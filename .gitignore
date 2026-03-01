@@ -1,0 +1,9 @@
+# OS
+.DS_Store
+
+# IDE (keep rules tracked)
+.cursor/*
+!.cursor/rules/
+
+# Assets (uploaded images etc.)
+assets/
