@@ -1,0 +1,89 @@
+# Work Log - MyAgents Root
+
+## 2026-03-02 - Rules 规范体系重构：通用化 AgentX / 回归测试 / 版本管理
+
+**状态**: 验收通过
+
+**内容**:
+- 新建根目录通用 `agentx.mdc`：工作流、三层自测、任务注释、并行隔离等通用规则
+- 新建根目录通用 `regression-testing.mdc`：L0/L1/L2 分层回归、问题分级（P0/P1/P2）
+- 升级 `version-management.mdc` 为强制规范：新增 /api/health、VersionTracker 模块模式、扩充接入清单
+- 提升 `shell-git.mdc`（从 cci_system）和 `git-branch-guard.mdc`（从 performeval）到根目录
+- 精简 pm-system 和 performeval 的 `agentx.mdc`，仅保留项目专用部分
+- 删除 `pmsystem-regression.mdc`（已被通用版替代）
+
+**备注**:
+- 根目录 rules 从 7 个增至 10 个（新增 agentx、regression-testing、shell-git、git-branch-guard；删除 pmsystem-regression）
+- 子项目专用 rules 不变（cci_system 5 个、pm-system 1 个、performeval 2 个）
+
+## 2026-03-02 - 多项目服务启动修复 + Git submodule 状态修复
+
+**状态**: 验收通过
+
+**内容**:
+- pm-system: 修复 backend/main.py 中 6 处 emoji 导致 Windows GBK 终端 UnicodeEncodeError 崩溃
+- pm-system: 修复 quick_start.bat 后端绑定 127.0.0.1 导致局域网设备无法访问，改为 0.0.0.0
+- performeval: 修复 run.bat 启动脚本——改为前台运行防服务丢失、移除不存在的 watchdog.bat 引用、补充 --reload
+- 修复 4 个子模块（cci_system、performeval、task_reminder、teamscore）的 detached HEAD 状态，全部归位到主分支
+
+**备注**:
+- pm-system/backend/main.py 中钉钉消息体内的 🤖 emoji 保留（非 print 输出，不触发 GBK 问题）
+- data-manager.js 有未提交修改，属于其他会话产物，未纳入本次提交
+
+## 2026-03-02 - PmSystem 数据导入两阶段预览 + UI 优化
+
+**状态**: 验收通过
+
+**内容**:
+- 重构 `importJSON` 为两阶段流程：先展示预览对比，用户确认后才实际写入数据
+- 提取 `_executeImport` 方法封装数据写入逻辑，与预览计算解耦
+- 预览弹窗 UI 从表格布局改为卡片式布局：Pill 标签展示增/删/保留数量，紧凑且一目了然
+- 运营标签变更改为箭头对比（`12 → 15 (+3)`）
+- 弹窗宽度收窄至 480px，圆角加大，按钮风格统一
+
+**备注**:
+- 导入确认前不会修改任何应用状态和 localStorage
+
+## 2026-03-02 - PmSystem 冲突合并字段级修复
+
+**状态**: 验收通过
+
+**内容**:
+- 修复 `_doConflictMerge` 中用户选择后"整条替换"导致三方自动合并结果丢失的核心 Bug
+- 将 `_smartMerge` 的三方上下文（`_conflictFields`/`_autoMerged`）注入弹窗数据源 `dialogItems`
+- 用户选择"本地"时改为字段级替换（仅替换冲突字段），保留自动解决的字段
+- 用户选择"服务器"时利用 `smartMerged` 已默认取 server 值的特性，无需额外操作
+
+**备注**:
+- 延迟处理路径（当前页面无关冲突时 apply localData）留作已知限制，需独立架构改造
+- 死代码 `_applyConflictChoices`/`_mergeByChoices` 未清理，待后续统一整理
+
+## 2025-12-04 - My Army Git工作流架构初始化
+
+**状态**: 验收通过
+
+**内容**:
+- 初始化根仓库作为"总司令部"
+- 添加5个子模块（gamedev-pm-system, align-flow, central-console, llm-plotter, workspace-docs）
+- 创建 `GIT_WORKFLOW_GUIDE.md` 工作流指南
+- 配置 `.gitignore` 排除临时文件
+- 建立 Root Repo + Submodules 架构
+
+**备注**: 
+- 采用 Gitlink 方式追踪各子模块的版本（Commit Hash）
+- 根仓库代表系统的"Total Score"（总进度）
+- 各子模块保持独立的 Git 历史
+
+
+## [2025-12-09] - [Task Reminder/增加优先级]
+
+**状态**: 验收通过
+
+**内容**:
+- 任务增加优先级
+- 任务卡片支持编辑
+- 分组展示改为横向泳道形式
+- 增加checked mark
+
+**备注**: 
+- 分组展示的横向泳道过长的情况未测试

@@ -1,0 +1,27 @@
+---
+description: Shell 环境和 Git 操作规范（Windows PowerShell）- 适用于所有项目
+alwaysApply: true
+---
+
+# Shell & Git 规范
+
+## PowerShell 环境注意事项
+所有项目运行在 **Windows PowerShell** 环境下：
+- **不支持** `&&` 连接命令，使用 `;` 代替
+- **不支持** heredoc（`<<'EOF'`），git commit 多行消息用 Write 工具写入临时文件再 `git commit -F` 提交
+- **不支持** `&` 后台运行，使用 `Start-Process` 或 `block_until_ms: 0`
+- 路径用**双引号**包裹：`cd "d:\MyAgents\项目名"`
+- Python 启动器：优先用 `py` 而非 `python`（`python` 在部分环境无输出）
+- **中文 commit message**：避免直接用 `-m` 传中文（可能乱码），优先使用 `-F` 文件方式
+- **print 语句禁用 emoji**：Windows 终端默认 GBK 编码，emoji 会触发 UnicodeEncodeError 导致进程崩溃
+
+## Python 语法检查命令模板
+```powershell
+py -c "import ast; ast.parse(open(r'文件名.py', encoding='utf-8').read()); print('OK')"
+```
+
+## Git 操作要点
+- Commit 前必须完成自测（参照 agentx.mdc 自测规范和 regression-testing.mdc）
+- Commit message 格式：`<type>(<scope>): <中文描述>`（参照 git-workflow.mdc）
+- 不使用 `--force`、`--amend`（除非用户明确要求）
+- 子模块（submodule）的 `.git` 实际路径需用 `git rev-parse --git-dir` 获取

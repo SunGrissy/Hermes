@@ -1,0 +1,150 @@
+---
+description: 应用版本管理规范 — 后端版本API + 健康检查 + 缓存控制 + 前端版本展示（适用于所有 Web 项目）
+globs:
+alwaysApply: true
+---
+
+# 应用版本管理规范
+
+所有带后端的 Web 应用**必须**实现统一的版本管理机制，让使用者一眼确认是否加载到最新代码。
+
+---
+
+## 1. 后端：`/api/version` 端点（必须）
+
+在 FastAPI 入口文件中实现，一次返回所有版本信息：
+
+```python
+APP_VERSION = "x.y.z"  # 语义化版本号，每次功能变更递增
+_server_start_time = ""
+
+_KEY_FILES = ["index.html", "app.js", "styles.css", "backend/main.py", ...]
+
+@app.get("/api/version")
+def get_version():
+    files = {}
+    latest = 0.0
+    for f in _KEY_FILES:
+        try:
+            mtime = os.path.getmtime(os.path.join(PROJECT_ROOT, f))
+            files[f] = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+            latest = max(latest, mtime)
+        except OSError: pass
+    return {
+        "app_version": APP_VERSION,
+        "server_start": _server_start_time,
+        "last_update": datetime.fromtimestamp(latest).strftime("%m/%d %H:%M"),
+        "last_update_ts": int(latest),
+        "files": files,
+    }
+```
+
+**关键设计：**
+- `APP_VERSION` 使用语义化版本号（`major.minor.patch`），每次功能变更递增
+- `_KEY_FILES` 列出所有需要追踪的关键文件，新增关键模块时同步更新此列表
+- 服务端 `os.path.getmtime` 比前端 HEAD 请求更可靠、更快
+- `server_start` 记录启动时间，用于排查"代码改了但没重启"的问题
+- 同时注册到 `FastAPI(version=APP_VERSION)` 让 Swagger 文档也显示版本
+
+## 2. 后端：`/api/health` 端点（必须）
+
+用于前端连接状态检测和负载均衡健康探针：
+
+```python
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "app": "应用名", "version": APP_VERSION}
+```
+
+前端通过定时轮询此接口判断服务器是否可达，驱动连接状态指示器（绿球/红球）。
+
+## 3. 静态文件 Cache-Control（必须）
+
+所有静态文件响应头加 `no-cache`，不再需要手动维护 `?v=` 参数：
+
+```python
+@app.get("/app.js")
+def serve_js():
+    resp = FileResponse(os.path.join(PROJECT_ROOT, "app.js"))
+    resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
+```
+
+HTML 中也加 meta 标签兜底：
+```html
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+```
+
+**不再使用 `<script src="app.js?v=42">` 模式**，改由 HTTP 头控制。
+
+## 4. 前端：版本展示（三层，必须）
+
+### 4a. 浏览器标签页标题
+```js
+document.title = `AppName [v${v.app_version}] 更新:${v.last_update}`;
+```
+
+### 4b. 侧边栏/页头摘要
+```js
+el.innerHTML = `v${v.app_version} · <span>更新 ${v.last_update}</span> <span class="version-info-trigger">ⓘ</span>`;
+```
+
+### 4c. ⓘ 悬浮浮窗 — 文件级详情
+hover `ⓘ` 图标弹出浮窗，展示：
+- 应用版本号
+- 服务启动时间
+- 每个关键文件的独立最后修改时间（按时间倒序排列）
+
+```
+┌─────────────────────────────┐
+│ v1.0.0 版本详情             │
+│ 服务启动    03/02 13:19     │
+│ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─│
+│ 关键文件修改时间:           │
+│ app.js      03/02 13:18     │
+│ styles.css  03/02 13:18     │
+│ index.html  03/02 13:15     │
+│ main.py     03/02 12:50     │
+│ models.py   03/01 19:34     │
+└─────────────────────────────┘
+```
+
+### 推荐实现：独立 VersionTracker 模块
+
+将版本展示逻辑封装为独立的 `version-tracker.js`（参考 PmSystem 实现），而非内联在 `app.js` 中：
+
+```js
+const VersionTracker = {
+    async fetchVersionData() { /* 调用 /api/version */ },
+    formatShort(isoStr) { /* ISO → "MM/DD HH:mm" */ },
+    createTooltip(data) { /* 生成悬浮窗 DOM */ },
+    async updatePageTitle() {
+        const data = await this.fetchVersionData();
+        // Layer 1: document.title
+        // Layer 2: Header 摘要 + ⓘ 图标
+        // Layer 3: 绑定 hover 事件显示悬浮窗
+    },
+    async init() { await this.updatePageTitle(); }
+};
+```
+
+优势：
+- 各项目复用同一套展示逻辑，只需改应用名称
+- 与业务代码解耦，维护方便
+- 回退模式：`/api/version` 不可用时仍显示应用名，不报错
+
+## 5. 接入清单
+
+新建或升级项目时按此清单检查：
+
+- [ ] `APP_VERSION` 已定义并注册到 FastAPI 和 `/api/version`
+- [ ] `_KEY_FILES` 包含所有需追踪的前后端文件
+- [ ] `/api/version` 端点已注册，返回格式符合规范
+- [ ] `/api/health` 端点已注册
+- [ ] 静态文件路由设置 `Cache-Control: no-cache, must-revalidate`
+- [ ] HTML 包含 `<meta>` 缓存控制标签
+- [ ] 前端 DOMContentLoaded 时调用 `/api/version` 更新标题和页头
+- [ ] hover 浮窗展示各文件独立修改时间
+- [ ] 不再使用 `?v=` 手动版本号
+- [ ] `APP_VERSION` 在每次功能迭代时递增
