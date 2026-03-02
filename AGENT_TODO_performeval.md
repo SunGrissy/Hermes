@@ -20,17 +20,30 @@
 
 - [ ] `PLAYBOOK.md`（通读 §零~§七，重点 §六评价哲学、§七AI进化纲领）
 - [ ] `performeval/DESIGN.md`（系统设计全文，重点 §十八 TODO）
-- [ ] `performeval/rubric_ops.json`（运营策划标尺，已完成）
-- [ ] `performeval/rubric_system_planning.json`（系统策划标尺，已完成）
+- [ ] `performeval/rubric_ops.json`（运营策划标尺）
+- [ ] `performeval/rubric_system_planning.json`（系统策划标尺）
+- [ ] `performeval/rubric_tech.json`（技术标尺）
+- [ ] `performeval/rubric_art.json`（美术标尺v2·含5子工种）
+- [ ] `performeval/rubric_ue.json`（体验组标尺·含4子工种）
+- [ ] `performeval/rubric_video.json`（视频标尺）
+- [ ] `performeval/rubric_qa.json`（QA标尺）
 - [ ] `performeval/共创工作表-L级标尺.html`（标尺模板结构）
 - [ ] `performeval/会议材料-绩效方案启动会.html`（产品思路背景）
 
-## 已完成（本轮）
+## 已完成
 
 - ✅ 运营策划标尺 `rubric_ops.json`（L2/L3/L4 × 业务/进化/摩擦）
 - ✅ 系统策划标尺 `rubric_system_planning.json`（L2/L3/L4 × 业务/进化/摩擦）
-- ✅ DESIGN.md 讨论记录同步至 D58
+- ✅ 技术标尺 `rubric_tech.json`（L2/L3/L4 × 业务/进化/摩擦，MAKE层）
+- ✅ 美术标尺 `rubric_art.json` v2（85条·共享底座+5子工种·animation/vfx/concept/modeling/ta）
+- ✅ 体验组标尺 `rubric_ue.json`（73条·HOW层·4子工种·ux/ui/motion/audio）
+- ✅ 视频标尺 `rubric_video.json`（37条·HOW+MAKE双层）
+- ✅ QA标尺 `rubric_qa.json`（L2/L3/L4 × 业务/进化/摩擦，MAKE层）
+- ✅ 标尺查看器 `标尺总览.html`（支持sub_function筛选）+ 共创工作表预览面板更新
+- ✅ DESIGN.md 讨论记录同步至 D58，附录 A 更新
 - ✅ 效能导向融入标尺 KPI（单活动人力成本、每 Feature 研发人天等）
+- ✅ VP通气提纲 `VP通气-数值协作方案.html`
+- ✅ 面谈准备材料 `面谈准备-数值主管协作.html`
 
 ## 任务清单
 
@@ -38,7 +51,7 @@
 
 | # | 任务 | 验收标准 | 状态 |
 |---|------|---------|------|
-| P0-B | 补齐剩余职能标尺 | 输出 `rubric_battle.json`（战斗·纵向四层）、`rubric_ue.json`（体验组）、`rubric_numerical.json`（数值·含生态）、`rubric_engineering.json`（程序）、`rubric_art.json`（美术·含3D/2D/TA）、`rubric_qa.json`（QA） | 待开始 |
+| P0-B | 编写各职能标尺 | 7职能346条完成（ops/system_planning/tech/art·v2/ue/video/qa）。**待补充**：`rubric_battle.json`（战斗·纵向四层）、`rubric_numerical.json`（数值·含生态·WHAT层） | 🔧 核心完成，战斗+数值待讨论 |
 | P0-C | 校准成长窗口期参数 | 各 L 级在位时长 → 标尺递增系数确定 | 待开始 |
 | P0-D | 确定组织蓝图（F3 目标编制） | 每个职能组的目标人数和 L 级分布 | 待开始 |
 
