@@ -24,8 +24,8 @@
 - [ ] `performeval/rubric_system_planning.json`（系统策划标尺）
 - [ ] `performeval/rubric_tech.json`（技术标尺）
 - [ ] `performeval/rubric_art.json`（美术标尺v2·含5子工种）
-- [ ] `performeval/rubric_ue.json`（体验组标尺·含4子工种）
-- [ ] `performeval/rubric_video.json`（视频标尺）
+- [ ] `performeval/rubric_ue.json`（体验组标尺·3子工种+PLE管线条目）
+- [ ] `performeval/rubric_video.json`（视频/音频标尺·含audio迁入）
 - [ ] `performeval/rubric_qa.json`（QA标尺）
 - [ ] `performeval/共创工作表-L级标尺.html`（标尺模板结构）
 - [ ] `performeval/会议材料-绩效方案启动会.html`（产品思路背景）
@@ -36,14 +36,21 @@
 - ✅ 系统策划标尺 `rubric_system_planning.json`（L2/L3/L4 × 业务/进化/摩擦）
 - ✅ 技术标尺 `rubric_tech.json`（L2/L3/L4 × 业务/进化/摩擦，MAKE层）
 - ✅ 美术标尺 `rubric_art.json` v2（85条·共享底座+5子工种·animation/vfx/concept/modeling/ta）
-- ✅ 体验组标尺 `rubric_ue.json`（73条·HOW层·4子工种·ux/ui/motion/audio）
-- ✅ 视频标尺 `rubric_video.json`（37条·HOW+MAKE双层）
+- ✅ 体验组标尺 `rubric_ue.json`（HOW层·3子工种·ux/ui/motion·含PLE管线轮值条目·音频已迁出）
+- ✅ 视频/音频标尺 `rubric_video.json`（HOW+MAKE·含audio business迁入）
 - ✅ QA标尺 `rubric_qa.json`（L2/L3/L4 × 业务/进化/摩擦，MAKE层）
 - ✅ 标尺查看器 `标尺总览.html`（支持sub_function筛选）+ 共创工作表预览面板更新
 - ✅ DESIGN.md 讨论记录同步至 D58，附录 A 更新
 - ✅ 效能导向融入标尺 KPI（单活动人力成本、每 Feature 研发人天等）
 - ✅ VP通气提纲 `VP通气-数值协作方案.html`
 - ✅ 面谈准备材料 `面谈准备-数值主管协作.html`
+- ✅ 面谈准备材料 `面谈准备-主美协作.html`（含10子工种锚点+管理幅度优化+PLE机制）
+- ✅ 面谈准备材料 `面谈准备-主程协作.html`（含AI BUILD Boss+PLE/PLD/PLT+TA调整+PMO）
+- ✅ 绩效系统计划书 `PLAN_绩效系统计划书.md`（设计思路+完成度+后续计划）
+- ✅ 主美面谈后落地：org-structure 音频迁移/陈晨BY直管/体验组7:3矩阵评价
+- ✅ 主美面谈后落地：rubric_ue 移除audio+增PLE管线条目；rubric_video 纳入audio
+- ✅ 主美面谈后落地：面谈材料同步更新（主美+主程）
+- ✅ 管线角色标尺设计：PLE在evolution维度L3+体现(pipeline_role标记)
 
 ## 任务清单
 
