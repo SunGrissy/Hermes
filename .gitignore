@@ -71,3 +71,8 @@ htmlcov/
 # Assets (uploaded images etc.)
 # ========================
 assets/
+
+# ========================
+# Local-only directories
+# ========================
+workspace-docs/
