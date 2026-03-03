@@ -1,15 +1,15 @@
 [submodule "performeval"]
 	path = performeval
-	url = http://tygit.tuyoo.com/ue4_pm_group/performeval.git
+	url = ../performeval.git
 [submodule "pm-system"]
 	path = pm-system
-	url = http://tygit.tuyoo.com/ue4_pm_group/pm-system.git
+	url = ../pm-system.git
 [submodule "cci_system"]
 	path = cci_system
-	url = http://tygit.tuyoo.com/ue4_pm_group/cci_system.git
+	url = ../cci_system.git
 [submodule "task_reminder"]
 	path = task_reminder
-	url = http://tygit.tuyoo.com/ue4_pm_group/task_reminder.git
+	url = ../task_reminder.git
 [submodule "teamscore"]
 	path = teamscore
-	url = http://tygit.tuyoo.com/ue4_pm_group/teamscore.git
+	url = ../teamscore.git

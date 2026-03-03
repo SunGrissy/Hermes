@@ -1,9 +1,73 @@
+# ========================
 # OS
+# ========================
 .DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
 
+# ========================
 # IDE (keep rules tracked)
+# ========================
 .cursor/*
 !.cursor/rules/
 
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# ========================
+# Database (local dev data)
+# ========================
+*.db
+*.sqlite
+*.sqlite3
+
+# ========================
+# Runtime data (backend JSON, backups)
+# ========================
+backend/data/
+*.json.bak
+
+# ========================
+# Environment / Secrets
+# ========================
+.env
+.env.*
+!.env.example
+
+# ========================
+# Node.js (Agent debugging artifacts)
+# ========================
+node_modules/
+package-lock.json
+
+# ========================
+# Logs
+# ========================
+*.log
+
+# ========================
+# Test artifacts
+# ========================
+.pytest_cache/
+.coverage
+htmlcov/
+.screenshots/
+
+# ========================
 # Assets (uploaded images etc.)
+# ========================
 assets/

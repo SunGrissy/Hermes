@@ -1,5 +1,41 @@
 # Work Log - MyAgents Root
 
+## 2026-03-03 - Agent 门禁检查体系 + Skill 生态建设 + 双 Git 工作流
+
+**状态**: 验收通过
+
+**内容**:
+- 重构 `agent-core.mdc`：用四道可执行门禁（post-edit / pre-commit / pre-push / on-accept）替换原"三层自测"
+- 新建 `preflight-checks` Skill：门禁检查失败时的详细修复指南
+- 安装 3 个社区 Skill：frontend-design、webapp-testing、fastapi-router
+- 自建 3 个项目 Skill：vanilla-js-ui-patterns、pm-data-sync、multi-service-orchestration
+- 新建 `dual-git-sync` + `github-ops` Skill：GitLab↔GitHub 双 remote 协作流程
+- 更新 `git-workflow.mdc`：验收流程加入合并冲突处理和合并后测试
+- 新建 `git-branch-guard.mdc`：SESSION_BRANCH 绑定 + 操作前验证 + worktree 推荐
+- 新建 `worktree-workflow.mdc`：多任务并行创建/命名/合并/清理规范
+- 完善 `.gitignore`（根仓库 + pm-system + performeval）
+- `.gitmodules` 改为相对路径，支持双 remote 子模块 clone
+
+**备注**:
+- 双 Git 首推等待 P-1 密钥外置化完成后执行
+- Skill 安装在 `~/.cursor/skills/`（个人级，跨项目可用）
+
+## 2026-03-03 - 版本管理合规化：pm-system + performeval API 规范对齐
+
+**状态**: 已完成，待验收
+
+**内容**:
+- pm-system: `/api/version` 响应字段 `version`→`app_version`、`server_start_time`→`server_start`，新增 `last_update`/`last_update_ts`
+- pm-system: `/api/health` 补齐 `app`、`version` 字段
+- pm-system: `FastAPI()` 构造器注册 `version=APP_VERSION`
+- pm-system: `version-tracker.js` 适配新字段名，兼容新旧两种 API 格式
+- performeval: 静态文件 Cache-Control 从 3 个显式路由改为 HTTP 中间件统一覆盖
+- task_reminder: 跳过（server.py 非真实 FastAPI 后端）
+
+**备注**:
+- 版本号未递增，仅做格式合规化（pm-system v1.0.0、performeval v2.1.0 不变）
+- version-tracker.js 做了向后兼容处理，同时支持 `app_version`/`version` 和 `server_start`/`server_start_time`
+
 ## 2026-03-02 - Git 工作流增强：会话分支安全检查 + Worktree 多任务并行规范
 
 **状态**: 验收通过

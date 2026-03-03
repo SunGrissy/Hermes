@@ -20,6 +20,81 @@ alwaysApply: true
 py -c "import ast; ast.parse(open(r'文件名.py', encoding='utf-8').read()); print('OK')"
 ```
 
+## 口令约定
+
+| 用户说 | Agent 执行 |
+|---|---|
+| "更新" | 执行下方「全量更新流程」 |
+
+### 全量更新流程（用户说"更新"时触发）
+
+```
+0. 记录当前目录 (saved_dir)，cd 到工作空间根目录
+
+1. 根仓库 pull
+   git pull origin main
+   ├─ 冲突 → 报告冲突文件，询问是否继续子模块更新
+   └─ 成功 → 继续
+
+2. 根仓库 GitHub 同步
+   若有 github remote:
+     git fetch github main
+     对比 main 与 github/main:
+     ├─ 无差异 → 跳过
+     └─ 有差异 → 报告 N 个新提交 + git merge github/main
+          ├─ 成功 → 标记 github_merged = true
+          └─ 冲突 → 报告，等用户处理
+
+3. 逐个子模块更新
+   for each submodule:
+     ├─ 脏检查 (git status --short)
+     │    └─ 脏 → 跳过并报告 "⚠️ <模块> 有未提交改动，已跳过"
+     ├─ 分支检查 (git branch --show-current)
+     │    └─ 空 (detached HEAD) → git checkout main (或 master)
+     ├─ git pull origin <当前分支>
+     │    └─ 冲突 → 报告，跳过此模块
+     ├─ 若有 github remote:
+     │    git fetch github main
+     │    对比差异:
+     │    ├─ 无差异 → 跳过
+     │    └─ 有差异 → 报告 + git merge github/main
+     │         ├─ 成功 → 标记
+     │         └─ 冲突 → 报告，跳过
+     └─ cd ..
+
+4. 子模块指针检查
+   cd 根仓库
+   git status → 若子模块指针有变更:
+     报告哪些子模块指针变了
+     询问是否提交指针更新
+
+5. 同步回推（仅当合入了 GitHub 内容时）
+   询问 "是否 push origin 同步回 GitLab？"
+   ├─ 是 → git push origin main
+   └─ 否 → 跳过
+
+6. 回到原目录 (cd saved_dir)，静默恢复
+
+7. 输出更新报告
+   ┌──────────────────────────────────────┐
+   │ 更新报告                              │
+   │ 根仓库:      origin ✅  github ✅     │
+   │ pm-system:   origin ✅  github ✅ (3) │
+   │ performeval: origin ✅  github 无变化  │
+   │ cci_system:  ⚠️ 脏状态，已跳过        │
+   │ task_reminder: origin ✅               │
+   │ teamscore:   origin ✅                 │
+   │ 已同步回推: 是/否                      │
+   └──────────────────────────────────────┘
+```
+
+**设计要点：**
+- 子模块先检查脏状态和分支状态，避免 detached HEAD 下 pull 报错
+- GitHub 差异自动 merge 而非仅报告，真正做到"全部更到最新"
+- 任何冲突都报告而非静默失败，冲突模块跳过不阻塞其他模块
+- 完成后静默恢复原目录，不改变用户工作上下文
+- 仅当合入了 GitHub 内容时才询问回推，避免无意义的交互
+
 ## Git 操作要点
 - Commit 前必须完成自测（参照 agentx.mdc 自测规范和 regression-testing.mdc）
 - Commit message 格式：`<type>(<scope>): <中文描述>`（参照 git-workflow.mdc）
