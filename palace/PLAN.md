@@ -49,6 +49,7 @@ MyAgent/
       dor_review.yaml     # Feature DoR 审查（6角色：PLD+PLE+PLT+边界+数值+QA）
       version_health.yaml # 版本健康度检查（PMO 主导）
       version_planning.yaml # 版本规划综合审查（全阁审议：御史台+PLD+PLT+PMO+吏部+户部）
+      growth_review.yaml  # 增长复盘（御史台主导 advisory）
       org_advisory.yaml   # 组织架构咨询（吏部尚书主导）
       resume_screening.yaml # 简历筛选（吏部尚书主导）
     run.py                # CLI 入口（测试用）
@@ -297,25 +298,37 @@ authority: block             # 可 block——验收标准不清晰的 Feature �
 id: strategist
 name: "御史台（战略锚）"
 layer: WHY               # 唯一一个 WHY 层角色
+scope: [pipeline, growth] # 双轨：管线战略 + 增长战略
 
 persona: |
-  你是战略对齐的守门人。你只问一个核心问题：
+  你是战略对齐的守门人，覆盖两条轨道：
+  1. 管线轨：Feature/版本规划是否对齐北极星。
+  2. 增长轨：买量节奏/投放策略是否对齐增长效能公式。
+  两条轨道共享同一个核心问题：
   这件事是否推动了北极星——增长效能 = 单位成本产出的用户价值。
   三条路径：做分子（提升LTV和自然量）？做分母（压缩边际成本）？提转化？
   你同时是制作人的学习伙伴——当制作人的决策思路不够清晰时，
   你通过追问帮助他厘清思路，而非直接给出答案。
   你不做具体方案判断，你做战略方向判断和思维训练。
+  你遵守制作人的思维纪律（见 producer-context.mdc）：
+  穿透表面指标、看结构再看绝对值、警惕相关≠因果、追问决策本质。
 
 knowledge_sections:
   - north_star               # §零 北极星（增长效能公式）
   - dual_track               # §二 双轨制（平战结合节奏）
 
 review_dimensions:
+  # 管线轨
   - "这个 Feature 对北极星公式的哪个变量有贡献？能量化吗？"
   - "这是平时状态该做的还是节点状态该做的？时机对吗？"
   - "快轨还是慢轨？管线重量和投入产出比匹配吗？"
   - "机会成本：如果这些资源投到别处，效果会更好吗？"
   - "这个决策背后的假设是什么？假设如果错了，后果是什么？"
+  # 增长轨（growth_review 场景时激活）
+  - "当前投放节奏和版本节奏是否匹配？是平时保底还是节点脉冲？"
+  - "CPI 变化的归因是什么？素材质量、版位结构、还是市场竞争？"
+  - "素材储备的健康度如何？头部依赖度是否过高？"
+  - "这笔获客投入的回收预期，和利润率目标是否矛盾？"
 
 authority: concern_only      # 不 block 具体方案，但标记"战略偏移"
 ```
@@ -535,7 +548,7 @@ py palace/run.py --scenario dor_review --input "春节限时礼包活动：面�
 ### Phase 3：引擎核心 + 场景配置（Mock 驱动）
 
 - 实现 `engine.py`（角色调度 + asyncio.gather 并行 + 综合器）
-- 编写 5 个场景 YAML（dor_review / version_health / org_advisory / resume_screening / version_planning）
+- 编写 6 个场景 YAML（dor_review / version_health / version_planning / growth_review / org_advisory / resume_screening）
 - 实现综合器同时支持 review 模式（pass/block）和 advisory 模式（建议+选择）
 - 全部用 MockProvider 驱动，验证调度逻辑和综合逻辑正确
 
@@ -581,25 +594,65 @@ MAKE         刑部尚书（QA）       质量门禁          block
 
 御史台（Strategist）不只是一个审查角色——它是制作人的**思维训练伙伴**。
 
-### 阶段 1：对齐检查（当前）
-- 被动模式：在 dor_review / version_planning 中作为角色参与
+### 职责范围（双轨）
+
+**管线战略对齐**（原有）：审查 Feature / 版本规划是否对齐北极星。
+**增长战略对齐**（扩展）：审查买量节奏、投放策略是否对齐增长效能公式。
+
+两条轨道共享同一个思维内核：**这件事对"单位成本产出的用户价值"的哪个变量有贡献？**
+
+> 增长侧的即时判断需求（素材初评、A/B 解读）由 `growth-advisor.mdc` 覆盖，
+> 不走 Palace 引擎。御史台只参与结构化的增长复盘场景（见 `growth_review`）。
+
+### 阶段 1：对齐检查（当前 MVP）
+- 被动模式：在 dor_review / version_planning / growth_review 中作为角色参与
 - 职责：检查议题是否对齐北极星
 
 ### 阶段 2：决策追问
 - 主动模式：制作人输入一个决策想法，御史台通过苏格拉底式追问帮助厘清
+- 覆盖管线决策和增长决策
 - 记录追问-回答链路，沉淀为决策档案
 
 ### 阶段 3：认知建模
 - 基于历史决策档案，构建制作人的决策模式画像
-- 识别常见思维盲区（如"总是低估时间成本""倾向于做加法而非减法"）
+- 识别常见思维盲区（如"总是低估时间成本""倾向于做加法而非减法""节点放量时容易被短期数据冲昏"）
 - 主动提醒：当新决策触发已知盲区模式时预警
 
 ### 阶段 4：战略参谋
-- 结合行业数据、竞品分析、历史项目数据
+- 结合行业数据、竞品分析、历史项目数据、投放数据
 - 从"检查对齐"升级为"建议方向"
 - 制作人和御史台形成"命题-挑战"的良性循环
 
 > 阶段 1 在本次 MVP 范围内。阶段 2-4 架构预留，不实现。
+
+## 增长复盘场景
+
+```yaml
+# scenarios/growth_review.yaml — 增长复盘（御史台主导 advisory）
+id: growth_review
+name: "增长复盘"
+mode: advisory
+roles: [strategist]
+trigger: 手动触发 / 周期性（建议每周或每版本节点后）
+
+input_schema:
+  - period: "复盘周期（如 '上周' / '2月' / 'v3.2版本期间'）"
+  - spending_data: "投放消耗数据（总消耗、CPI、ROI、分版位明细）"
+  - cci_summary: "CCI 系统输出摘要（头部素材表现、淘汰率、新素材成功率）"
+  - product_events: "产品侧事件（版本更新、活动上线、功能变更）"
+  - market_context: "市场环境（竞品动作、行业 CPI 趋势、季节性因素）"
+
+output_includes:
+  - period_summary           # 本期投放概况（平时 vs 节点拆分）
+  - north_star_impact        # 对北极星公式各变量的影响评估
+  - pulse_rhythm_review      # 脉冲节奏回顾：开枪时机对不对？收枪信号是否及时？
+  - creative_health          # 素材健康度：储备量、头部依赖度、衰减速度
+  - next_period_suggestion   # 下期策略建议：预算分配、素材生产重点、节点预判
+  - lessons_learned          # 本期经验沉淀（可回写到 growth-advisor.mdc 经验区）
+```
+
+> 此场景和 PLD/PLT 等管线角色无关，只有御史台参与。
+> 它的本质是帮制作人做"增长侧的结构化复盘"，逐步建立脉冲买量的量化框架。
 
 ## 后续扩展路径（不在本次范围，架构预留）
 
@@ -608,6 +661,8 @@ MAKE         刑部尚书（QA）       质量门禁          block
 - 解析 org-structure.html 中的组织架构数据供吏部尚书使用
 - 户部尚书接入数值策划工具数据（配表、经济系统模拟结果）
 - 刑部尚书接入 QA 系统（bug 数据库、测试覆盖率报告）
+- growth_review 场景接入广告平台 API（自动拉取投放数据，减少手动输入）
+- growth_review 输出的 lessons_learned 自动回写 `growth-advisor.mdc` 经验沉淀区
 - 新增场景：运营活动规划（advisory 模式）、考核标准设计（eval_design）
 - 集成到 PmSystem 前端（Feature 页加"审查"按钮，版本页加"健康度检查"按钮）
 - 集成到 Cursor AgentX（作为 Agent Skill 被调用）
