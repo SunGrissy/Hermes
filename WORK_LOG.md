@@ -151,6 +151,20 @@
 - 各子模块保持独立的 Git 历史
 
 
+## [2026-03-03] - [规则体系/子模块 Git 操作规范补全]
+
+**状态**: 验收通过
+
+**内容**:
+- `shell-git.mdc`：新增"推送"口令流程，触发 pre-push P1-P3 门禁 + 子模块先推序列
+- `agentx.mdc`：入场快照增加 `git submodule status`，区分 m/M/+ 子模块标记
+- `git-workflow.mdc`：新增"子模块 commit 闭环"铁律，commit 后必须回根检查指针
+
+**备注**:
+- 补的是 acceptance-checklist 未覆盖的 3 个边缘场景（单独推送、入场识别、非验收 commit）
+- 同会话还更新了 palace/PLAN.md（9 角色图谱），已在前一个 commit 提交
+
+
 ## [2026-03-01] - [规则体系/验收流程统一 + 会议体系对齐]
 
 **状态**: 验收通过
