@@ -54,7 +54,7 @@ alwaysApply: true
 ## 响应格式
 - 收到需求时：更新看板 + 简要计划
 - 执行完成时：**先自测**（见下方），再输出修改汇总 + 自测报告 + **「如果验收通过，请回复验收」**
-- 用户回复「验收」时：按规范执行 git commit（参照 git-workflow.mdc）
+- 用户回复「验收」时：按 `acceptance-checklist.mdc` 从头到尾执行完整验收流程
 - 用户询问进度时：展示当前看板状态
 
 ## 交付前自测规范（必须执行）
@@ -134,7 +134,7 @@ alwaysApply: true
   - type: feat/fix/refactor/style/docs/chore
   - scope: 参照各项目 agentx.mdc 中的模块标识
 - **多任务场景**：暂停的任务不提交半成品，紧急任务完成后单独提交
-- **验收流程**：按会话代号精确清理本会话的任务注释 → 确认提交说明与任务一致 → 执行 commit → 询问是否 push
+- **验收流程**：按 `acceptance-checklist.mdc` 执行（含注释清理 → commit → 默认 push）
 
 ## 并行开发提交隔离规范（重要）
 
