@@ -36,18 +36,21 @@ MyAgent/
       knowledge.py        # PLAYBOOK 章节切片器
       schemas.py          # 结构化输出 schema（review_result / advisory_result）
     roles/
-      pld.yaml            # 管线主策角色配置（WHAT 层）
-      ple.yaml            # 管线体验角色配置（HOW 层）
-      plt.yaml            # 管线技术角色配置（BUILD 层）
-      boundary.yaml       # 职权边界检查角色配置（跨层）
-      pmo.yaml            # 管线总管角色配置（管线运营域）
-      personnel.yaml      # 吏部尚书角色配置（人才组织域）
+      pld.yaml            # 管线主策（WHAT 层）
+      ple.yaml            # 管线体验（HOW 层）
+      plt.yaml            # 管线技术（BUILD 层）
+      boundary.yaml       # 职权边界检查（跨层）
+      pmo.yaml            # 管线总管（管线运营域）
+      personnel.yaml      # 吏部尚书（人才组织域）
+      numerics.yaml       # 户部尚书（数值/经济系统）
+      qa_review.yaml      # 刑部尚书（质量门禁）
+      strategist.yaml     # 御史台（战略锚）
     scenarios/
-      dor_review.yaml     # Feature DoR 审查（PLD+PLE+PLT+边界检查）
+      dor_review.yaml     # Feature DoR 审查（6角色：PLD+PLE+PLT+边界+数值+QA）
       version_health.yaml # 版本健康度检查（PMO 主导）
+      version_planning.yaml # 版本规划综合审查（全阁审议：御史台+PLD+PLT+PMO+吏部+户部）
       org_advisory.yaml   # 组织架构咨询（吏部尚书主导）
       resume_screening.yaml # 简历筛选（吏部尚书主导）
-      version_planning.yaml # 版本规划综合审查（跨域联合：PLD+PLT+PMO+吏部尚书）
     run.py                # CLI 入口（测试用）
     requirements.txt
     .env.example
@@ -234,6 +237,89 @@ review_dimensions:
 authority: concern_only
 ```
 
+```yaml
+# roles/numerics.yaml 示例（数值/经济系统域）
+id: numerics
+name: "户部尚书（数值顾问）"
+layer: WHAT_BUILD        # 跨两层：WHAT 层判断生态方向，BUILD 层审查配表/公式
+
+persona: |
+  你是数值与经济系统顾问，对应 PLAYBOOK §九"命题-解题"模型中的解题方视角。
+  你负责：生态方向判断、经济系统健康度、定价策略、概率设计、留存影响评估。
+  你不做"做什么"的决策（那是命题方/制作人的事），
+  你做"数值上行不行"的判断。
+  你和 PLD 的分工：PLD 审查"内容方向对不对"，你审查"数值上合不合理"。
+
+knowledge_sections:
+  - north_star               # §零 北极星（增长效能）
+  - dual_track               # §二 双轨制（快轨数值支撑 vs 慢轨策略实验）
+
+review_dimensions:
+  - "奖励/产出是否会打破现有经济平衡？"
+  - "定价是否在玩家接受区间？付费深度合理吗？"
+  - "概率设计是否透明、合规？预期收益是否经过模拟？"
+  - "对长期留存的影响是正向还是负向？"
+  - "是否需要 A/B 实验验证？实验设计是否严谨？"
+
+authority: concern_only      # 不 block，但可标记"数值风险"
+```
+
+```yaml
+# roles/qa_review.yaml 示例（质量门禁）
+id: qa_review
+name: "刑部尚书（QA 审查）"
+layer: MAKE              # 质量门禁，站在 MAKE 层往上看
+
+persona: |
+  你是质量与风险控制官。你的职责不是测试本身，
+  而是审查：这个方案的验收标准是否清晰可测？测试资源是否够用？上线风险是否可控？
+  你在两个节点介入：
+  1. DoR 阶段：审查可测性——spec 能不能转化为测试用例？
+  2. DoD 阶段：审查发版就绪度——bug 量、覆盖率、风险等级。
+  你和 PLT 的分工：PLT 管"技术上能不能实现"，你管"实现之后能不能验证"。
+
+knowledge_sections:
+  - pipeline_roles           # §三 管线角色体系
+  - dor_standards            # §五 DoR 分级
+
+review_dimensions:
+  - "验收标准是否明确、可量化、可自动化？"
+  - "边界条件和异常路径是否被定义？"
+  - "预估测试工作量是否合理？资源是否到位？"
+  - "是否有回归风险？影响已有功能的概率？"
+  - "上线后的监控和回退方案是否准备好？"
+
+authority: block             # 可 block——验收标准不清晰的 Feature 不准进生产
+```
+
+```yaml
+# roles/strategist.yaml 示例（战略对齐）
+id: strategist
+name: "御史台（战略锚）"
+layer: WHY               # 唯一一个 WHY 层角色
+
+persona: |
+  你是战略对齐的守门人。你只问一个核心问题：
+  这件事是否推动了北极星——增长效能 = 单位成本产出的用户价值。
+  三条路径：做分子（提升LTV和自然量）？做分母（压缩边际成本）？提转化？
+  你同时是制作人的学习伙伴——当制作人的决策思路不够清晰时，
+  你通过追问帮助他厘清思路，而非直接给出答案。
+  你不做具体方案判断，你做战略方向判断和思维训练。
+
+knowledge_sections:
+  - north_star               # §零 北极星（增长效能公式）
+  - dual_track               # §二 双轨制（平战结合节奏）
+
+review_dimensions:
+  - "这个 Feature 对北极星公式的哪个变量有贡献？能量化吗？"
+  - "这是平时状态该做的还是节点状态该做的？时机对吗？"
+  - "快轨还是慢轨？管线重量和投入产出比匹配吗？"
+  - "机会成本：如果这些资源投到别处，效果会更好吗？"
+  - "这个决策背后的假设是什么？假设如果错了，后果是什么？"
+
+authority: concern_only      # 不 block 具体方案，但标记"战略偏移"
+```
+
 **角色配置新增 `data_sources` 字段**：`knowledge_sections` 引用 PLAYBOOK 章节（静态文档），`data_sources` 引用系统 API 和文件数据（动态数据）。PMO 和吏部尚书比 PLD/PLE/PLT 更依赖动态数据。开发阶段 data_sources 用 mock 数据，Phase 5+ 接真实 API。
 
 ### 3. 场景配置
@@ -241,15 +327,17 @@ authority: concern_only
 引擎支持两种模式：`review`（审查，有 pass/block 结论）和 `advisory`（咨询，给建议和选择）。
 
 ```yaml
-# scenarios/dor_review.yaml — Feature 审查域
+# scenarios/dor_review.yaml — Feature DoR 审查（6 角色）
 id: dor_review
 name: "Feature DoR 审查"
 mode: review
-roles: [pld, ple, plt, boundary]
+roles: [pld, ple, plt, boundary, numerics, qa_review]
+#       WHAT  HOW  BUILD 跨层     WHAT+BUILD  MAKE
+#       内容  体验  技术  职权边界   数值审查    可测性
 
 synthesis_rules:
-  any_block_means_block: true
-  concern_threshold: 2
+  any_block_means_block: true      # PLD/PLE/PLT/QA 任一 block → 整体 block
+  concern_threshold: 2             # >=2 concern → 整体至少 concern
   must_list_action_items: true
   no_hedging: true
 
@@ -257,8 +345,9 @@ output_includes:
   - overall_verdict
   - per_role_verdicts
   - boundary_violations
+  - numerics_risk                  # 数值风险标记
   - action_items
-  - dor_checklist_status
+  - dor_checklist_status           # DoR 四把锁状态（需求+体验+技术+可测性）
 ```
 
 ```yaml
@@ -310,11 +399,13 @@ output_includes:
 ```
 
 ```yaml
-# scenarios/version_planning.yaml — 跨域联合
+# scenarios/version_planning.yaml — 全阁审议（跨域联合）
 id: version_planning
 name: "版本规划综合审查"
 mode: review
-roles: [pld, plt, pmo, personnel]
+roles: [strategist, pld, plt, numerics, pmo, personnel]
+#       WHY      WHAT BUILD WHAT+BUILD 运营  组织
+#       战略对齐  内容  技术   数值      资源  人才
 
 synthesis_rules:
   any_block_means_block: true
@@ -323,7 +414,9 @@ synthesis_rules:
 
 output_includes:
   - overall_verdict
+  - strategic_alignment      # 御史台: 是否对齐北极星
   - per_role_verdicts
+  - numerics_feasibility     # 户部: 经济系统影响
   - resource_feasibility     # PMO: 资源够不够
   - org_readiness            # 吏部: 人才准备度
   - action_items
@@ -354,8 +447,11 @@ PLAYBOOK_SECTIONS = {
 | PLE | §三§四§五 | ~140 行 |
 | PLT | §三§四§五§二 | ~175 行 |
 | Boundary | §四 | ~75 行 |
+| Numerics（户部） | §零§二 | ~70 行 |
+| QA Review（刑部） | §三§五 | ~85 行 |
+| Strategist（御史台） | §零§二 | ~70 行 |
 | PMO | §三§五§二 | ~115 行 |
-| Personnel | §零§三§六§七§八 | ~200 行 |
+| Personnel（吏部） | §零§三§六§七§八PerformEval 数据 + rubric | ~200 行 + 动态数据 |
 
 ### 5. 结构化输出 Schema
 
@@ -427,7 +523,12 @@ py palace/run.py --scenario dor_review --input "春节限时礼包活动：面�
 
 ### Phase 2：角色配置 + 知识注入
 
-- 编写 6 个角色 YAML（PLD/PLE/PLT/边界检查/PMO/吏部尚书）
+- 编写 9 个角色 YAML：
+  - Feature 审查域：PLD / PLE / PLT / 边界检查
+  - 数值 & 质量域：户部尚书（numerics）/ 刑部尚书（qa_review）
+  - 管线运营域：PMO
+  - 人才组织域：吏部尚书（personnel）
+  - 战略对齐域：御史台（strategist）
 - 实现 `knowledge.py`（PLAYBOOK 章节切片 + data_sources 抽象，动态数据先用 mock）
 - 实现 `schemas.py`（结构化输出 JSON Schema，review_result + advisory_result 两种）
 
@@ -441,10 +542,11 @@ py palace/run.py --scenario dor_review --input "春节限时礼包活动：面�
 ### Phase 4：CLI 入口 + Mock 端到端验证
 
 - 实现 `run.py` CLI 入口
-- 准备三域测试用例：
-  - Feature 审查：一个应通过、一个应 block、一个边界情况
+- 准备四域测试用例：
+  - Feature 审查（含数值 + 可测性）：一个应通过、一个应 block、一个数值风险 concern
   - 管线运营：一个版本健康度检查（PMO 视角）
   - 人才组织：一个组织诊断咨询（如"体验组无组长，怎么办"）
+  - 全阁审议：一个版本规划（御史台 + PLD + PLT + 户部 + PMO + 吏部联合审议）
 - 用 mock 端到端跑通完整流程
 - 验证：并行调度正确、review/advisory 两种模式正确、输出格式合规、错误降级正常
 
@@ -456,12 +558,58 @@ py palace/run.py --scenario dor_review --input "春节限时礼包活动：面�
 - 调优角色 persona 和 review_dimensions
 - 验证结构化输出解析的鲁棒性
 
+## 完整角色图谱
+
+```
+层级         角色                域               authority
+─────────────────────────────────────────────────────────────
+WHY          御史台（战略锚）     战略对齐          concern_only
+WHAT         PLD（管线主策）      Feature 审查      block
+WHAT+BUILD   户部尚书（数值）     数值/经济系统      concern_only
+HOW          PLE（管线体验）      Feature 审查      block
+BUILD        PLT（管线技术）      Feature 审查      block
+MAKE         刑部尚书（QA）       质量门禁          block
+跨层          边界检查            职权边界          block
+─── 横向职能 ──────────────────────────────────────────────
+运营          PMO（管线总管）      管线运营          concern_only
+组织          吏部尚书            人才组织          concern_only
+```
+
+**block 权力分布**：PLD、PLE、PLT、QA、边界 共 5 个角色有 block 权。其余 4 个角色只能标记 concern。这保证了"具体执行层有否决权，战略和管理层只提建议"的权力结构。
+
+## 御史台进化路径（长期规划）
+
+御史台（Strategist）不只是一个审查角色——它是制作人的**思维训练伙伴**。
+
+### 阶段 1：对齐检查（当前）
+- 被动模式：在 dor_review / version_planning 中作为角色参与
+- 职责：检查议题是否对齐北极星
+
+### 阶段 2：决策追问
+- 主动模式：制作人输入一个决策想法，御史台通过苏格拉底式追问帮助厘清
+- 记录追问-回答链路，沉淀为决策档案
+
+### 阶段 3：认知建模
+- 基于历史决策档案，构建制作人的决策模式画像
+- 识别常见思维盲区（如"总是低估时间成本""倾向于做加法而非减法"）
+- 主动提醒：当新决策触发已知盲区模式时预警
+
+### 阶段 4：战略参谋
+- 结合行业数据、竞品分析、历史项目数据
+- 从"检查对齐"升级为"建议方向"
+- 制作人和御史台形成"命题-挑战"的良性循环
+
+> 阶段 1 在本次 MVP 范围内。阶段 2-4 架构预留，不实现。
+
 ## 后续扩展路径（不在本次范围，架构预留）
 
 - 接入 PmSystem API（PMO 角色从 `/api/features` `/api/versions` 拉取真实数据）
 - 接入 PerformEval API（吏部尚书从 `/api/members` `/api/evaluations` 拉取成员和评价数据）
 - 解析 org-structure.html 中的组织架构数据供吏部尚书使用
+- 户部尚书接入数值策划工具数据（配表、经济系统模拟结果）
+- 刑部尚书接入 QA 系统（bug 数据库、测试覆盖率报告）
 - 新增场景：运营活动规划（advisory 模式）、考核标准设计（eval_design）
 - 集成到 PmSystem 前端（Feature 页加"审查"按钮，版本页加"健康度检查"按钮）
 - 集成到 Cursor AgentX（作为 Agent Skill 被调用）
 - 简历筛选批量处理（接入邮件/文件夹自动读取候选人简历）
+- 御史台阶段 2-4 进化（决策追问 → 认知建模 → 战略参谋）
