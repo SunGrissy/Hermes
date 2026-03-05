@@ -1,5 +1,25 @@
 # Work Log - MyAgents Root
 
+## 2026-03-05 - Bridge 对接规范文档
+
+**状态**: 已完成
+
+**内容**:
+- 新建 `BRIDGE_SPEC.md`：智能管理工具体系与 Ultra 的对接技术方案（12 章节）
+- 架构设计：三层编排模型（意图编排/业务编排/投递编排）、三种通信流向
+- MVP 接口契约：PmSystem 版本管理 + Feature 管理 + 仪表盘（完整出入参）
+- 能力发现机制：`/bridge/capabilities` 兼容 Function Calling 格式
+- 事件系统：订阅/推送协议、8 种 MVP 事件类型
+- 职责边界：Bridge 管"办事记录"，Ultra 管"理解人通知人"
+- 待确认清单：U1-U8 共 8 个问题需 Ultra 方回复
+- 新建 `BRIDGE_PM_API_REQUIREMENTS.md`：PmSystem 细粒度 API 改造需求（供 pm-system Agent 执行）
+- Bridge 采用两阶段适配策略：短期厚适配（基于现有 /api/data），长期薄代理（等 PmSystem 补接口）
+
+**备注**:
+- 子模块为私有仓库，云环境无法检出，API 契约基于 pm_requirements.md 和 AGENT_TODO_pm-system.md 推导
+- Bridge 项目代码尚未开始，本次仅输出设计文档
+- 推送通道原则上交给 Ultra，Bridge 保留应急直连钉钉 webhook
+
 ## 2026-03-03 - 工作室会议体系架构设计
 
 **状态**: v2 已完成，待验收
