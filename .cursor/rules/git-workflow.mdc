@@ -10,7 +10,7 @@ alwaysApply: true
 ## 何时提交（铁律）
 - 只在用户明确说**"请提交"**或**"验收通过"**时才执行 git commit
 - 功能做完、Bug 修完、重构完 → 都**不要自动提交**，等用户指令
-- 永远不要未经许可执行 `git push`
+- 验收时默认推送（见 `acceptance-checklist.mdc` 第 7 步），其他场景不要未经许可执行 `git push`
 
 ## Commit Message 格式
 ```
@@ -23,15 +23,18 @@ type: feat / fix / docs / style / refactor / perf / test / chore / revert
 - `fix(login): 修复 token 过期后白屏问题`
 
 ## "验收通过"完整流程
-1. 更新 WORK_LOG.md（状态标记为"验收通过"）
-2. `git add` 相关文件（优先指定文件，避免 `git add .`）
-3. `git commit` 提交当前分支
-4. 如果在功能分支上：
+
+> **完整验收流程见 `acceptance-checklist.mdc`。** 本节仅保留 commit 和合并的细节规则，执行顺序以 checklist 为准。
+
+验收流程中的 commit + 合并步骤：
+1. `git add` 相关文件（优先指定文件，避免 `git add .`）
+2. `git commit` 提交当前分支
+3. 如果在功能分支上：
    - 先在功能分支合并主分支：`git merge main`
    - 如果有冲突 → 见下方「合并冲突处理流程」
    - 合并完成后 → 见下方「合并后测试流程」
    - 测试通过后：`git checkout main && git merge <branch>`（此时应为 fast-forward）
-5. 告知用户 commit ID，询问是否需要 push
+4. 推送（默认执行，含子模块顺序处理，见 `acceptance-checklist.mdc` 第 7 步）
 
 ### 合并冲突处理流程
 当 `git merge` 产生冲突时：
@@ -48,6 +51,23 @@ type: feat / fix / docs / style / refactor / perf / test / chore / revert
 2. Agent 逐项自测：检查代码逻辑一致性、引用完整性、lint 无新增错误、关键路径可运行
 3. Agent 输出自测报告（通过 / 存疑 / 失败），对存疑项说明原因
 4. 用户根据报告确认是否通过，通过后才继续合并回 main
+
+## 子模块 commit 闭环（铁律）
+
+在子模块内执行 `git commit` 后，**必须立即回根仓库检查指针状态**：
+
+```
+1. cd 回根仓库目录
+2. git status --short → 检查子模块是否显示为"新提交"
+3. 如果有变更：
+   a. 提醒用户："子模块 {name} 已提交，根仓库指针需要同步更新。"
+   b. 等用户确认后 → git add <子模块名> → git commit "chore: sync {name} submodule pointer"
+4. 如果无变更 → 异常情况，确认子模块 commit 是否成功
+```
+
+**不执行此闭环 = 子模块指针漂移。** 其他人 `git pull` 根仓库后，子模块仍指向旧 commit，导致代码不一致。
+
+**适用场景**：任何在子模块内的 commit，无论是验收流程还是用户单独说"请提交"。验收流程中此步骤由 `acceptance-checklist.mdc` 第 7 步统一处理，非验收场景由本规则保底。
 
 ## 禁止提交
 - `.env`、API 密钥、密码等敏感信息

@@ -8,6 +8,8 @@ alwaysApply: true
 
 ## 口令触发（必须遵守）
 
+> **完整验收流程见 `acceptance-checklist.mdc`。** 快检是该流程的第 1 步，由 checklist 调度执行。
+
 ### 用户说"验收" → 执行快检（L0 + L1）
 
 **L0 静态检查：**

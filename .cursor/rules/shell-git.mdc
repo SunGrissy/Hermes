@@ -25,6 +25,30 @@ py -c "import ast; ast.parse(open(r'文件名.py', encoding='utf-8').read()); pr
 | 用户说 | Agent 执行 |
 |---|---|
 | "更新" | 执行下方「全量更新流程」 |
+| "推送" / "push" | 执行下方「推送流程」 |
+
+### 推送流程（用户说"推送"时触发）
+
+**不论是否在验收流程中，任何 push 前都必须通过 pre-push 门禁。**
+
+```
+1. 分支安全验证
+   git branch --show-current → 比对 SESSION_BRANCH
+
+2. pre-push 门禁（agent-core.mdc P1-P3）
+   P1: git submodule status → 有 + 前缀 = 子模块有未推送 commit → 先推子模块
+   P2: 敏感路径检查
+   P3: 推送顺序检查（子模块先于父仓库）
+
+3. 如果 P1 检测到子模块变更 → 按 acceptance-checklist.mdc 7b→7c 执行：
+   a. 逐个 cd 子模块 → git push
+   b. 回根仓库 → git add <子模块> → git commit "chore: update submodule pointers" → git push
+   c. 完成判定：子模块远端 + 根仓库指针 + 根仓库远端 三者同步
+
+4. 无子模块变更 → 直接 git push
+
+5. rejected → git pull --rebase → 重试一次 → 仍失败报告用户
+```
 
 ### 全量更新流程（用户说"更新"时触发）
 
