@@ -136,6 +136,22 @@ async def _invoke_assessment(provider, role_config, topic_text, playbook_text,
 # Prompt builders (v0.4)
 # ============================================================
 
+_DEFAULT_EXTRACTION_OUTPUT_SPEC = (
+    "以 JSON 格式输出，包含三个字段：\n\n"
+    "1. layer_overview: 数组，每层一项 {layer, ratio, completeness(complete/incomplete/fragment/absent), key_gaps}\n"
+    "2. checklist: 数组，每个核心交付物一项 {item_id, title, layer, status(present/incomplete/missing), extracted_text, gap_description, acceptance_criteria, group_id}\n"
+    "   - item_id 用英文短横线格式如 what-intent, what-success-metrics, how-interaction\n"
+    "   - group_id（可选）：语义相关的检查项共享同一 group_id（如术语表和信息架构共享 'terminology'），合成时会合并为一条\n"
+    "   - extracted_text 填写从文档中找到的相关原文（至少 2-3 段完整上下文，避免断章取义）\n"
+    "   - gap_description 说明缺了什么或哪里不完整\n"
+    "   - acceptance_criteria 描述'什么算完成'的验收标准（具体、可检验的交付物描述）\n"
+    "3. cross_layer_observations: 数组 {category(intent/readiness/annotate), description, suggestion}\n"
+    "   - intent: 体验意图在跨层传递中的一致性风险\n"
+    "   - readiness: 下游团队启动工作所需的前置条件缺口\n"
+    "   - annotate: 跨层引用的标注建议（参考 vs 决策）"
+)
+
+
 def _build_extraction_prompt(role_config, knowledge, scenario):
     parts = [role_config["persona"].strip()]
 
@@ -147,21 +163,8 @@ def _build_extraction_prompt(role_config, knowledge, scenario):
         dim_text = "\n".join(f"- {d}" for d in dims)
         parts.append(f"\n## 检查维度\n\n{dim_text}")
 
-    parts.append(
-        "\n## 输出要求\n\n"
-        "以 JSON 格式输出，包含三个字段：\n\n"
-        "1. layer_overview: 数组，每层一项 {layer, ratio, completeness(complete/incomplete/fragment/absent), key_gaps}\n"
-        "2. checklist: 数组，每个核心交付物一项 {item_id, title, layer, status(present/incomplete/missing), extracted_text, gap_description, acceptance_criteria, group_id}\n"
-        "   - item_id 用英文短横线格式如 what-intent, what-success-metrics, how-interaction\n"
-        "   - group_id（可选）：语义相关的检查项共享同一 group_id（如术语表和信息架构共享 'terminology'），合成时会合并为一条\n"
-        "   - extracted_text 填写从文档中找到的相关原文（至少 2-3 段完整上下文，避免断章取义）\n"
-        "   - gap_description 说明缺了什么或哪里不完整\n"
-        "   - acceptance_criteria 描述'什么算完成'的验收标准（具体、可检验的交付物描述）\n"
-        "3. cross_layer_observations: 数组 {category(intent/readiness/annotate), description, suggestion}\n"
-        "   - intent: 体验意图在跨层传递中的一致性风险\n"
-        "   - readiness: 下游团队启动工作所需的前置条件缺口\n"
-        "   - annotate: 跨层引用的标注建议（参考 vs 决策）"
-    )
+    output_spec = role_config.get("extraction_output_spec", _DEFAULT_EXTRACTION_OUTPUT_SPEC)
+    parts.append(f"\n## 输出要求\n\n{output_spec.strip()}")
     return "\n".join(parts)
 
 

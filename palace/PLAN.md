@@ -108,6 +108,41 @@ feature_meta:
 
 当 `document_layer: mixed` 时，Palace 对同一份文档分别用 WHAT/HOW/BUILD 标准审查各自的内容，并额外检查层间连贯性。
 
+### 版本排布预审（version_layout）
+
+版本排布预审发生在**版本规划阶段**，是所有 Feature 进入详细设计之前的门禁。
+与 `what_precheck`（审单篇 Feature 文档纵向深度）正交——它审的是多个 Feature 组合在一起的横向构成质量。
+
+```
+管线时序：
+
+PLD 产出版本规划（Feature 清单 + 各自的 WHAT 概要 + 组盘逻辑）
+    ↓
+version_layout 预审 ← 审的是这份规划，不是各 Feature 的完整文档
+    ↓
+制作人决策（direction_aligned ✅ 或 打回重组）
+    ↓
+各 Feature Owner 领到明确的 WHAT 要求，开始写详细文档
+    ↓
+what_precheck 审单篇文档
+    ↓
+DoR 门禁
+```
+
+| 项目 | 说明 |
+|------|------|
+| **场景 ID** | `version_layout` |
+| **输入物** | 版本规划文本（Feature 清单 + 各 Feature WHAT 概要 + 组盘逻辑） |
+| **提取角色** | `layout_analyst`（版本排布结构分析师，advisory） |
+| **评估角色** | `pld`（concern）+ `pmo`（advisory） |
+| **审查维度** | 快慢轨配比、用户价值覆盖、内容节奏、研发负荷、风险集中度、逐 Feature WHAT 交代 |
+| **综合规则** | any_block → block, concern_threshold: 1 |
+| **对应 PmSystem** | planning 节点的 `direction_aligned` 勾选前置 |
+
+**关键设计决策**：版本规划先于 Feature 文档存在。不能等所有 Feature 文档写完再组版本，那样来不及。
+版本规划里每个 Feature 应包含的不是完整设计，而是 WHAT 层的"交代"：
+体验意图（一句话）、管线权重、目标用户群、在版本中的角色、粗略体量、成功标准方向。
+
 ### 快慢轨分级审查
 
 | | 慢轨 WHAT 预审（准备中期） | 慢轨 DoR 门禁 | 快轨轻量审查 |
@@ -171,6 +206,7 @@ MyAgent/
       plt.yaml            # 管线技术：审 WHAT 可实现性 + 审 HOW 技术可行性（block 权）
       boundary.yaml       # 职权边界检查（advisory）
       pmo.yaml            # 版本级 PMO：scope/风险/排期评估（advisory）
+      layout_analyst.yaml # 版本排布结构分析师：审版本组盘构成（advisory）
     scenarios/
       what_precheck.yaml  # 慢轨 WHAT 预审（已实现，PLD+PLE+PLT+Boundary）
       dor_slow.yaml       # 慢轨 DoR 审查（PLD+PLE+PLT，正式门禁）
@@ -178,6 +214,7 @@ MyAgent/
       dor_review.yaml     # Feature DoR 审查（6角色：PLD+PLE+PLT+边界+数值+QA）
       how_review.yaml     # HOW 方案审查（PLE+PLT，独立于 WHAT 审查）
       version_scope.yaml  # 版本 scope 健康度评估（PMO）
+      version_layout.yaml # 版本内容排布预审（LayoutAnalyst+PLD+PMO，已实现）
       version_health.yaml # 版本健康度检查（PMO 主导，待实现）
       version_planning.yaml # 版本规划综合审查（全阁审议，待实现）
       growth_review.yaml  # 增长复盘（御史台主导 advisory，待实现）
@@ -201,9 +238,13 @@ Feature 级审查：
                                  │ PLT Agent    │  ├──→ 综合器 ──→ 结构化审查报告 JSON
   场景配置 YAML ───→              │ Boundary     │  │
                                  └──────┬───────┘  │
-版本级审查：                             │          │
+版本级审查（scope）：                      │          │
   版本 Feature 列表 ──→ PMO Agent ──────────────────┘
   各 Feature 管线状态
+
+版本排布预审（layout）：
+  版本规划文本 ──→ LayoutAnalyst（提取） ──→ PLD + PMO（评估） ──→ 排布预审报告
+  （各 Feature 的 WHAT 概要 + 组盘逻辑）
                                  LLM Provider 接口
                                  ├── MockProvider（开发/测试）
                                  └── OpenAI Compatible（中转站）

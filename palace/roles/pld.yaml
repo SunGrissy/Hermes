@@ -40,6 +40,13 @@ review_dimensions_fast:
   - "资源投入是否在快轨预算内（开发≤0.5人天、美术≤1素材）？"
 
 authority: block
+authority_by_scenario:
+  what_precheck: block
+  dor_slow: block
+  how_review: advisory
+  dor_fast: null
+  version_layout: concern
+
 block_conditions:
   - "内容方向偏离版本目标"
   - "体验意图不清晰，下游无法落地"
