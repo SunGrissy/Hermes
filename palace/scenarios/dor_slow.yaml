@@ -1,0 +1,27 @@
+id: dor_slow
+name: "慢轨 DoR 审查"
+mode: review
+target: feature
+pipeline_weight: slow
+pipeline_stage: dor
+
+roles: [pld, ple, plt]
+
+role_overrides:
+  ple:
+    use_dimensions: review_dimensions
+    authority: block
+  plt:
+    use_dimensions: review_dimensions
+    authority: block
+
+synthesis_rules:
+  any_block_means_block: true
+  must_list_action_items: true
+  no_hedging: true
+
+output_includes:
+  - overall_verdict
+  - per_role_verdicts
+  - action_items
+  - dor_checklist_status

@@ -1,0 +1,23 @@
+# Legacy scenario — retained for backward compatibility.
+# Equivalent to what_precheck.yaml (慢轨 WHAT 预审).
+# New code should use what_precheck / dor_slow / dor_fast / how_review / version_scope.
+id: dor_review
+name: "Feature DoR 审查 (legacy)"
+mode: review
+target: feature
+pipeline_weight: slow
+pipeline_stage: scoping
+roles: [pld, ple, plt, boundary]
+
+synthesis_rules:
+  any_block_means_block: true
+  concern_threshold: 2
+  must_list_action_items: true
+  no_hedging: true
+
+output_includes:
+  - overall_verdict
+  - per_role_verdicts
+  - boundary_violations
+  - action_items
+  - dor_checklist_status

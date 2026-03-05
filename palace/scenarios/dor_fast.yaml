@@ -1,0 +1,25 @@
+id: dor_fast
+name: "快轨 DoR 审查"
+mode: review
+target: feature
+pipeline_weight: fast
+pipeline_stage: dor
+
+roles: [pld, plt]
+
+role_overrides:
+  pld:
+    use_dimensions: review_dimensions_fast
+    authority: block
+  plt:
+    use_dimensions: review_dimensions_fast
+    authority: concern
+
+synthesis_rules:
+  any_block_means_block: true
+  must_list_action_items: true
+
+output_includes:
+  - overall_verdict
+  - per_role_verdicts
+  - action_items

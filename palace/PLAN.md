@@ -1,27 +1,157 @@
 # Palace 多角色协商引擎
 
-> 基于管线角色和管理体系的 AI 审查、运营监控与组织决策系统
+> 基于管线角色（PLD/PLE/PLT/PMO）的 AI 审查与决策系统
 > 创建日期：2026-03-03
+> 最后更新：2026-03-04
 
 ## 定位
 
-Palace 是 MyAgent 下的新项目，定位为**管理决策服务层**——读取 PLAYBOOK 规则、PmSystem 和 PerformEval 数据，通过多角色 AI 并行审查，产出结构化决策报告。
+Palace 是 MyAgent 下的新项目，定位为**管线决策服务层**——读取 PLAYBOOK 规则和 PmSystem 数据，通过多角色 AI 并行审查，产出结构化决策报告。
 
-引擎服务三个域：
-
-| 域 | 核心问题 | 角色 | 时间尺度 |
-|---|---|---|---|
-| **Feature 审查** | "这个 Feature 行不行？" | PLD + PLE + PLT + 边界检查 | 单 Feature 生命周期 |
-| **管线运营** | "版本能不能按时交？" | PMO（管线总管） | 单版本周期 |
-| **人才组织** | "组织能不能持续运转？" | 吏部尚书（人才组织） | 跨版本 / 半年度 |
-
-第一个验证场景：Feature DoR 审查（PLD + PLE + PLT + 职权边界检查，4 角色并行）。
+审查发生在两个层级：
+- **Feature 级**：单个 Feature 的交付物质量门禁（WHAT 预审、DoR 门禁、HOW 品质门禁）
+- **版本级**：版本整体 scope / 风险 / 排期的健康度评估（PMO 角色）
 
 ## 设计灵感
 
 - **复杂任务三步法（S0→S3）**：分层防御思想——用最少资源识别真正需要资源的任务，逐层递减流量、递增精度
 - **Palace 三省六部制**：人类验证过的治理结构映射为多Agent协作——角色专业化 + 制度化流程替代单点智能
 - **PLAYBOOK 四层模型**：WHAT/HOW/BUILD/MAKE 职权边界天然定义了每个审查角色的视角和权力范围
+
+## 三层概念模型
+
+管线审查发生在清晰的概念分层之上：
+
+```
+运营节点 (Operational Node)     版本 (Version/Release)      Feature (管线单元)
+─────────────────────────      ──────────────────────      ───────────────────
+描述"市场侧"                    描述"交付侧"                 描述"生产侧"
+SABC = 内容密度/新鲜感           = 一次部署的打包容器          = 一条独立管线的最小单位
+
+属性：                          属性：                       属性：
+  tier (S/A/B/C)                 release_date                 pipeline_weight (fast/slow)
+  关联 Features 列表              scope (Feature 列表)          operational_node (运营节点)
+                                 resource_budget               version (所属版本)
+                                                              pipeline_stage (规划→复盘)
+```
+
+**三者正交**：
+- SABC 描述运营节点的内容投放密度，不是版本属性
+- 快/慢轨是 Feature 属性，一个版本可同时包含快轨和慢轨 Feature
+- Feature 可跨版本迁移而管线状态不变
+- Palace Feature 级审查基于 pipeline_weight 选择审查场景和审查强度
+- Palace 版本级审查（PMO）聚合所有 Feature 的管线状态评估整体健康度
+
+## 审查职责矩阵
+
+### 交付物 × 审查人 × 权力
+
+> Owner 是管线角色（同 PLD），不固定为某个职能。同一个 Feature 的 WHAT/HOW/BUILD 文档可能由不同人编写。
+> 审查跟文档的层级走，不跟写文档的人的职能走。
+
+| 文档层级 | 制作人 | PLD | PLE | PLT | 主美 | 主程 |
+|---|---|---|---|---|---|---|
+| **WHAT（体验设计）** | **审**（战略对齐） | **审**（内容方向，block 权） | **审**（可设计性 + 向上理解，concern） | **审**（可实现性 + 向上理解，concern） | — | — |
+| **HOW（交互方案）** | **关注**（纠偏，不阻塞） | — | **验**（品质 Owner，block 权） | **审**（技术可行性，block 权） | **审**（视觉品质，block 权） | — |
+| **BUILD（系统方案）** | — | — | — | **验**（品质 Owner） | — | **审**（架构合理性，block 权） |
+
+**"向上理解"**：审查者不仅审本层质量，还审文档是否体现了对上游层级意图的正确理解（如系统策划的 BUILD 文档应体现对 WHAT 体验意图和 HOW 交互方案的理解）。
+
+### WHAT 文档的定义
+
+WHAT 文档 = **内容体验设计**（不是功能需求文档）：
+
+```
+第一层：体验意图（必须）—— 用户应该产生什么感受/行为变化？
+第二层：内容结构（必须）—— 用什么内容结构承载体验意图？
+第三层：决策约束（必须）—— 哪些是已决策？哪些留给 HOW/BUILD？
+第四层：成功指标（必须）—— 怎么衡量体验意图是否实现？
+```
+
+**边界判断标准**：描述"用户应该有什么感受/行为" = WHAT；描述"怎么在界面上实现" = HOW。
+
+### 层间连贯性审查模型（D72-D75）
+
+审查跟着**文档的层级**走，不跟着**人的职能**走。"谁写的"不是审查重点，"这个层级的核心交付物到位了吗"才是。
+
+**核心原则**：每份文档既审**本层质量**，又审**跨层连贯性**：
+
+```
+                向上对齐（理解上游意图）
+                    ↑
+    本层核心交付完整度 ← 审查焦点 → 跨层材料定性（参考 vs 决策）
+                    ↓
+                向下空间（给下游留余地）
+```
+
+**三类跨层内容的定性**（替代旧的"越界检测"）：
+
+| 类型 | 定义 | 审查态度 | 示例 |
+|------|------|---------|------|
+| **跨层理解展示** | 附带相邻层材料帮助接收方理解 | 正面（鼓励，审质量） | 系统策划在 BUILD 文档中画交互流程图 |
+| **跨层参考标注** | 包含其他层的参数/方案但标注为"参考值" | 中性（检查标注清晰度） | WHAT 文档附"35人一组（参考值，由系统策划确定）" |
+| **跨层替代决策** | 替其他层做了最终决策且未标注 | 需改进（建议改为参考） | 运营在 WHAT 文档中写死匹配算法的具体参数 |
+
+**审查优先级翻转**：
+1. **P0 核心交付**：本层的核心交付物完整吗？质量达标吗？
+2. **P1 向上对齐**：文档是否体现了对上游层级意图的理解？
+3. **P1 向下空间**：给下游层级留够设计/实现空间了吗？
+4. **P2 跨层定性**：附带的跨层材料是否清晰标注了"参考"而非"决策"？
+
+**document_layer 元数据**：提交审查时必须声明文档层级：
+
+```yaml
+feature_meta:
+  document_layer: "WHAT"    # WHAT / HOW / BUILD / mixed
+  # mixed = 过渡期混合文档，Palace 按层拆开审
+```
+
+当 `document_layer: mixed` 时，Palace 对同一份文档分别用 WHAT/HOW/BUILD 标准审查各自的内容，并额外检查层间连贯性。
+
+### 快慢轨分级审查
+
+| | 慢轨 WHAT 预审（准备中期） | 慢轨 DoR 门禁 | 快轨轻量审查 |
+|---|---|---|---|
+| **触发时机** | 准备阶段中期 | DoR 申请时 | DoR 申请时 |
+| **Palace 角色** | PLD + PLE + PLT + Boundary | PLD + PLE + PLT（人审签字） | PLD + PLT（兼容性半锁） |
+| **PLD 权力** | block | block | block |
+| **PLE 权力** | concern（审可设计性） | block（人审） | 不参与 |
+| **PLT 权力** | concern（审可实现性） | block（人审） | concern（框架兼容性确认） |
+| **Boundary** | advisory | 不参与（已在预审覆盖） | 不参与 |
+| **综合规则** | any_block → block | 三把锁全过 | PLD 过 + PLT 兼容 → 通过 |
+
+HOW 方案审查（独立于 WHAT 审查，发生在准备阶段后期）：
+
+| | 慢轨 HOW 审查 | 快轨 HOW 审查 |
+|---|---|---|
+| **审查人** | PLE（品质 Owner）+ 主美 + PLT | PLE 轻量确认 |
+| **PLE 权力** | block（整体体验不达标） | concern |
+| **主美 权力** | block（视觉品质不达标） | 不参与 |
+| **PLT 权力** | block（技术不可行 / 性能超标） | 不参与 |
+| **制作人** | 关注（纠偏，不阻塞） | 不参与 |
+
+### 轨道分类决策树
+
+```
+Feature 需要新增系统框架（新代码模块）？
+       /              \
+     是                否
+     ↓                 ↓
+  慢轨（确定）       美术资产超出快轨预算？
+                      /          \
+                    是            否
+                    ↓              ↓
+              升级慢轨         体验追求代差？
+              （主美确认）       /         \
+                            是           否
+                            ↓             ↓
+                      升级慢轨        快轨（确定）
+                      （PLE 确认）
+
+主判据：是否需要新框架（二值，无模糊）
+升级触发器：逐项检查每个 B 指标能否在快轨预算内消化
+核心原则：轨道只能升级（快→慢），不能降级
+```
 
 ## 项目结构
 
@@ -36,21 +166,17 @@ MyAgent/
       knowledge.py        # PLAYBOOK 章节切片器
       schemas.py          # 结构化输出 schema（review_result / advisory_result）
     roles/
-      pld.yaml            # 管线主策（WHAT 层）
-      ple.yaml            # 管线体验（HOW 层）
-      plt.yaml            # 管线技术（BUILD 层）
-      boundary.yaml       # 职权边界检查（跨层）
-      pmo.yaml            # 管线总管（管线运营域）
-      personnel.yaml      # 吏部尚书（人才组织域）
-      numerics.yaml       # 户部尚书（数值/经济系统）
-      qa_review.yaml      # 刑部尚书（质量门禁）
-      strategist.yaml     # 御史台（战略锚）
+      pld.yaml            # 管线主策：审 WHAT 内容方向（block 权）
+      ple.yaml            # 管线体验：审 WHAT 可设计性 + 验 HOW 品质（block 权）
+      plt.yaml            # 管线技术：审 WHAT 可实现性 + 审 HOW 技术可行性（block 权）
+      boundary.yaml       # 职权边界检查（advisory）
+      pmo.yaml            # 版本级 PMO：scope/风险/排期评估（advisory）
     scenarios/
-      dor_review.yaml     # Feature DoR 审查（6角色：PLD+PLE+PLT+边界+数值+QA）
-      version_health.yaml # 版本健康度检查（PMO 主导）
-      version_planning.yaml # 版本规划综合审查（全阁审议：御史台+PLD+PLT+PMO+吏部+户部）
-      org_advisory.yaml   # 组织架构咨询（吏部尚书主导）
-      resume_screening.yaml # 简历筛选（吏部尚书主导）
+      what_precheck.yaml  # 慢轨 WHAT 预审（准备中期，PLD+PLE+PLT+Boundary）
+      dor_slow.yaml       # 慢轨 DoR 审查（PLD+PLE+PLT，正式门禁）
+      dor_fast.yaml       # 快轨 DoR 审查（PLD+PLT 兼容性半锁）
+      how_review.yaml     # HOW 方案审查（PLE+PLT，独立于 WHAT 审查）
+      version_scope.yaml  # 版本 scope 健康度评估（PMO）
     run.py                # CLI 入口（测试用）
     requirements.txt
     .env.example
@@ -59,44 +185,39 @@ MyAgent/
 ## 核心架构
 
 ```
-                         Palace Engine
-                         ─────────────
-议题 + 场景配置 ──→ 议题路由器 ──→ 按场景召唤角色 ──→ 并行执行 ──→ 综合器 ──→ 结构化报告
+输入                              Palace Engine                              输出
+─────────                         ─────────────                              ─────
 
-                    ┌─────────── 角色池 ───────────┐
-                    │                              │
-                    │  Feature 审查域               │
-                    │  ├── PLD (WHAT)              │
-                    │  ├── PLE (HOW)               │
-                    │  ├── PLT (BUILD)             │
-                    │  └── Boundary (跨层)          │
-                    │                              │
-                    │  管线运营域                    │
-                    │  └── PMO (跨层)               │
-                    │                              │
-                    │  人才组织域                    │
-                    │  └── Personnel/吏部尚书 (跨层)  │
-                    │                              │
-                    └──────────────────────────────┘
-                                 │
-                          LLM Provider 接口
-                          ├── MockProvider（开发/测试）
-                          └── OpenAI Compatible（智谱 GLM-4）
+Feature 级审查：
+  WHAT 文档文本 ─┐                ┌──────────────┐
+  HOW 方案文本 ──┤                │ PLD Agent    ├──┐
+  Feature 元数据 ┘──→ 议题路由器 ─┤ PLE Agent    │  │
+                                 │ PLT Agent    │  ├──→ 综合器 ──→ 结构化审查报告 JSON
+  场景配置 YAML ───→              │ Boundary     │  │
+                                 └──────┬───────┘  │
+版本级审查：                             │          │
+  版本 Feature 列表 ──→ PMO Agent ──────────────────┘
+  各 Feature 管线状态
+                                 LLM Provider 接口
+                                 ├── MockProvider（开发/测试）
+                                 └── OpenAI Compatible（中转站）
 ```
 
-### 三域关系与信号流
+### Feature 元数据（Input Metadata）
 
-```
-Feature 审查域 ────────── 管线运营域 ────────── 人才组织域
-(PLD/PLE/PLT)             (PMO)              (吏部尚书)
-"方案行不行"              "版本跑不跑得动"       "组织撑不撑得住"
-     │                      │                     │
-     │ DoR 通过率下降        │ 资源缺口信号          │
-     └──────────→ PMO 监控 ──┘──────────→ 吏部接手  │
-                  进度/资源/依赖            架构/培养/招聘
-```
+提交审查时附带的结构化信息，用于精准匹配审查场景和审查强度：
 
-三个域的角色可以**按场景灵活组合**——版本规划审查时同时召唤 PLD + PLT + PMO + 吏部尚书，各自从自己的视角给意见。
+```yaml
+feature_meta:
+  title: "锦标赛月赛"
+  owner: "崔忠仁"
+  owner_role: "运营策划"           # Owner 的职能角色
+  pipeline_weight: "slow"         # fast / slow
+  pipeline_stage: "scoping"       # planning / scoping / dor / production
+  operational_node: "五一"         # 所属运营节点
+  operational_tier: "S"           # S / A / B / C
+  version: "v2.1"                 # 所属版本
+```
 
 ## 关键设计决策
 
@@ -128,330 +249,130 @@ MockProvider 设计要点：
 
 ### 2. 角色配置 Schema
 
-每个角色 YAML 包含五层——身份、知识、数据源、行为、输出：
+每个角色 YAML 包含五层——身份、知识、行为、输出、轨道差异：
 
 ```yaml
-# roles/pld.yaml 示例（Feature 审查域）
+# roles/pld.yaml 示例
 id: pld
 name: "管线主策 (PLD)"
 layer: WHAT
 
 persona: |
   你是本版本的管线主策(PLD)，版本内容方向总负责人。
-  你将战略目标转化为内容方案，主导优先级，闭环内容验收。
-  你只管 WHAT 层（做什么），不侵入 HOW 层（怎么呈现）。
-  你有权 block 内容不达标的 feature。
+  你审查的是 WHAT 层的「内容体验设计」文档——关注体验意图、内容结构、
+  决策约束和成功指标，而非功能需求参数或实现细节。
 
 knowledge_sections:
-  - pipeline_roles           # §三 管线角色体系
-  - authority_model          # §四 职权边界模型
-  - dor_standards            # §五 DoR 分级
+  - pipeline_roles
+  - authority_model
+  - dor_standards
+  - dual_track
 
+# 慢轨审查维度（完整）
 review_dimensions:
-  - "内容方向是否与版本战略目标一致？"
-  - "优先级排序是否有数据或逻辑支撑？"
-  - "需求描述是否完整（目标用户、核心玩法、预期指标）？"
-  - "奖励/数值设计是否已经过数值评审？"
+  - "体验意图是否清晰？能否一句话说清'用户应产生什么感受'？"
+  - "内容结构是否能承载体验意图？逻辑是否自洽？"
+  - "已决策项是否有依据（数据/竞品/战略判断）？"
+  - "留给 HOW/BUILD 的空间是否合理？有没有锁死下游？"
+  - "成功指标是否可衡量、和北极星对齐？"
+  - "数值/经济模型是否已协调数值评审？"
+
+# 快轨审查维度（精简）
+review_dimensions_fast:
+  - "内容设计是否在框架能力范围内？"
+  - "增量改动的预期用户价值是否清晰？"
+  - "资源投入是否在快轨预算内？"
 
 authority: block
 block_conditions:
   - "内容方向偏离版本目标"
-  - "需求描述严重不完整，无法进入生产"
+  - "体验意图不清晰，下游无法落地"
+  - "成功指标缺失"
 ```
-
-```yaml
-# roles/pmo.yaml 示例（管线运营域）
-id: pmo
-name: "管线总管 (PMO)"
-layer: cross
-
-persona: |
-  你是版本管线的总管（PMO），负责全局进度监控和跨组协调。
-  你不做内容判断（那是PLD的事），不做体验判断（那是PLE的事），
-  不做技术判断（那是PLT的事）。
-  你只看三件事：进度是否健康、资源是否到位、依赖是否断裂。
-  你的输出铁律：每一条记录必须包含——「谁」在「什么时间」把「什么」做到「什么程度」。
-  不接受"在跟进了""差不多了""有点问题"。
-
-knowledge_sections:
-  - pipeline_roles           # §三 管线角色（理解谁负责什么）
-  - dor_standards            # §五 DoR 分级（门禁标准）
-  - dual_track               # §二 双轨制（快轨/慢轨不同节奏）
-
-data_sources:                # 系统数据（非 PLAYBOOK 章节）
-  - pmsystem_versions        # PmSystem 版本数据
-  - pmsystem_features        # PmSystem Feature 状态/进度
-  - pmsystem_milestones      # PmSystem 里程碑
-  - pmo_report_template      # PMO 管线汇报模板（输出格式参考）
-
-review_dimensions:
-  - "整体进度是否健康？完成比 vs 时间比差值多少？"
-  - "有无阻塞/延期 Feature？原因和预计解决时间？"
-  - "跨组依赖是否完整？有无等待超时？"
-  - "上下游交付质量评价是否存在标准偏差？"
-  - "资源是否有瓶颈？谁过载了？下个版本轮值候选人够不够？"
-
-authority: concern_only
-```
-
-```yaml
-# roles/personnel.yaml 示例（人才组织域）
-id: personnel
-name: "吏部尚书"
-layer: cross
-
-persona: |
-  你是工作室的组织与人才管理顾问，分管三条线：
-  1. 组织能力建设——管理幅度诊断、中间层策略、轮值制运转
-  2. 人事考核管理——绩效公式设计、标尺校准、评价周期运营
-  3. 招聘线——岗位需求分析、JD 设计、简历筛选、候选人画像
-  你的核心原则：
-  - 管理体系是效能的基础设施——建议必须回答"省了什么？快了多少？好了多少？"
-  - 单一指标归属——一个指标不由两个人同时背
-  - tenure 递增——标尺随在位时间提高，"非升即走"
-  - 进化系数——无 AI 成果 = 上限 80%，不可商量
-  - 轮值优于固化——降低关键人依赖成本
-  你的沟通风格：不上价值，用"痛点→解法"结构；给选择而非给指令。
-
-knowledge_sections:
-  - evaluation               # §六 评价哲学（乘法公式、标尺设计）
-  - ai_evolution             # §七 AI进化纲领（进化系数、职能融合）
-  - org_diagnosis            # §八 组织诊断（管理幅宽、中间层策略）
-  - pipeline_roles           # §三 管线角色体系（理解轮值制）
-  - north_star               # §零 北极星（增长效能，建议的锚点）
-
-data_sources:
-  - producer_context         # producer-context.mdc（团队93人现状）
-  - org_structure            # org-structure.html 中的组织数据
-  - rubrics                  # rubric_*.json（各职能标尺定义）
-  - performeval_members      # PerformEval 成员数据
-  - performeval_evaluations  # PerformEval 评价记录
-
-review_dimensions:
-  - "这个方案是否降低了管理幅度，还是增加了？"
-  - "考核标准是否符合'整体评判+加法层举证'的两层模型？"
-  - "标尺是否满足 tenure 递增原则？卓越档是否指向下一 L 级？"
-  - "招聘需求是否因组织诊断驱动，而非'感觉缺人'？"
-  - "方案是否有利于超级个体培养，还是在固化层级？"
-
-authority: concern_only
-```
-
-```yaml
-# roles/numerics.yaml 示例（数值/经济系统域）
-id: numerics
-name: "户部尚书（数值顾问）"
-layer: WHAT_BUILD        # 跨两层：WHAT 层判断生态方向，BUILD 层审查配表/公式
-
-persona: |
-  你是数值与经济系统顾问，对应 PLAYBOOK §九"命题-解题"模型中的解题方视角。
-  你负责：生态方向判断、经济系统健康度、定价策略、概率设计、留存影响评估。
-  你不做"做什么"的决策（那是命题方/制作人的事），
-  你做"数值上行不行"的判断。
-  你和 PLD 的分工：PLD 审查"内容方向对不对"，你审查"数值上合不合理"。
-
-knowledge_sections:
-  - north_star               # §零 北极星（增长效能）
-  - dual_track               # §二 双轨制（快轨数值支撑 vs 慢轨策略实验）
-
-review_dimensions:
-  - "奖励/产出是否会打破现有经济平衡？"
-  - "定价是否在玩家接受区间？付费深度合理吗？"
-  - "概率设计是否透明、合规？预期收益是否经过模拟？"
-  - "对长期留存的影响是正向还是负向？"
-  - "是否需要 A/B 实验验证？实验设计是否严谨？"
-
-authority: concern_only      # 不 block，但可标记"数值风险"
-```
-
-```yaml
-# roles/qa_review.yaml 示例（质量门禁）
-id: qa_review
-name: "刑部尚书（QA 审查）"
-layer: MAKE              # 质量门禁，站在 MAKE 层往上看
-
-persona: |
-  你是质量与风险控制官。你的职责不是测试本身，
-  而是审查：这个方案的验收标准是否清晰可测？测试资源是否够用？上线风险是否可控？
-  你在两个节点介入：
-  1. DoR 阶段：审查可测性——spec 能不能转化为测试用例？
-  2. DoD 阶段：审查发版就绪度——bug 量、覆盖率、风险等级。
-  你和 PLT 的分工：PLT 管"技术上能不能实现"，你管"实现之后能不能验证"。
-
-knowledge_sections:
-  - pipeline_roles           # §三 管线角色体系
-  - dor_standards            # §五 DoR 分级
-
-review_dimensions:
-  - "验收标准是否明确、可量化、可自动化？"
-  - "边界条件和异常路径是否被定义？"
-  - "预估测试工作量是否合理？资源是否到位？"
-  - "是否有回归风险？影响已有功能的概率？"
-  - "上线后的监控和回退方案是否准备好？"
-
-authority: block             # 可 block——验收标准不清晰的 Feature 不准进生产
-```
-
-```yaml
-# roles/strategist.yaml 示例（战略对齐）
-id: strategist
-name: "御史台（战略锚）"
-layer: WHY               # 唯一一个 WHY 层角色
-
-persona: |
-  你是战略对齐的守门人。你只问一个核心问题：
-  这件事是否推动了北极星——增长效能 = 单位成本产出的用户价值。
-  三条路径：做分子（提升LTV和自然量）？做分母（压缩边际成本）？提转化？
-  你同时是制作人的学习伙伴——当制作人的决策思路不够清晰时，
-  你通过追问帮助他厘清思路，而非直接给出答案。
-  你不做具体方案判断，你做战略方向判断和思维训练。
-
-knowledge_sections:
-  - north_star               # §零 北极星（增长效能公式）
-  - dual_track               # §二 双轨制（平战结合节奏）
-
-review_dimensions:
-  - "这个 Feature 对北极星公式的哪个变量有贡献？能量化吗？"
-  - "这是平时状态该做的还是节点状态该做的？时机对吗？"
-  - "快轨还是慢轨？管线重量和投入产出比匹配吗？"
-  - "机会成本：如果这些资源投到别处，效果会更好吗？"
-  - "这个决策背后的假设是什么？假设如果错了，后果是什么？"
-
-authority: concern_only      # 不 block 具体方案，但标记"战略偏移"
-```
-
-**角色配置新增 `data_sources` 字段**：`knowledge_sections` 引用 PLAYBOOK 章节（静态文档），`data_sources` 引用系统 API 和文件数据（动态数据）。PMO 和吏部尚书比 PLD/PLE/PLT 更依赖动态数据。开发阶段 data_sources 用 mock 数据，Phase 5+ 接真实 API。
 
 ### 3. 场景配置
 
-引擎支持两种模式：`review`（审查，有 pass/block 结论）和 `advisory`（咨询，给建议和选择）。
+场景按审查对象（Feature/版本）× 管线阶段 × 轨道类型组合：
 
 ```yaml
-# scenarios/dor_review.yaml — Feature DoR 审查（6 角色）
-id: dor_review
-name: "Feature DoR 审查"
+# scenarios/what_precheck.yaml — 慢轨 WHAT 预审（Palace 主战场）
+id: what_precheck
+name: "慢轨 WHAT 预审"
 mode: review
-roles: [pld, ple, plt, boundary, numerics, qa_review]
-#       WHAT  HOW  BUILD 跨层     WHAT+BUILD  MAKE
-#       内容  体验  技术  职权边界   数值审查    可测性
-
+target: feature
+pipeline_weight: slow
+pipeline_stage: scoping
+roles: [pld, ple, plt, boundary]
 synthesis_rules:
-  any_block_means_block: true      # PLD/PLE/PLT/QA 任一 block → 整体 block
-  concern_threshold: 2             # >=2 concern → 整体至少 concern
+  any_block_means_block: true
+  concern_threshold: 2
   must_list_action_items: true
-  no_hedging: true
 
-output_includes:
-  - overall_verdict
-  - per_role_verdicts
-  - boundary_violations
-  - numerics_risk                  # 数值风险标记
-  - action_items
-  - dor_checklist_status           # DoR 四把锁状态（需求+体验+技术+可测性）
-```
-
-```yaml
-# scenarios/version_health.yaml — 管线运营域
-id: version_health
-name: "版本健康度检查"
-mode: advisory
-roles: [pmo]
-
-output_includes:
-  - progress_health          # 进度健康度（完成比 vs 时间比）
-  - blockers                 # 阻塞/延期 Feature 清单
-  - dependency_status        # 跨组依赖状态
-  - resource_risks           # 资源瓶颈和过载预警
-  - action_items
-```
-
-```yaml
-# scenarios/org_advisory.yaml — 人才组织域
-id: org_advisory
-name: "组织架构咨询"
-mode: advisory
-roles: [personnel]
-
-output_includes:
-  - diagnosis                # 当前状态诊断
-  - recommendations          # 建议方案（给选择而非指令）
-  - risk_assessment          # 风险评估
-  - action_items
-```
-
-```yaml
-# scenarios/resume_screening.yaml — 人才组织域
-id: resume_screening
-name: "简历筛选"
-mode: advisory
-roles: [personnel]
-
-input_format:
-  job_description: "岗位 JD"
-  resumes: "候选人简历（批量）"
-
-output_includes:
-  - match_score              # 匹配度评分
-  - strengths                # 匹配项
-  - concerns                 # 不匹配项/风险点
-  - interview_focus          # 面试建议重点考察什么
-  - ranking                  # 候选人排序
-```
-
-```yaml
-# scenarios/version_planning.yaml — 全阁审议（跨域联合）
-id: version_planning
-name: "版本规划综合审查"
+# scenarios/dor_slow.yaml — 慢轨 DoR 门禁
+id: dor_slow
+name: "慢轨 DoR 审查"
 mode: review
-roles: [strategist, pld, plt, numerics, pmo, personnel]
-#       WHY      WHAT BUILD WHAT+BUILD 运营  组织
-#       战略对齐  内容  技术   数值      资源  人才
-
+target: feature
+pipeline_weight: slow
+pipeline_stage: dor
+roles: [pld, ple, plt]          # 无 boundary（已在预审覆盖）
 synthesis_rules:
   any_block_means_block: true
   must_list_action_items: true
-  no_hedging: true
 
-output_includes:
-  - overall_verdict
-  - strategic_alignment      # 御史台: 是否对齐北极星
-  - per_role_verdicts
-  - numerics_feasibility     # 户部: 经济系统影响
-  - resource_feasibility     # PMO: 资源够不够
-  - org_readiness            # 吏部: 人才准备度
-  - action_items
+# scenarios/dor_fast.yaml — 快轨 DoR 审查
+id: dor_fast
+name: "快轨 DoR 审查"
+mode: review
+target: feature
+pipeline_weight: fast
+pipeline_stage: dor
+roles: [pld, plt]               # PLD block 权 + PLT 兼容性半锁
+synthesis_rules:
+  any_block_means_block: true
+  must_list_action_items: true
+# PLD 使用 review_dimensions_fast，PLT 使用 review_dimensions_fast
+
+# scenarios/how_review.yaml — HOW 方案审查
+id: how_review
+name: "HOW 方案审查"
+mode: review
+target: feature
+pipeline_stage: scoping_late    # 准备阶段后期
+roles: [ple, plt]               # PLE 品质 Owner + PLT 技术可行性
+synthesis_rules:
+  any_block_means_block: true
+  must_list_action_items: true
+
+# scenarios/version_scope.yaml — 版本 scope 健康度
+id: version_scope
+name: "版本 Scope 评估"
+mode: advisory                  # 只建议，不 block
+target: version
+roles: [pmo]
+synthesis_rules:
+  must_list_action_items: true
+  flag_risk_concentration: true
 ```
 
 ### 4. 知识切片
 
-从 PLAYBOOK.md 按行号范围提取章节，按角色按需注入：
+从 PLAYBOOK.md 按 `## X、` 标题正则匹配提取章节（已实现，替代了脆弱的硬编码行号）：
 
 ```python
-PLAYBOOK_SECTIONS = {
-    "north_star":      (10, 46),     # §零 北极星（增长效能）
-    "dual_track":      (76, 110),    # §二 双轨制
-    "pipeline_roles":  (112, 156),   # §三 管线角色体系
-    "authority_model": (159, 234),   # §四 职权边界模型
-    "dor_standards":   (236, 255),   # §五 DoR 分级
-    "evaluation":      (258, 302),   # §六 评价哲学
-    "ai_evolution":    (305, 351),   # §七 AI进化纲领（进化系数、职能融合）
-    "org_diagnosis":   (354, 388),   # §八 组织诊断
+SECTION_PATTERNS = {
+    "north_star":      r"^## 零、",
+    "strategic":       r"^## 一、",
+    "dual_track":      r"^## 二、",
+    "pipeline_roles":  r"^## 三、",
+    "authority_model": r"^## 四、",
+    "dor_standards":   r"^## 五、",
+    "evaluation":      r"^## 六、",
+    "ai_evolution":    r"^## 七、",
+    "org_diagnosis":   r"^## 八、",
+    "data_collab":     r"^## 九、",
 }
 ```
-
-各角色的知识切片映射：
-
-| 角色 | 注入章节 | 典型 token 量 |
-|------|---------|-------------|
-| PLD | §三§四§五 | ~140 行 |
-| PLE | §三§四§五 | ~140 行 |
-| PLT | §三§四§五§二 | ~175 行 |
-| Boundary | §四 | ~75 行 |
-| Numerics（户部） | §零§二 | ~70 行 |
-| QA Review（刑部） | §三§五 | ~85 行 |
-| Strategist（御史台） | §零§二 | ~70 行 |
-| PMO | §三§五§二 | ~115 行 |
-| Personnel（吏部） | §零§三§六§七§八PerformEval 数据 + rubric | ~200 行 + 动态数据 |
 
 ### 5. 结构化输出 Schema
 
@@ -523,32 +444,23 @@ py palace/run.py --scenario dor_review --input "春节限时礼包活动：面�
 
 ### Phase 2：角色配置 + 知识注入
 
-- 编写 9 个角色 YAML：
-  - Feature 审查域：PLD / PLE / PLT / 边界检查
-  - 数值 & 质量域：户部尚书（numerics）/ 刑部尚书（qa_review）
-  - 管线运营域：PMO
-  - 人才组织域：吏部尚书（personnel）
-  - 战略对齐域：御史台（strategist）
-- 实现 `knowledge.py`（PLAYBOOK 章节切片 + data_sources 抽象，动态数据先用 mock）
-- 实现 `schemas.py`（结构化输出 JSON Schema，review_result + advisory_result 两种）
+- 编写 4 个角色 YAML（PLD/PLE/PLT/边界检查）
+- 实现 `knowledge.py`（PLAYBOOK 章节切片）
+- 实现 `schemas.py`（结构化输出 JSON Schema）
 
 ### Phase 3：引擎核心 + 场景配置（Mock 驱动）
 
 - 实现 `engine.py`（角色调度 + asyncio.gather 并行 + 综合器）
-- 编写 5 个场景 YAML（dor_review / version_health / org_advisory / resume_screening / version_planning）
-- 实现综合器同时支持 review 模式（pass/block）和 advisory 模式（建议+选择）
+- 编写 `dor_review.yaml` 场景配置
+- 实现综合器的硬规则（any_block_means_block 等）
 - 全部用 MockProvider 驱动，验证调度逻辑和综合逻辑正确
 
 ### Phase 4：CLI 入口 + Mock 端到端验证
 
 - 实现 `run.py` CLI 入口
-- 准备四域测试用例：
-  - Feature 审查（含数值 + 可测性）：一个应通过、一个应 block、一个数值风险 concern
-  - 管线运营：一个版本健康度检查（PMO 视角）
-  - 人才组织：一个组织诊断咨询（如"体验组无组长，怎么办"）
-  - 全阁审议：一个版本规划（御史台 + PLD + PLT + 户部 + PMO + 吏部联合审议）
+- 准备 2-3 个测试 Feature 方案（一个应通过、一个应 block、一个边界情况）
 - 用 mock 端到端跑通完整流程
-- 验证：并行调度正确、review/advisory 两种模式正确、输出格式合规、错误降级正常
+- 验证：并行调度正确、综合规则正确、输出格式合规、错误降级正常
 
 ### Phase 5：接入真实 LLM API
 
@@ -558,58 +470,33 @@ py palace/run.py --scenario dor_review --input "春节限时礼包活动：面�
 - 调优角色 persona 和 review_dimensions
 - 验证结构化输出解析的鲁棒性
 
-## 完整角色图谱
+## 后续扩展路径
 
-```
-层级         角色                域               authority
-─────────────────────────────────────────────────────────────
-WHY          御史台（战略锚）     战略对齐          concern_only
-WHAT         PLD（管线主策）      Feature 审查      block
-WHAT+BUILD   户部尚书（数值）     数值/经济系统      concern_only
-HOW          PLE（管线体验）      Feature 审查      block
-BUILD        PLT（管线技术）      Feature 审查      block
-MAKE         刑部尚书（QA）       质量门禁          block
-跨层          边界检查            职权边界          block
-─── 横向职能 ──────────────────────────────────────────────
-运营          PMO（管线总管）      管线运营          concern_only
-组织          吏部尚书            人才组织          concern_only
-```
-
-**block 权力分布**：PLD、PLE、PLT、QA、边界 共 5 个角色有 block 权。其余 4 个角色只能标记 concern。这保证了"具体执行层有否决权，战略和管理层只提建议"的权力结构。
-
-## 御史台进化路径（长期规划）
-
-御史台（Strategist）不只是一个审查角色——它是制作人的**思维训练伙伴**。
-
-### 阶段 1：对齐检查（当前）
-- 被动模式：在 dor_review / version_planning 中作为角色参与
-- 职责：检查议题是否对齐北极星
-
-### 阶段 2：决策追问
-- 主动模式：制作人输入一个决策想法，御史台通过苏格拉底式追问帮助厘清
-- 记录追问-回答链路，沉淀为决策档案
-
-### 阶段 3：认知建模
-- 基于历史决策档案，构建制作人的决策模式画像
-- 识别常见思维盲区（如"总是低估时间成本""倾向于做加法而非减法"）
-- 主动提醒：当新决策触发已知盲区模式时预警
-
-### 阶段 4：战略参谋
-- 结合行业数据、竞品分析、历史项目数据
-- 从"检查对齐"升级为"建议方向"
-- 制作人和御史台形成"命题-挑战"的良性循环
-
-> 阶段 1 在本次 MVP 范围内。阶段 2-4 架构预留，不实现。
-
-## 后续扩展路径（不在本次范围，架构预留）
-
-- 接入 PmSystem API（PMO 角色从 `/api/features` `/api/versions` 拉取真实数据）
-- 接入 PerformEval API（吏部尚书从 `/api/members` `/api/evaluations` 拉取成员和评价数据）
-- 解析 org-structure.html 中的组织架构数据供吏部尚书使用
-- 户部尚书接入数值策划工具数据（配表、经济系统模拟结果）
-- 刑部尚书接入 QA 系统（bug 数据库、测试覆盖率报告）
-- 新增场景：运营活动规划（advisory 模式）、考核标准设计（eval_design）
-- 集成到 PmSystem 前端（Feature 页加"审查"按钮，版本页加"健康度检查"按钮）
+- 接入 PmSystem API（从 `/api/features/{id}` 拉取 Feature 数据 + 元数据）
+- S0 静态预检层（纯规则，零 LLM 成本）：待定项计数、Owner 声明、成功指标、管线重量
+- 框架能力清单对照：快轨 PLT 兼容性半锁的自动化基础
+- 集成到 PmSystem 前端（Feature 页加"审查"按钮，自动带入 feature_meta）
 - 集成到 Cursor AgentX（作为 Agent Skill 被调用）
-- 简历筛选批量处理（接入邮件/文件夹自动读取候选人简历）
-- 御史台阶段 2-4 进化（决策追问 → 认知建模 → 战略参谋）
+- 审查历史沉淀 → 组织诊断数据源（越界频率、block 率、返工率趋势）
+
+## 决策记录（本轮讨论 2026-03-04）
+
+| # | 决策 | 详情 |
+|---|------|------|
+| D59 | 三层概念模型 | 运营节点(SABC,用户感知) / 版本(部署容器) / Feature(管线单元) 三者正交。SABC 描述运营节点内容密度，不是版本属性。快/慢轨是 Feature 级属性 |
+| D60 | WHAT 文档定义 | WHAT 文档 = 内容体验设计（体验意图 + 内容结构 + 决策约束 + 成功指标），不是功能需求文档。描述"用户应有什么感受" = WHAT，描述"界面怎么实现" = HOW |
+| D61 | 审查职责矩阵 | 审查跟文档层级走不跟人的职能走。Owner 是管线角色不固定职能。制作人审 WHAT + 关注 HOW；PLD/PLE/PLT 各自按文档层级审；PLE+主美+PLT 审 HOW；主程审 BUILD |
+| D62 | HOW block 权 | 慢轨：PLE(整体体验) + 主美(视觉品质) + PLT(技术可行性) 三方均有 block 权。快轨：PLE 轻量 concern，主美/PLT 不参与 |
+| D63 | 快慢轨分级审查 | 慢轨全量审查（预审+DoR），快轨轻量审查（PLD+PLT 兼容性半锁）。审查强度由 pipeline_weight 决定 |
+| D64 | 轨道分类机制 | Owner 自评 → PLD 审核 → PLT 兜底。主判据：是否需要新框架（二值）。只能升级不能降级 |
+| D65 | 框架能力清单 | 主程 + 主美 + 制作人共建，定义快轨沙盒边界。PLT 兼容性半锁以此为判据 |
+| D66 | 快轨资源预算 | 开发 ≤0.5 人天、美术 ≤1 新素材、策划 ≤1 人天。超预算触发轨道升级评审 |
+| D67 | 创意差异化量化 | 用活动表现指数（活动指标/同期大盘基线）衡量相对表现，组合趋势优于单次对比 |
+| D68 | PMO 角色 | 新增版本级审查角色，评估 scope/风险/依赖/排期，advisory 模式（不 block） |
+| D69 | 文档分层提交 | 目标态：WHAT/HOW/BUILD 分别提交（模板即边界）。过渡期：综合文档 + 层标注 |
+| D70 | Palace 发力节点 | Palace 主战场 = 节点 0（轨道分类 S0）+ 节点 2（准备阶段预审）+ 节点 6（复盘趋势）。DoR 门禁以人审为主，Palace 辅助 checklist |
+| D71 | PLE 反向约束 | PLE 审 WHAT 时需检查"是否给 HOW 层留了足够设计空间"，防止 WHAT 锁死下游 |
+| D72 | 层间连贯性模型 | 审查从"越界检测"转向"核心交付完整度 + 跨层连贯性"。三类跨层内容：理解展示（鼓励）、参考标注（中性）、替代决策（需改进）。审查优先级：P0 核心交付 > P1 上下游对齐 > P2 跨层定性 |
+| D73 | document_layer 元数据 | 提交审查时必须声明 document_layer（WHAT/HOW/BUILD/mixed），Palace 据此匹配审查标准。mixed 文档按层拆开分别审 |
+| D74 | boundary 角色重定义 | 从"越界检测器"改为"层间连贯性审查官"，审核心交付完整度、跨层材料定性、层间对齐质量。不再用"越界"一词 |
+| D75 | 跨层理解审查 | 所有审查角色增加"向上理解"维度：审查文档是否体现对上游层级意图的正确理解，确保 Feature 在不同层级有连贯性 |
