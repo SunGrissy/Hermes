@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Debug & test artifacts
+debug_output/
+_test_*.json
+dor_result.json
+what_precheck_result*.json
+
+# Iteration drafts (keep final reports only)
+what_precheck_report_v*.md
+what_precheck_report.md
+
+# HTML exports (keep markdown source only)
+四象角力_活动设计思路.html

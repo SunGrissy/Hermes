@@ -1,0 +1,27 @@
+id: what_precheck
+name: "慢轨 WHAT 预审"
+mode: review
+target: feature
+pipeline_weight: slow
+pipeline_stage: scoping
+
+extraction_role: boundary
+assessment_roles: [pld, ple, plt]
+
+role_overrides:
+  ple:
+    authority: concern
+  plt:
+    authority: concern
+
+synthesis_rules:
+  any_block_means_block: true
+  concern_threshold: 2
+  must_list_action_items: true
+  no_hedging: true
+
+output_includes:
+  - overall_verdict
+  - per_role_verdicts
+  - boundary_violations
+  - action_items

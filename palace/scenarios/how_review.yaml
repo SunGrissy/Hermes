@@ -1,0 +1,24 @@
+id: how_review
+name: "HOW 方案审查"
+mode: review
+target: feature
+pipeline_stage: scoping_late
+
+roles: [ple, plt]
+
+role_overrides:
+  ple:
+    use_dimensions: review_dimensions_how
+    authority: block
+  plt:
+    use_dimensions: review_dimensions_how
+    authority: block
+
+synthesis_rules:
+  any_block_means_block: true
+  must_list_action_items: true
+
+output_includes:
+  - overall_verdict
+  - per_role_verdicts
+  - action_items

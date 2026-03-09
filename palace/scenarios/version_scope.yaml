@@ -1,0 +1,16 @@
+id: version_scope
+name: "版本 Scope 评估"
+mode: advisory
+target: version
+
+roles: [pmo]
+
+synthesis_rules:
+  must_list_action_items: true
+  flag_risk_concentration: true
+
+output_includes:
+  - overall_verdict
+  - per_role_verdicts
+  - action_items
+  - risk_summary
