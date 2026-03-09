@@ -144,7 +144,17 @@ class MDReaderHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", PORT), MDReaderHandler)
+    host = "127.0.0.1"
+    try:
+        server = HTTPServer((host, PORT), MDReaderHandler)
+    except OSError as e:
+        if e.errno == 48:
+            print(f"[ERROR] Port {PORT} already in use. Kill the old process or change PORT.")
+        elif e.errno == 49:
+            print(f"[ERROR] Cannot bind to {host}:{PORT}. Try: python3 server.py")
+        else:
+            print(f"[ERROR] {e}")
+        raise SystemExit(1)
     print(f"MD Reader started at http://localhost:{PORT}")
     print(f"Workspace: {WORKSPACE}")
     try:
