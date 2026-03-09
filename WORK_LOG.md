@@ -1,5 +1,17 @@
 # Work Log - MyAgents Root
 
+## 2026-03-09 - MD Reader 轻量 Markdown 阅读器
+
+**状态**: 已提交
+
+**内容**:
+- 新建 `md-reader/` 工具：轻量 Markdown 阅读器（Python 标准库 + 单页 HTML）
+- 后端 `server.py`：文件扫描、内容读取、全文搜索 API
+- 前端 `index.html`：文件树侧边栏、GitHub 风格渲染（marked.js + highlight.js）、全文搜索、收藏（localStorage）、导出 PDF
+- 启动方式：`python3 md-reader/server.py` → `http://localhost:8899`
+
+---
+
 ## 2026-03-09 - Palace 版本预审 v0.4 迭代 + 版本规划文档入库
 
 **状态**: 开发完成，待验收

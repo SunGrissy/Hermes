@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>MD Reader</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css">
+<style>
+/* === RESET & LAYOUT === */
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --sidebar-w: 300px;
+  --bg: #ffffff;
+  --sidebar-bg: #ffffff;
+  --border: #d0d7de;
+  --accent: #0969da;
+  --accent-light: #ddf4ff;
+  --text: #1f2328;
+  --text-dim: #656d76;
+  --hover: #f3f4f6;
+  --fav-color: #e3b341;
+  --search-hl: #fff8c5;
+}
+html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); }
+#app { display:flex; height:100vh; }
+
+/* === SIDEBAR === */
+#sidebar {
+  width:var(--sidebar-w); min-width:var(--sidebar-w); background:var(--sidebar-bg);
+  border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden;
+}
+#sidebar-header { padding:16px; border-bottom:1px solid var(--border); }
+#sidebar-header h1 { font-size:18px; font-weight:600; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
+#sidebar-header h1 svg { width:20px; height:20px; }
+#search-box {
+  width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px;
+  font-size:14px; outline:none; transition:border .2s;
+}
+#search-box:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(9,105,218,.12); }
+#sidebar-tabs {
+  display:flex; border-bottom:1px solid var(--border);
+}
+.sidebar-tab {
+  flex:1; padding:8px 0; text-align:center; font-size:13px; cursor:pointer;
+  color:var(--text-dim); border-bottom:2px solid transparent; transition:all .15s;
+}
+.sidebar-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+.sidebar-tab:hover { background:var(--hover); }
+#file-list {
+  flex:1; overflow-y:auto; padding:8px 0;
+}
+#search-results {
+  flex:1; overflow-y:auto; padding:8px 0; display:none;
+}
+.dir-group { margin-bottom:4px; }
+.dir-name {
+  padding:4px 16px; font-size:12px; font-weight:600; color:var(--text-dim);
+  text-transform:uppercase; letter-spacing:.5px; cursor:pointer; display:flex; align-items:center; gap:4px;
+  user-select:none;
+}
+.dir-name:hover { background:var(--hover); }
+.dir-name .arrow { transition:transform .15s; font-size:10px; }
+.dir-name.collapsed .arrow { transform:rotate(-90deg); }
+.dir-files { }
+.dir-name.collapsed + .dir-files { display:none; }
+.file-item {
+  padding:6px 16px 6px 28px; font-size:13px; cursor:pointer; display:flex;
+  align-items:center; gap:6px; transition:background .1s; position:relative;
+}
+.file-item:hover { background:var(--hover); }
+.file-item.active { background:var(--accent-light); color:var(--accent); font-weight:500; }
+.file-item .fav-star {
+  opacity:0; cursor:pointer; color:var(--text-dim); font-size:14px; margin-left:auto;
+  transition:opacity .15s;
+}
+.file-item:hover .fav-star, .file-item .fav-star.is-fav { opacity:1; }
+.file-item .fav-star.is-fav { color:var(--fav-color); }
+.file-meta { font-size:11px; color:var(--text-dim); margin-left:auto; white-space:nowrap; }
+
+/* search results */
+.search-result-file { padding:8px 16px; border-bottom:1px solid var(--border); cursor:pointer; }
+.search-result-file:hover { background:var(--hover); }
+.search-result-path { font-size:13px; font-weight:600; color:var(--accent); margin-bottom:4px; }
+.search-result-snippet { font-size:12px; color:var(--text-dim); line-height:1.5; }
+.search-result-snippet mark { background:var(--search-hl); padding:1px 2px; border-radius:2px; }
+
+/* === MAIN CONTENT === */
+#main {
+  flex:1; display:flex; flex-direction:column; overflow:hidden;
+}
+#toolbar {
+  padding:8px 24px; border-bottom:1px solid var(--border); background:var(--sidebar-bg);
+  display:flex; align-items:center; gap:12px; min-height:48px;
+}
+#breadcrumb { font-size:14px; color:var(--text-dim); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.toolbar-btn {
+  padding:6px 12px; border:1px solid var(--border); border-radius:6px; background:white;
+  font-size:13px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all .15s;
+  color:var(--text);
+}
+.toolbar-btn:hover { background:var(--hover); border-color:var(--accent); color:var(--accent); }
+.toolbar-btn svg { width:14px; height:14px; }
+
+#content-area {
+  flex:1; overflow-y:auto; padding:32px 48px;
+}
+#welcome {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  height:100%; color:var(--text-dim); text-align:center;
+}
+#welcome h2 { font-size:24px; margin-bottom:8px; font-weight:400; }
+#welcome p { font-size:14px; }
+#md-body {
+  display:none; max-width:860px; margin:0 auto; width:100%;
+}
+#md-body .markdown-body { font-size:15px; line-height:1.7; }
+#md-body .markdown-body table { display:table; width:auto; }
+#md-body .markdown-body img { max-width:100%; }
+
+/* print / PDF */
+@media print {
+  #sidebar, #toolbar { display:none !important; }
+  #content-area { padding:0 !important; }
+  #md-body { max-width:100%; }
+  #md-body .markdown-body { font-size:12px; }
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width:6px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#c1c7cd; border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:#8b949e; }
+
+/* loading spinner */
+.loading { display:flex; align-items:center; justify-content:center; height:200px; }
+.spinner { width:32px; height:32px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .6s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* empty state */
+.empty-state { text-align:center; padding:40px 16px; color:var(--text-dim); font-size:13px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <h1>
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"/></svg>
+        MD Reader
+      </h1>
+      <input id="search-box" type="text" placeholder="搜索文件名或全文内容...">
+    </div>
+    <div id="sidebar-tabs">
+      <div class="sidebar-tab active" data-tab="files">文件</div>
+      <div class="sidebar-tab" data-tab="favorites">收藏</div>
+    </div>
+    <div id="file-list"></div>
+    <div id="search-results"></div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="toolbar">
+      <div id="breadcrumb">选择一个文件开始阅读</div>
+      <button class="toolbar-btn" id="btn-fav" title="收藏" style="display:none">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+        <span>收藏</span>
+      </button>
+      <button class="toolbar-btn" id="btn-pdf" title="导出 PDF" style="display:none">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.75 7.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"/></svg>
+        导出 PDF
+      </button>
+    </div>
+    <div id="content-area">
+      <div id="welcome">
+        <h2>Markdown 阅读器</h2>
+        <p>从左侧选择文件，或使用搜索框查找内容</p>
+      </div>
+      <div id="md-body"><div class="markdown-body"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+<script>
+const App = {
+  files: [],
+  currentPath: null,
+  favorites: JSON.parse(localStorage.getItem('md-reader-favs') || '[]'),
+  searchTimer: null,
+  activeTab: 'files',
+
+  async init() {
+    marked.setOptions({
+      highlight: (code, lang) => {
+        if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, {language: lang}).value;
+        return hljs.highlightAuto(code).value;
+      },
+      gfm: true, breaks: true,
+    });
+    this.bindEvents();
+    await this.loadFiles();
+    this.renderFileTree();
+  },
+
+  bindEvents() {
+    const searchBox = document.getElementById('search-box');
+    searchBox.addEventListener('input', () => {
+      clearTimeout(this.searchTimer);
+      const q = searchBox.value.trim();
+      if (!q) { this.showFileList(); return; }
+      if (q.length < 2) return;
+      this.searchTimer = setTimeout(() => this.doSearch(q), 300);
+    });
+
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        this.activeTab = tab.dataset.tab;
+        if (this.activeTab === 'favorites') this.renderFavorites();
+        else this.renderFileTree();
+        document.getElementById('search-results').style.display = 'none';
+        document.getElementById('file-list').style.display = '';
+      });
+    });
+
+    document.getElementById('btn-fav').addEventListener('click', () => this.toggleFavorite());
+    document.getElementById('btn-pdf').addEventListener('click', () => this.exportPDF());
+  },
+
+  async loadFiles() {
+    const res = await fetch('/api/files');
+    this.files = await res.json();
+  },
+
+  renderFileTree() {
+    const list = document.getElementById('file-list');
+    const files = this.activeTab === 'favorites'
+      ? this.files.filter(f => this.favorites.includes(f.path))
+      : this.files;
+    const groups = {};
+    files.forEach(f => {
+      const parts = f.path.split('/');
+      const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '(root)';
+      if (!groups[dir]) groups[dir] = [];
+      groups[dir].push(f);
+    });
+
+    if (Object.keys(groups).length === 0) {
+      list.innerHTML = '<div class="empty-state">暂无文件</div>';
+      return;
+    }
+
+    let html = '';
+    for (const [dir, dirFiles] of Object.entries(groups)) {
+      html += `<div class="dir-group">`;
+      html += `<div class="dir-name" onclick="this.classList.toggle('collapsed')"><span class="arrow">▼</span> ${this.escHtml(dir)} (${dirFiles.length})</div>`;
+      html += `<div class="dir-files">`;
+      for (const f of dirFiles) {
+        const isFav = this.favorites.includes(f.path);
+        const isActive = this.currentPath === f.path;
+        html += `<div class="file-item${isActive ? ' active' : ''}" data-path="${this.escAttr(f.path)}" onclick="App.openFile('${this.escAttr(f.path)}')">`;
+        html += `<span>${this.escHtml(f.name)}</span>`;
+        html += `<span class="fav-star${isFav ? ' is-fav' : ''}" onclick="event.stopPropagation();App.toggleFavFromList('${this.escAttr(f.path)}')">★</span>`;
+        html += `</div>`;
+      }
+      html += `</div></div>`;
+    }
+    list.innerHTML = html;
+  },
+
+  renderFavorites() {
+    this.renderFileTree();
+  },
+
+  async openFile(path) {
+    this.currentPath = path;
+    this.updateActiveStates();
+    document.getElementById('breadcrumb').textContent = path;
+    document.getElementById('btn-fav').style.display = '';
+    document.getElementById('btn-pdf').style.display = '';
+    this.updateFavButton();
+
+    const mdBody = document.getElementById('md-body');
+    const welcome = document.getElementById('welcome');
+    welcome.style.display = 'none';
+    mdBody.style.display = 'block';
+    mdBody.querySelector('.markdown-body').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    try {
+      const res = await fetch(`/api/file?path=${encodeURIComponent(path)}`);
+      const data = await res.json();
+      if (data.error) {
+        mdBody.querySelector('.markdown-body').innerHTML = `<div class="empty-state">${data.error}</div>`;
+        return;
+      }
+      const html = marked.parse(data.content);
+      mdBody.querySelector('.markdown-body').innerHTML = html;
+      document.getElementById('content-area').scrollTop = 0;
+      document.title = `${path.split('/').pop()} — MD Reader`;
+    } catch (e) {
+      mdBody.querySelector('.markdown-body').innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
+    }
+  },
+
+  updateActiveStates() {
+    document.querySelectorAll('.file-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.path === this.currentPath);
+    });
+  },
+
+  async doSearch(query) {
+    const fileList = document.getElementById('file-list');
+    const searchResults = document.getElementById('search-results');
+    fileList.style.display = 'none';
+    searchResults.style.display = '';
+    searchResults.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    let results;
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+      results = await res.json();
+    } catch (e) {
+      searchResults.innerHTML = `<div class="empty-state">搜索失败: ${e.message}</div>`;
+      return;
+    }
+
+    if (results.length === 0) {
+      searchResults.innerHTML = '<div class="empty-state">未找到匹配内容</div>';
+      return;
+    }
+
+    const pattern = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    let html = '';
+    for (const r of results) {
+      html += `<div class="search-result-file" onclick="App.openFile('${this.escAttr(r.path)}')">`;
+      html += `<div class="search-result-path">${this.escHtml(r.path)}</div>`;
+      for (const m of r.matches.slice(0, 3)) {
+        const highlighted = this.escHtml(m.snippet).replace(pattern, '<mark>$1</mark>');
+        html += `<div class="search-result-snippet">${highlighted}</div>`;
+      }
+      if (r.matches.length > 3) {
+        html += `<div class="search-result-snippet" style="font-style:italic">... 还有 ${r.matches.length - 3} 处匹配</div>`;
+      }
+      html += `</div>`;
+    }
+    searchResults.innerHTML = html;
+  },
+
+  showFileList() {
+    document.getElementById('file-list').style.display = '';
+    document.getElementById('search-results').style.display = 'none';
+  },
+
+  toggleFavorite() {
+    if (!this.currentPath) return;
+    this.toggleFavFromList(this.currentPath);
+    this.updateFavButton();
+  },
+
+  toggleFavFromList(path) {
+    const idx = this.favorites.indexOf(path);
+    if (idx >= 0) this.favorites.splice(idx, 1);
+    else this.favorites.push(path);
+    localStorage.setItem('md-reader-favs', JSON.stringify(this.favorites));
+    if (this.activeTab === 'favorites') this.renderFavorites();
+    else this.renderFileTree();
+    this.updateFavButton();
+  },
+
+  updateFavButton() {
+    const btn = document.getElementById('btn-fav');
+    if (!this.currentPath) return;
+    const isFav = this.favorites.includes(this.currentPath);
+    btn.querySelector('span').textContent = isFav ? '已收藏' : '收藏';
+    btn.querySelector('svg').style.fill = isFav ? 'var(--fav-color)' : 'currentColor';
+  },
+
+  exportPDF() {
+    if (!this.currentPath) return;
+    window.print();
+  },
+
+  escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
+  escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); },
+};
+
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
