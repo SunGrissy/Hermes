@@ -1,4 +1,5 @@
 """Palace LLM providers v0.4 — supports extraction + assessment schemas."""
+from __future__ import annotations
 
 import json
 import logging

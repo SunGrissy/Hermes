@@ -8,6 +8,7 @@ Flow (when extraction_role is defined):
 Fallback (legacy parallel flow for scenarios without extraction_role):
   Same as v0.3 — all roles run in parallel, then synthesize.
 """
+from __future__ import annotations
 
 import asyncio
 import json
@@ -126,7 +127,7 @@ async def _invoke_assessment(provider, role_config, topic_text, playbook_text,
     effective_config = _apply_role_overrides(role_config, scenario)
     knowledge = get_knowledge_for_role(role_config, playbook_text)
     authority = _resolve_authority(role_config, scenario)
-    system_prompt = _build_assessment_prompt(effective_config, knowledge, authority)
+    system_prompt = _build_assessment_prompt(effective_config, knowledge, authority, scenario)
     user_prompt = _build_assessment_user_prompt(
         topic_text, extraction_result, document_layer,
     )
@@ -142,6 +143,22 @@ async def _invoke_assessment(provider, role_config, topic_text, playbook_text,
 # ============================================================
 # Prompt builders (v0.4)
 # ============================================================
+
+_SENSITIVITY_RULE = (
+    '\n## 输出脱敏规则（必须遵守）\n\n'
+    '报告可能被同步给 PLD、Feature Owner 等非管理层角色。'
+    '你可以利用参考知识中的组织信息辅助判断，但输出中**禁止**直接暴露以下敏感信息：\n'
+    '- 个人绩效状态（如「待处置」「绩效不达标」「试用期」等）\n'
+    '- 人事处理决定（如「计划劝退」「降级」等）\n'
+    '- 管理层对个人的评价原文\n\n'
+    '如需表达人力风险，应转化为**能力/掌控力/可用性**维度：\n'
+    '- BAD: 「负责人处于待处置状态」\n'
+    '  GOOD: 「建议确认负责人对该功能的理解深度和持续投入能力」\n'
+    '- BAD: 「绩效不达标」\n'
+    '  GOOD: 「该Feature复杂度高，建议评估负责人是否需要co-owner支持」\n'
+    '- BAD: 「可能离职」\n'
+    '  GOOD: 「核心Feature建议配置backup Owner，降低人力单点风险」\n'
+)
 
 _DEFAULT_EXTRACTION_OUTPUT_SPEC = (
     "以 JSON 格式输出，包含三个字段：\n\n"
@@ -170,6 +187,8 @@ def _build_extraction_prompt(role_config, knowledge, scenario):
         dim_text = "\n".join(f"- {d}" for d in dims)
         parts.append(f"\n## 检查维度\n\n{dim_text}")
 
+    parts.append(_SENSITIVITY_RULE)
+
     output_spec = role_config.get("extraction_output_spec", _DEFAULT_EXTRACTION_OUTPUT_SPEC)
     parts.append(f"\n## 输出要求\n\n{output_spec.strip()}")
     return "\n".join(parts)
@@ -192,7 +211,7 @@ def _build_extraction_user_prompt(topic_text, document_layer, scenario=None):
     return f"\u8bf7\u5bf9\u4ee5\u4e0b Feature \u6587\u6863\u8fdb\u884c\u7ed3\u6784\u5316\u63d0\u53d6\uff1a\n\n{topic_text}{layer_hint}"
 
 
-def _build_assessment_prompt(role_config, knowledge, authority):
+def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
     parts = [role_config["persona"].strip()]
 
     if authority == "block":
@@ -210,6 +229,22 @@ def _build_assessment_prompt(role_config, knowledge, authority):
         dim_text = "\n".join(f"- {d}" for d in dims)
         parts.append(f"\n## 审查维度\n\n{dim_text}")
 
+    if scenario and scenario.get("pipeline_stage") == "planning":
+        parts.append(
+            '\n## 阶段边界（必须遵守）\n\n'
+            '当前审查的是**规划阶段**文档。规划阶段的 Feature 只需交代 WHAT（做什么、为什么）'
+            '和 scope 边界（改什么、不改什么）。\n\n'
+            '以下内容属于详设阶段交付物，**不在本次审查范围**，不得作为扣分依据：\n'
+            '- 具体处理方案 / 实现路径（HOW）\n'
+            '- 数值参数、概率、阈值\n'
+            '- 降级方案、兜底策略（除非涉及版本结构性单点故障）\n'
+            '- 子系统逐项拆解\n\n'
+            '系统级 Feature 写入规划 = 方向已线下对齐。'
+            '评审的是"组盘决策质量"，不是"每个棋子的走法"。'
+        )
+
+    parts.append(_SENSITIVITY_RULE)
+
     rid = role_config.get("id", "unknown")
     parts.append(
         "\n## \u8f93\u51fa\u8981\u6c42\n\n"
@@ -221,7 +256,9 @@ def _build_assessment_prompt(role_config, knowledge, authority):
         "4. issue_assessments: \u6570\u7ec4\uff0c\u5bf9 checklist \u4e2d\u6bcf\u4e2a\u4e0e\u4f60\u89c6\u89d2\u76f8\u5173\u7684\u9879\u7ed9\u51fa\u8bc4\u4f30\n"
         "   \u6bcf\u9879: {item_id, impact(pass/concern/block), comment}\n"
         "5. supplementary_findings: \u6570\u7ec4\uff08\u53ef\u4e3a\u7a7a\uff09\uff0cchecklist \u6ca1\u8986\u76d6\u5230\u7684\u989d\u5916\u53d1\u73b0\n"
-        "   \u6bcf\u9879: {item_id(\u65b0\u7684), title, layer, description, impact, suggested_action}"
+        "   \u6bcf\u9879: {item_id(\u65b0\u7684), title, layer, description, impact, suggested_action}\n"
+        "6. highlights: \u6570\u7ec4\uff081-3 \u9879\uff09\uff0c\u4ece\u4f60\u7684\u89c6\u89d2\u770b\u8fd9\u4efd\u6587\u6863/\u89c4\u5212\u505a\u5f97\u597d\u7684\u5730\u65b9\n"
+        "   \u6bcf\u9879: {aspect: \u4e00\u53e5\u8bdd\u6982\u62ec\u4eae\u70b9, detail: \u7b80\u8981\u8bf4\u660e\u4e3a\u4ec0\u4e48\u597d}"
     )
     return "\n".join(parts)
 
@@ -248,7 +285,12 @@ _REMINDER_TITLE_KEYWORDS = [
 
 
 def _is_passed_feature(issue: dict) -> bool:
-    """A feature is 'passed' if status=present and all assessors say pass."""
+    """A feature is 'passed' if WHAT is present and no serious issues found.
+
+    Pass conditions (any of):
+    - status=present and all assessors say pass
+    - status=present and severity is P3 (minor suggestion only)
+    """
     if issue.get("layer") != "WHAT":
         return False
     if issue.get("extraction_status") != "present":
@@ -256,7 +298,11 @@ def _is_passed_feature(issue: dict) -> bool:
     comments = issue.get("role_comments", [])
     if not comments:
         return True
-    return all(rc.get("impact") == "pass" for rc in comments)
+    if all(rc.get("impact") == "pass" for rc in comments):
+        return True
+    if issue.get("severity") == "P3":
+        return True
+    return False
 
 
 def _strip_comment_emoji(issue: dict):
@@ -353,7 +399,17 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
     else:
         overall = "pass"
 
-    quality_issues.sort(key=lambda i: {"P0": 0, "P1": 1, "P2": 2}.get(i["severity"], 9))
+    quality_issues.sort(key=lambda i: {"P0": 0, "P1": 1, "WARN": 2, "P2": 3, "P3": 4}.get(i["severity"], 9))
+
+    highlights = []
+    for a in assessments:
+        role_id = a.get("role_id", "")
+        for h in a.get("highlights", []):
+            highlights.append({
+                "role_id": role_id,
+                "aspect": h.get("aspect", ""),
+                "detail": h.get("detail", ""),
+            })
 
     return {
         "overall_verdict": overall,
@@ -363,6 +419,7 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
         "passed_features": passed_features,
         "reminders": reminders,
         "cross_layer": cross_layer,
+        "highlights": highlights,
         "blocker_count": blocker_count,
         "concern_count": concern_count,
     }
@@ -545,7 +602,7 @@ def _assign_severity(issues: list[dict], scenario: dict):
 
         if "block" in impacts:
             issue["severity"] = "P0"
-        elif hint:
+        elif hint and hint in ("P0", "P1", "WARN", "P2", "P3"):
             issue["severity"] = hint
         elif "concern" in impacts:
             if is_planning_version:
@@ -557,7 +614,7 @@ def _assign_severity(issues: list[dict], scenario: dict):
             if status == "missing":
                 issue["severity"] = "P2" if is_planning_version else "P1"
             else:
-                issue["severity"] = "P2"
+                issue["severity"] = "P3" if is_planning_version else "P2"
 
 
 # ============================================================

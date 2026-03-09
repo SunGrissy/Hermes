@@ -17,15 +17,15 @@ role_overrides:
       - "是否存在只有标题没有体验意图的'裸 Feature'？"
       - "版本整体的内容新鲜度如何？是否过度依赖惯性复用？"
       - "快慢轨配比是否与版本目标匹配？"
-      - "各 Feature 的 WHAT 描述是否足够让下游（PLE/PLT/Feature Owner）启动 HOW 设计？"
+      - "各 Feature 的 WHAT 命题是否清晰？（体验意图+scope边界。注意：规划阶段不要求给出 HOW / 处理方案 / 数值参数）"
       - "投入产出比：各 Feature 的预期用户价值与研发投入是否匹配？"
   pmo:
     authority: advisory
     review_dimensions:
-      - "版本内慢轨 Feature 数量与可用资源是否匹配？"
-      - "是否有多个慢轨 Feature 竞争同一瓶颈资源？"
-      - "各 Feature 的 WHAT 交代是否足够让下游启动？"
-      - "版本排期是否现实？内容上线节奏与研发周期是否对齐？"
+      - "版本内慢轨 Feature 数量与可用资源是否匹配？（所有Feature共享同一发版截止日）"
+      - "是否有多个慢轨 Feature 竞争同一瓶颈资源？（程序/美术/策划Owner）"
+      - "各 Feature 的 WHAT 命题是否清晰到可以启动详设？（只看意图和 scope，不要求 HOW）"
+      - "同一Owner承担多个Feature时，并行设计工作量是否现实？"
       - "版本核心体验是否过度依赖单个 Feature（单点故障风险）？"
       - "快轨 Feature 是否都在框架能力清单范围内？"
 
