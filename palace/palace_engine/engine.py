@@ -21,9 +21,15 @@ from .schemas import EXTRACTION_SCHEMA, ROLE_ASSESSMENT_SCHEMA, ROLE_REVIEW_SCHE
 logger = logging.getLogger("palace.engine")
 
 _PERSP_LABEL = {
-    "pld": "WHAT 内容方向",
-    "ple": "WHAT\u2192HOW 可设计性",
-    "plt": "WHAT\u2192BUILD 可实现性",
+    "pld": "WHAT \u5185\u5bb9\u65b9\u5411",
+    "ple": "WHAT\u2192HOW \u53ef\u8bbe\u8ba1\u6027",
+    "plt": "WHAT\u2192BUILD \u53ef\u5b9e\u73b0\u6027",
+    "pmo": "\u7248\u672c Scope",
+}
+
+_VERSION_PERSP_LABEL = {
+    "pld": "\u5185\u5bb9\u65b9\u5411",
+    "pmo": "\u8d44\u6e90\u4e0e\u6392\u671f",
 }
 
 # ============================================================
@@ -105,7 +111,7 @@ async def _run_two_step(provider, scenario, extraction_role_id, topic_text, docu
 async def _invoke_extraction(provider, role_config, topic_text, playbook_text, scenario, document_layer):
     knowledge = get_knowledge_for_role(role_config, playbook_text)
     system_prompt = _build_extraction_prompt(role_config, knowledge, scenario)
-    user_prompt = _build_extraction_user_prompt(topic_text, document_layer)
+    user_prompt = _build_extraction_user_prompt(topic_text, document_layer, scenario)
 
     start = time.monotonic()
     result = await provider.complete(system_prompt, user_prompt, EXTRACTION_SCHEMA)
@@ -117,9 +123,10 @@ async def _invoke_extraction(provider, role_config, topic_text, playbook_text, s
 
 async def _invoke_assessment(provider, role_config, topic_text, playbook_text,
                              extraction_result, scenario, document_layer):
+    effective_config = _apply_role_overrides(role_config, scenario)
     knowledge = get_knowledge_for_role(role_config, playbook_text)
     authority = _resolve_authority(role_config, scenario)
-    system_prompt = _build_assessment_prompt(role_config, knowledge, authority)
+    system_prompt = _build_assessment_prompt(effective_config, knowledge, authority)
     user_prompt = _build_assessment_user_prompt(
         topic_text, extraction_result, document_layer,
     )
@@ -168,18 +175,21 @@ def _build_extraction_prompt(role_config, knowledge, scenario):
     return "\n".join(parts)
 
 
-def _build_extraction_user_prompt(topic_text, document_layer):
+def _build_extraction_user_prompt(topic_text, document_layer, scenario=None):
+    target = (scenario or {}).get("target", "feature")
+    if target == "version":
+        return f"\u8bf7\u5bf9\u4ee5\u4e0b\u7248\u672c\u89c4\u5212\u6587\u6863\u8fdb\u884c\u7ed3\u6784\u5316\u63d0\u53d6\uff1a\n\n{topic_text}"
     layer_hint = ""
     if document_layer:
         layer_labels = {
-            "WHAT": "WHAT（体验设计）层文档",
-            "HOW": "HOW（交互方案）层文档",
-            "BUILD": "BUILD（系统方案）层文档",
-            "mixed": "混合层级文档",
+            "WHAT": "WHAT\uff08\u4f53\u9a8c\u8bbe\u8ba1\uff09\u5c42\u6587\u6863",
+            "HOW": "HOW\uff08\u4ea4\u4e92\u65b9\u6848\uff09\u5c42\u6587\u6863",
+            "BUILD": "BUILD\uff08\u7cfb\u7edf\u65b9\u6848\uff09\u5c42\u6587\u6863",
+            "mixed": "\u6df7\u5408\u5c42\u7ea7\u6587\u6863",
         }
-        label = layer_labels.get(document_layer.upper(), f"{document_layer} 层文档")
-        layer_hint = f"\n\n文档层级声明: {label}"
-    return f"请对以下 Feature 文档进行结构化提取：\n\n{topic_text}{layer_hint}"
+        label = layer_labels.get(document_layer.upper(), f"{document_layer} \u5c42\u6587\u6863")
+        layer_hint = f"\n\n\u6587\u6863\u5c42\u7ea7\u58f0\u660e: {label}"
+    return f"\u8bf7\u5bf9\u4ee5\u4e0b Feature \u6587\u6863\u8fdb\u884c\u7ed3\u6784\u5316\u63d0\u53d6\uff1a\n\n{topic_text}{layer_hint}"
 
 
 def _build_assessment_prompt(role_config, knowledge, authority):
@@ -200,17 +210,18 @@ def _build_assessment_prompt(role_config, knowledge, authority):
         dim_text = "\n".join(f"- {d}" for d in dims)
         parts.append(f"\n## 审查维度\n\n{dim_text}")
 
+    rid = role_config.get("id", "unknown")
     parts.append(
-        "\n## 输出要求\n\n"
-        "前面已经有一份文档结构提取结果（checklist），请基于你的视角逐项评估。\n"
-        "以 JSON 格式输出，包含：\n\n"
-        "1. role_id: 你的角色 ID\n"
+        "\n## \u8f93\u51fa\u8981\u6c42\n\n"
+        "\u524d\u9762\u5df2\u7ecf\u6709\u4e00\u4efd\u6587\u6863\u7ed3\u6784\u63d0\u53d6\u7ed3\u679c\uff08checklist\uff09\uff0c\u8bf7\u57fa\u4e8e\u4f60\u7684\u89c6\u89d2\u9010\u9879\u8bc4\u4f30\u3002\n"
+        "\u4ee5 JSON \u683c\u5f0f\u8f93\u51fa\uff0c\u5305\u542b\uff1a\n\n"
+        f'1. role_id: "{rid}"  \uff08\u5fc5\u987b\u4f7f\u7528\u8fd9\u4e2a\u7cbe\u786e\u503c\uff09\n'
         "2. verdict: pass / concern / block\n"
-        "3. perspective_summary: 一段话概述你的总体判断\n"
-        "4. issue_assessments: 数组，对 checklist 中每个与你视角相关的项给出评估\n"
-        "   每项: {item_id, impact(pass/concern/block), comment}\n"
-        "5. supplementary_findings: 数组（可为空），checklist 没覆盖到的额外发现\n"
-        "   每项: {item_id(新的), title, layer, description, impact, suggested_action}"
+        "3. perspective_summary: \u4e00\u6bb5\u8bdd\u6982\u8ff0\u4f60\u7684\u603b\u4f53\u5224\u65ad\n"
+        "4. issue_assessments: \u6570\u7ec4\uff0c\u5bf9 checklist \u4e2d\u6bcf\u4e2a\u4e0e\u4f60\u89c6\u89d2\u76f8\u5173\u7684\u9879\u7ed9\u51fa\u8bc4\u4f30\n"
+        "   \u6bcf\u9879: {item_id, impact(pass/concern/block), comment}\n"
+        "5. supplementary_findings: \u6570\u7ec4\uff08\u53ef\u4e3a\u7a7a\uff09\uff0cchecklist \u6ca1\u8986\u76d6\u5230\u7684\u989d\u5916\u53d1\u73b0\n"
+        "   \u6bcf\u9879: {item_id(\u65b0\u7684), title, layer, description, impact, suggested_action}"
     )
     return "\n".join(parts)
 
@@ -228,30 +239,105 @@ def _build_assessment_user_prompt(topic_text, extraction_result, document_layer)
 # Synthesis v0.4 — merge extraction + assessments into report data
 # ============================================================
 
+_REMINDER_TITLE_KEYWORDS = [
+    "\u65f6\u95f4\u7ebf", "\u8282\u594f", "\u624e\u5806", "\u7a7a\u7a97", "\u7ba1\u7ebf\u6743\u91cd", "\u6743\u91cd\u7f3a\u5931", "\u6743\u91cd\u5168\u90e8",
+    "\u524d\u7f6e\u6761\u4ef6", "DoR", "\u4f53\u9a8c\u8868", "Feature\u6e05\u5355", "\u4fe1\u606f\u4e0d\u5bf9\u79f0", "\u4e0d\u5bf9\u9f50",
+    "\u514d\u8d39\u73a9\u5bb6", "\u6162\u8f68\u7ba1\u7ebf\u7a7a\u8f6c",
+    "\u89d2\u8272\u672a\u6307\u6d3e", "PLD/PLE/PLT", "\u7ba1\u7ebf\u89d2\u8272",
+]
+
+
+def _is_passed_feature(issue: dict) -> bool:
+    """A feature is 'passed' if status=present and all assessors say pass."""
+    if issue.get("layer") != "WHAT":
+        return False
+    if issue.get("extraction_status") != "present":
+        return False
+    comments = issue.get("role_comments", [])
+    if not comments:
+        return True
+    return all(rc.get("impact") == "pass" for rc in comments)
+
+
+def _strip_comment_emoji(issue: dict):
+    """Remove trailing emoji markers leaked from assessment impact into comment text."""
+    import re
+    _TRAILING_EMOJI = re.compile(r'\s*[\U0001f534\U0001f7e1\U0001f7e2\u2705\u274c\u26aa\U0001f7e0]+\s*$')
+    for rc in issue.get("role_comments", []):
+        comment = rc.get("comment", "")
+        rc["comment"] = _TRAILING_EMOJI.sub("", comment)
+
+
+def _is_reminder_item(item: dict, scenario: dict) -> bool:
+    """Determine if a checklist/issue item belongs to the reminder category."""
+    if scenario.get("target") != "version":
+        return False
+    cat = item.get("category", "")
+    if cat == "reminder":
+        return True
+    if cat == "quality":
+        return False
+    title = item.get("title", "")
+    return any(kw in title for kw in _REMINDER_TITLE_KEYWORDS)
+
+
 def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> dict:
     checklist = extraction.get("checklist", [])
     layer_overview = extraction.get("layer_overview", [])
     cross_layer = extraction.get("cross_layer_observations", [])
+    target = scenario.get("target", "feature")
+    persp_map = _VERSION_PERSP_LABEL if target == "version" else _PERSP_LABEL
 
     raw_issues = []
     for item in checklist:
-        issue = _build_issue(item, assessments)
+        issue = _build_issue(item, assessments, persp_map, target)
         issue["_group_id"] = item.get("group_id", "")
+        issue["_category"] = item.get("category", "")
+        issue["_severity_hint"] = item.get("severity_hint", "")
         raw_issues.append(issue)
 
     for asmt in assessments:
         for sf in asmt.get("supplementary_findings", []):
             gid = sf.get("group_id", "")
             if gid and any(i["_group_id"] == gid for i in raw_issues):
-                _merge_supplementary_into_group(raw_issues, sf, asmt, gid)
+                _merge_supplementary_into_group(raw_issues, sf, asmt, gid, persp_map)
             elif not any(i["item_id"] == sf.get("item_id") for i in raw_issues):
-                sup_issue = _build_issue_from_supplementary(sf, asmt)
+                sup_issue = _build_issue_from_supplementary(sf, asmt, persp_map, target)
                 sup_issue["_group_id"] = gid
+                sup_issue["_category"] = sf.get("category", "")
+                sup_issue["_severity_hint"] = sf.get("severity_hint", "")
                 raw_issues.append(sup_issue)
 
-    issues = _merge_groups(raw_issues)
+    merged = _merge_groups(raw_issues)
 
-    _assign_severity(issues, scenario)
+    quality_issues = []
+    reminders = []
+    passed_features = []
+    for issue in merged:
+        cat = issue.pop("_category", "")
+        issue["category"] = cat
+        _strip_comment_emoji(issue)
+        issue["_severity_hint"] = issue.pop("_severity_hint", "")
+        if _is_reminder_item(issue, scenario):
+            issue["category"] = "reminder"
+            reminders.append(issue)
+        else:
+            issue["category"] = "quality"
+            quality_issues.append(issue)
+
+    _assign_severity(quality_issues, scenario)
+    for r in reminders:
+        r["severity"] = "INFO"
+
+    if target == "version":
+        still_issues = []
+        for issue in quality_issues:
+            if _is_passed_feature(issue):
+                issue["severity"] = "PASS"
+                passed_features.append(issue)
+            else:
+                still_issues.append(issue)
+        quality_issues = still_issues
 
     verdicts = [a.get("verdict", "pass") for a in assessments]
     rules = scenario.get("synthesis_rules", {})
@@ -267,13 +353,15 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
     else:
         overall = "pass"
 
-    issues.sort(key=lambda i: {"P0": 0, "P1": 1, "P2": 2}.get(i["severity"], 9))
+    quality_issues.sort(key=lambda i: {"P0": 0, "P1": 1, "P2": 2}.get(i["severity"], 9))
 
     return {
         "overall_verdict": overall,
         "scenario_id": scenario.get("id", ""),
         "layer_overview": layer_overview,
-        "issues": issues,
+        "issues": quality_issues,
+        "passed_features": passed_features,
+        "reminders": reminders,
         "cross_layer": cross_layer,
         "blocker_count": blocker_count,
         "concern_count": concern_count,
@@ -287,24 +375,30 @@ def _merge_groups(raw_issues: list[dict]) -> list[dict]:
 
     for issue in raw_issues:
         gid = issue.pop("_group_id", "")
+        cat = issue.pop("_category", "")
+        hint = issue.pop("_severity_hint", "")
         if not gid:
+            issue["_category"] = cat
+            issue["_severity_hint"] = hint
             result.append(issue)
             continue
 
         if gid in seen_groups:
-            target = result[seen_groups[gid]]
-            target["role_comments"].extend(issue.get("role_comments", []))
+            target_issue = result[seen_groups[gid]]
+            target_issue["role_comments"].extend(issue.get("role_comments", []))
             sub = issue.get("title", "")
             gap = issue.get("gap_description", "")
             if gap:
                 sub = f"{sub}: {gap}"
-            target.setdefault("sub_items", []).append(sub)
+            target_issue.setdefault("sub_items", []).append(sub)
             et = issue.get("extracted_text", "")
-            if et and et not in target.get("extracted_text", ""):
-                target["extracted_text"] = (target.get("extracted_text", "") + "\n\n" + et).strip()
+            if et and et not in target_issue.get("extracted_text", ""):
+                target_issue["extracted_text"] = (target_issue.get("extracted_text", "") + "\n\n" + et).strip()
         else:
             seen_groups[gid] = len(result)
             issue.setdefault("sub_items", [])
+            issue["_category"] = cat
+            issue["_severity_hint"] = hint
             result.append(issue)
 
     for issue in result:
@@ -321,20 +415,24 @@ def _merge_groups(raw_issues: list[dict]) -> list[dict]:
     return result
 
 
-def _merge_supplementary_into_group(issues: list[dict], sf: dict, asmt: dict, gid: str):
+def _merge_supplementary_into_group(issues: list[dict], sf: dict, asmt: dict, gid: str,
+                                    persp_map: dict | None = None):
     """Merge a supplementary finding's comment into an existing group issue."""
+    pm = persp_map or _PERSP_LABEL
     rid = asmt.get("role_id", "")
     for issue in issues:
         if issue.get("_group_id") == gid:
             issue["role_comments"].append({
-                "perspective": _PERSP_LABEL.get(rid, rid.upper()),
+                "perspective": pm.get(rid, rid.upper()),
                 "impact": sf.get("impact", "concern"),
                 "comment": sf.get("suggested_action", sf.get("description", "")),
             })
             break
 
 
-def _build_issue(checklist_item: dict, assessments: list[dict]) -> dict:
+def _build_issue(checklist_item: dict, assessments: list[dict],
+                 persp_map: dict | None = None, scenario_target: str = "feature") -> dict:
+    pm = persp_map or _PERSP_LABEL
     item_id = checklist_item["item_id"]
     role_comments = []
     for asmt in assessments:
@@ -342,21 +440,25 @@ def _build_issue(checklist_item: dict, assessments: list[dict]) -> dict:
         for ia in asmt.get("issue_assessments", []):
             if ia.get("item_id") == item_id:
                 role_comments.append({
-                    "perspective": _PERSP_LABEL.get(rid, rid.upper()),
+                    "perspective": pm.get(rid, rid.upper()),
                     "impact": ia.get("impact", "pass"),
                     "comment": ia.get("comment", ""),
                 })
 
     gap = checklist_item.get("gap_description", "")
     status = checklist_item.get("status", "missing")
-    status_label = {"missing": "缺失", "incomplete": "不完整", "present": "已有", "fragment": "片段"}.get(status, status)
+    status_label = {
+        "missing": "\u7f3a\u5931", "incomplete": "\u4e0d\u5b8c\u6574",
+        "present": "\u5df2\u6709", "fragment": "\u7247\u6bb5",
+    }.get(status, status)
 
     ac = checklist_item.get("acceptance_criteria", "")
     if not ac:
         ac = gap
 
     title = checklist_item.get("title", item_id)
-    target = _natural_target_state(title, status)
+    target_state = _natural_target_state(title, status, scenario_target)
+    initiator = "PLD" if scenario_target == "version" else "Feature Owner"
 
     return {
         "item_id": item_id,
@@ -367,10 +469,10 @@ def _build_issue(checklist_item: dict, assessments: list[dict]) -> dict:
         "extracted_text": checklist_item.get("extracted_text", ""),
         "role_comments": role_comments,
         "action": {
-            "target_state": target,
+            "target_state": target_state,
             "current_status": status_label,
             "acceptance_criteria": ac,
-            "initiator": "Feature Owner",
+            "initiator": initiator,
         },
         "severity": "P2",
     }
@@ -392,16 +494,24 @@ _TARGET_TEMPLATES = {
 }
 
 
-def _natural_target_state(title: str, status: str) -> str:
+def _natural_target_state(title: str, status: str, scenario_target: str = "feature") -> str:
     if title in _TARGET_TEMPLATES:
         return _TARGET_TEMPLATES[title]
+    if scenario_target == "version":
+        if status == "missing":
+            return f"\u786e\u8ba4{title}\u7684\u5b9a\u4f4d\u548c\u6743\u91cd"
+        return f"{title}\u5df2\u660e\u786e"
     if status == "missing":
         return f"\u6587\u6863\u5305\u542b{title}"
     return f"{title}\u5df2\u8fbe\u6807"
 
 
-def _build_issue_from_supplementary(sf: dict, asmt: dict) -> dict:
+def _build_issue_from_supplementary(sf: dict, asmt: dict,
+                                    persp_map: dict | None = None,
+                                    scenario_target: str = "feature") -> dict:
+    pm = persp_map or _PERSP_LABEL
     rid = asmt.get("role_id", "")
+    initiator = "PLD" if scenario_target == "version" else "Feature Owner"
     return {
         "item_id": sf.get("item_id", ""),
         "title": sf.get("title", ""),
@@ -410,7 +520,7 @@ def _build_issue_from_supplementary(sf: dict, asmt: dict) -> dict:
         "gap_description": sf.get("description", ""),
         "extracted_text": "",
         "role_comments": [{
-            "perspective": _PERSP_LABEL.get(rid, rid.upper()),
+            "perspective": pm.get(rid, rid.upper()),
             "impact": sf.get("impact", "concern"),
             "comment": sf.get("suggested_action", sf.get("description", "")),
         }],
@@ -418,23 +528,34 @@ def _build_issue_from_supplementary(sf: dict, asmt: dict) -> dict:
             "target_state": sf.get("title", ""),
             "current_status": "\u5f85\u8bc4\u4f30",
             "acceptance_criteria": sf.get("suggested_action", sf.get("description", "")),
-            "initiator": "Feature Owner",
+            "initiator": initiator,
         },
         "severity": "P2",
     }
 
 
 def _assign_severity(issues: list[dict], scenario: dict):
+    pipeline_stage = scenario.get("pipeline_stage", "")
+    target = scenario.get("target", "feature")
+    is_planning_version = (target == "version" and pipeline_stage == "planning")
+
     for issue in issues:
         impacts = [rc["impact"] for rc in issue.get("role_comments", [])]
+        hint = issue.get("_severity_hint", "")
+
         if "block" in impacts:
             issue["severity"] = "P0"
+        elif hint:
+            issue["severity"] = hint
         elif "concern" in impacts:
-            issue["severity"] = "P1"
+            if is_planning_version:
+                issue["severity"] = "P2"
+            else:
+                issue["severity"] = "P1"
         else:
             status = issue.get("extraction_status", "")
             if status == "missing":
-                issue["severity"] = "P1"
+                issue["severity"] = "P2" if is_planning_version else "P1"
             else:
                 issue["severity"] = "P2"
 
@@ -525,6 +646,18 @@ def _legacy_synthesize(role_results, rules):
 # ============================================================
 # Shared helpers
 # ============================================================
+
+def _apply_role_overrides(role_config: dict, scenario: dict) -> dict:
+    """Merge scenario-level role_overrides into role_config (except authority)."""
+    overrides = scenario.get("role_overrides", {}).get(role_config["id"], {})
+    if not overrides:
+        return role_config
+    merged = {**role_config}
+    for key, value in overrides.items():
+        if key != "authority":
+            merged[key] = value
+    return merged
+
 
 def _resolve_authority(role_config: dict, scenario: dict) -> str:
     overrides = scenario.get("role_overrides", {}).get(role_config["id"], {})

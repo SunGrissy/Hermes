@@ -12,7 +12,7 @@ Synthesis: code merges extraction + assessments into REPORT_DATA for rendering.
 LAYER_OVERVIEW_ITEM = {
     "type": "object",
     "properties": {
-        "layer": {"type": "string", "enum": ["WHAT", "HOW", "BUILD"]},
+        "layer": {"type": "string"},
         "ratio": {"type": "string"},
         "completeness": {"type": "string", "enum": ["complete", "incomplete", "fragment", "absent"]},
         "key_gaps": {"type": "string"},
@@ -25,12 +25,14 @@ CHECKLIST_ITEM = {
     "properties": {
         "item_id": {"type": "string"},
         "title": {"type": "string"},
-        "layer": {"type": "string", "enum": ["WHAT", "HOW", "BUILD"]},
+        "layer": {"type": "string"},
         "status": {"type": "string", "enum": ["present", "incomplete", "missing"]},
         "extracted_text": {"type": "string"},
         "gap_description": {"type": "string"},
         "acceptance_criteria": {"type": "string"},
         "group_id": {"type": "string"},
+        "category": {"type": "string", "enum": ["quality", "reminder"]},
+        "severity_hint": {"type": "string", "enum": ["P1", "P2"]},
     },
     "required": ["item_id", "title", "layer", "status"],
 }

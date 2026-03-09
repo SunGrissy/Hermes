@@ -1,5 +1,23 @@
 # Work Log - MyAgents Root
 
+## 2026-03-09 - Palace 版本预审 v0.4 迭代 + 版本规划文档入库
+
+**状态**: 开发完成，待验收
+
+**内容**:
+- 版本预审报告大幅重构：异常优先总览、版本级问题速查表、Feature 状态速查、passed feature 过滤
+- engine.py：新增 severity_hint 校准机制、passed feature 判定、emoji 剥离、reminder 关键词扩充
+- report.py：版本报告渲染器重写（_version_summary / _version_issue_table / _merge_role_comments）
+- schemas.py：checklist 新增 severity_hint 字段
+- layout_analyst.yaml：品类特征注入、分类与严重度规则、VERSION 层归类指导
+- llm_client.py：MockProvider 版本预审数据同步更新
+- 入库 3 份版本规划文档（0318/0401/0422）和 6 份预审报告
+- 入库 1 份管线 PM 评价文档
+
+**备注**:
+- 审查发现 P0 级 verdict-vs-P0 矛盾问题，待下轮修复
+- 子模块指针变更非本次改动，未纳入提交
+
 ## 2026-03-05 - Palace 预审引擎 v0.4 全量入库 + 文档规范
 
 **状态**: 验收通过

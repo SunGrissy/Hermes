@@ -141,7 +141,13 @@ class MockProvider(LLMProvider):
                 "perspective_summary": "No preset available", "issue_assessments": []})
 
     def _is_extraction(self, prompt: str) -> bool:
-        return "\u6587\u6863\u7ed3\u6784\u4e0e\u8fde\u8d2f\u6027\u6559\u7ec3" in prompt or "layer_overview" in prompt
+        if "\u6587\u6863\u7ed3\u6784\u4e0e\u8fde\u8d2f\u6027\u6559\u7ec3" in prompt:
+            return True
+        if "\u7248\u672c\u6392\u5e03\u7ed3\u6784\u5206\u6790\u5e08" in prompt:
+            return True
+        if "layer_overview" in prompt and "checklist" in prompt:
+            return True
+        return False
 
     def _identify_role(self, prompt: str) -> str:
         head = prompt[:200]
@@ -151,13 +157,15 @@ class MockProvider(LLMProvider):
             return "ple"
         if "\u7ba1\u7ebf\u6280\u672f" in head or "PLT" in head.split("\n")[0]:
             return "plt"
-        if "PMO" in head:
+        if "PMO" in head or "\u7248\u672c PMO" in head or "\u7248\u672c\u7ea7\u522b\u7684 PMO" in head:
             return "pmo"
         return "unknown"
 
     def _match_topic(self, prompt: str) -> str:
-        if "锦标" in prompt or "月赛" in prompt:
+        if "\u9526\u6807" in prompt or "\u6708\u8d5b" in prompt:
             return "tournament"
+        if "\u7248\u672c\u5185\u5bb9\u6982\u8981" in prompt or "\u7248\u672c\u89c4\u5212" in prompt:
+            return "version"
         return "default"
 
 
@@ -193,6 +201,7 @@ class OpenAICompatibleProvider(LLMProvider):
 def _build_extraction_presets() -> dict:
     return {
         "tournament": _tournament_extraction(),
+        "version": _version_extraction(),
         "default": {"layer_overview": [], "checklist": [], "cross_layer_observations": []},
     }
 
@@ -286,9 +295,12 @@ def _build_assessment_presets() -> dict:
         "pld:tournament": _tournament_pld(),
         "ple:tournament": _tournament_ple(),
         "plt:tournament": _tournament_plt(),
+        "pld:version": _version_pld(),
+        "pmo:version": _version_pmo(),
         "pld:default": {"role_id": "pld", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
         "ple:default": {"role_id": "ple", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
         "plt:default": {"role_id": "plt", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
+        "pmo:default": {"role_id": "pmo", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
     }
 
 
@@ -376,5 +388,145 @@ def _tournament_plt() -> dict:
              "description": "\u79ef\u5206\u6389\u843d\u9700\u5728\u6e14\u573a\u6218\u6597\u6389\u843d\u7ba1\u7ebf\u4e2d\u6269\u5c55\uff1b\u6bb5\u4f4d\u5916\u663e\u53ef\u80fd\u8026\u5408Avatar\u7cfb\u7edf\uff1b\u9650\u65f6BUFF\u9700\u5bf9\u63a5\u73b0\u6709BUFF\u7cfb\u7edf",
              "impact": "concern",
              "suggested_action": "\u8f93\u51fa\u6280\u672f\u9884\u7814\u7ed3\u8bba\uff0c\u786e\u8ba4\u8026\u5408\u65b9\u5f0f"},
+        ],
+    }
+
+
+# ============================================================
+# Version layout presets
+# ============================================================
+
+def _version_extraction() -> dict:
+    return {
+        "layer_overview": [
+            {"layer": "\u5feb\u6162\u8f68\u914d\u6bd4", "ratio": "\u6162\u8f680~1/\u5feb\u8f68~8",
+             "completeness": "incomplete",
+             "key_gaps": "\u5168\u90e8\u672a\u6807\u6ce8\u6743\u91cd\uff0c\u53ef\u63a8\u65ad\u51e0\u4e4e\u5168\u5feb\u8f68"},
+            {"layer": "\u7528\u6237\u4ef7\u503c\u8986\u76d6", "ratio": "\u5927R 3\u9879/\u4e2dR 3\u9879/\u5c0fR 3\u9879",
+             "completeness": "complete",
+             "key_gaps": "\u542f\u52a8\u91d1\u5e01\u5df2\u8986\u76d6\uff0c\u514d\u8d39\u73a9\u5bb6\u57fa\u7840\u4fdd\u969c"},
+            {"layer": "\u5185\u5bb9\u8282\u594f", "ratio": "W13\u5bc6\u96c6/W14\u7a00\u758f",
+             "completeness": "fragment",
+             "key_gaps": "W13\u624e\u5806\u3001W14\u540e\u53ef\u80fd\u7a7a\u7a97"},
+            {"layer": "\u7814\u53d1\u8d1f\u8377", "ratio": "~8 Feature\uff0c\u591a\u6570\u5feb\u8f68\u914d\u7f6e",
+             "completeness": "complete",
+             "key_gaps": ""},
+            {"layer": "\u98ce\u9669\u96c6\u4e2d\u5ea6", "ratio": "\u6838\u5fc3\u4f53\u9a8c\u5206\u6563\uff0c\u65e0\u5355\u70b9\u8fc7\u5ea6\u4f9d\u8d56",
+             "completeness": "complete",
+             "key_gaps": "\u5e86\u5178\u5438\u5f15\u529b\u5f85\u786e\u8ba4"},
+        ],
+        "checklist": [
+            {"item_id": "feat-01", "title": "\u65b0Boss\u4e0a\u7ebf(\u8783\u87f9\u722a/\u673a\u68b0\u9f99\u73e0)", "layer": "WHAT",
+             "status": "missing", "category": "quality", "severity_hint": "P2",
+             "extracted_text": "\u4ec5\u6709\u6807\u9898\uff0c\u65e0\u4efb\u4f55\u63cf\u8ff0\u3002",
+             "gap_description": "\u88f8Feature\uff0c\u65e0\u4f53\u9a8c\u610f\u56fe",
+             "acceptance_criteria": "\u8865\u5145\u4e00\u53e5\u8bdd\u6982\u8981"},
+            {"item_id": "feat-02", "title": "\u89c6\u9891Boss", "layer": "WHAT",
+             "status": "missing", "category": "quality", "severity_hint": "P1",
+             "extracted_text": "\u4ec5\u5728\u65f6\u95f4\u7ebf\u4e2d\u51fa\u73b0\uff0c\u65e0\u63cf\u8ff0\u3002",
+             "gap_description": "\u547d\u540d\u6697\u793a\u65b0\u5f62\u6001\uff0c\u5f62\u6001\u672a\u786e\u8ba4",
+             "acceptance_criteria": "\u786e\u8ba4\u73a9\u6cd5\u5f62\u6001\u548c\u7ba1\u7ebf\u6743\u91cd"},
+            {"item_id": "feat-03", "title": "\u65b0\u8d5b\u5b63(0320-0430)", "layer": "WHAT",
+             "status": "present", "category": "quality", "severity_hint": "P2",
+             "extracted_text": "\u6d3b\u52a8\u5b9a\u4f4d\uff1a\u7ed9\u5168\u90e8\u73a9\u5bb6\u7684\u6d3b\u8dc3\u6d88\u8017\u6d3b\u52a8\u3002\u4e3b\u8981\u6295\u653e\uff1a\u6c38\u4e45\u589e\u76ca\u3001\u6ee1\u7ea7\u9752\u9f99\u795e\u541b*1\u3002",
+             "gap_description": "\u5b9a\u4f4d\u6e05\u6670\u3001\u6295\u653e\u660e\u786e\uff0c\u8de8\u7248\u672c\u8854\u63a5\u53ef\u8865\u5145",
+             "acceptance_criteria": "\u8bf4\u660e\u8de8\u7248\u672c\u5b89\u6392"},
+            {"item_id": "feat-04", "title": "\u6625\u65e5\u5e86\u5178(0320-0402)", "layer": "WHAT",
+             "status": "present", "category": "quality",
+             "extracted_text": "\u6d3b\u52a8\u5b9a\u4f4d\uff1a\u7ed9\u4e2d\u5c0fr\u7684\u6d3b\u8dc3\u6d88\u8017\u6d3b\u52a8\u3002\u4e3b\u8981\u6295\u653e\uff1a\u4e09\u795e\u541b\u3001\u8d85\u65f6\u7a7a\u82f1\u96c4\uff0c\u65e0\u6218\u9b42\u3002",
+             "gap_description": "\u5b9a\u4f4d\u548c\u6295\u653e\u6e05\u6670\uff0c\u547d\u9898\u5145\u5206",
+             "acceptance_criteria": ""},
+            {"item_id": "feat-05", "title": "\u6392\u671f\u6d3b\u52a8AB\u6d4b\u8bd5", "layer": "WHAT",
+             "status": "incomplete", "category": "quality", "severity_hint": "P2",
+             "extracted_text": "\u8bbe\u8ba1\u76ee\u7684\uff1a\u9a8c\u8bc1\u90e8\u5206\u6392\u671f\u6d3b\u52a8\u662f\u5426\u5bf9\u63d0\u9ad8\u73a9\u5bb6\u6d3b\u8dc3\u3001\u4ed8\u8d39\u6709\u5e2e\u52a9\u3002\u5b9e\u73b0\u65b9\u6848\uff1a\u4f18\u5148\u6d4b\u8bd5boss\u6311\u6218\u3002",
+             "gap_description": "\u89c2\u6d4b\u6307\u6807\u672a\u5b9a\u4e49\uff0c\u589e\u91cf\u5f00\u53d1\u91cf\u672a\u8bc4\u4f30",
+             "acceptance_criteria": "\u5b9a\u4e49\u6838\u5fc3\u89c2\u6d4b\u6307\u6807\u548c\u589e\u91cf\u5f00\u53d1\u91cf"},
+            {"item_id": "feat-06", "title": "\u793c\u5305\u77e9\u9635(\u795e\u541b\u81ea\u9009/\u7384\u6b66\u66b4\u51fb/\u5927\u4e54\u66b4\u51fb)", "layer": "WHAT",
+             "status": "missing", "category": "quality", "severity_hint": "P2",
+             "extracted_text": "\u4ec5\u5728\u65f6\u95f4\u7ebf\u8868\u683c\u4e2d\u51fa\u73b0\u3002",
+             "gap_description": "\u65e0\u72ec\u7acb\u63cf\u8ff0",
+             "acceptance_criteria": "\u8865\u5145\u5b9a\u4f4d\u548c\u6838\u5fc3\u5185\u5bb9\u7269"},
+            {"item_id": "ver-timeline", "title": "\u7248\u672c\u65f6\u95f4\u7ebf\u8986\u76d6\u4e0d\u5b8c\u6574", "layer": "VERSION",
+             "status": "incomplete", "category": "reminder",
+             "extracted_text": "\u65f6\u95f4\u7ebf\u4ec5\u8986\u76d6W13-W14(3.20-4.2)\uff0c\u4f46\u8d5b\u5b63\u52300430\u3001\u6731\u96c0\u52300423\u3002",
+             "gap_description": "\u65f6\u95f4\u7ebf\u4ec5\u8986\u76d6\u6838\u5fc3\u4e0a\u7ebf\u671f\uff0c\u540e\u7eed\u5185\u5bb9\u53ef\u80fd\u6392\u5728\u4e0b\u4e2a\u7248\u672c",
+             "acceptance_criteria": "\u786e\u8ba4\u662f\u5426\u4ec5\u8986\u76d6\u6838\u5fc3\u4e0a\u7ebf\u671f"},
+            {"item_id": "ver-weight", "title": "\u7ba1\u7ebf\u6743\u91cd\u5168\u90e8\u7f3a\u5931", "layer": "VERSION",
+             "status": "missing", "category": "reminder",
+             "extracted_text": "\u6240\u6709Feature\u5747\u672a\u6807\u6ce8\u5feb\u8f68/\u6162\u8f68\u3002",
+             "gap_description": "\u672a\u6807\u6ce8\u4f46\u53ef\u63a8\u65ad\u51e0\u4e4e\u5168\u5feb\u8f68\uff0c\u5efa\u8bae\u6a21\u677f\u5316",
+             "acceptance_criteria": "\u5728\u7248\u672c\u89c4\u5212\u6a21\u677f\u4e2d\u589e\u52a0\u6743\u91cd\u5b57\u6bb5"},
+            {"item_id": "ver-kpi", "title": "\u7248\u672cKPI\u76ee\u6807\u7f3a\u5931", "layer": "VERSION",
+             "status": "missing", "category": "quality", "severity_hint": "P1",
+             "extracted_text": "",
+             "gap_description": "\u65e0\u6536\u5165/\u6d3b\u8dc3/\u7559\u5b58\u76ee\u6807",
+             "acceptance_criteria": "\u5b9a\u4e49\u7248\u672c\u6838\u5fc3KPI"},
+        ],
+        "cross_layer_observations": [
+            {"category": "intent",
+             "description": "\u91d1\u5e01\u7ecf\u6d4e\u591a\u51fa\u53e3\u7ade\u4e89\uff1a\u6625\u65e5\u5e86\u5178\u548c\u8d5b\u5b63\u517b\u6210\u540c\u65f6\u6d88\u8017\u91d1\u5e01\uff0cPLD\u672a\u8bbe\u8ba1\u4f18\u5148\u7ea7",
+             "suggestion": "\u660e\u786e\u91d1\u5e01\u4f18\u5148\u6d88\u8017\u8def\u5f84"},
+            {"category": "readiness",
+             "description": "AB\u6d4b\u8bd5\u6280\u672f\u524d\u7f6e\u6761\u4ef6\u4e0d\u660e\uff0c\u5982\u9700\u65b0\u5efa\u5206\u7ec4\u6846\u67b6\u53ef\u80fd\u5f71\u54cd\u6392\u671f",
+             "suggestion": "PLT\u786e\u8ba4\u6280\u672f\u524d\u7f6e\u6761\u4ef6"},
+            {"category": "annotate",
+             "description": "\u7248\u672c\u89c4\u5212\u7f3a\u5c11Feature Owner\u6807\u6ce8\u548c\u7248\u672c\u89d2\u8272\u6807\u6ce8",
+             "suggestion": "\u8865\u5145\u7248\u672c\u5143\u4fe1\u606f\u533a\u5757"},
+        ],
+    }
+
+
+def _version_pld() -> dict:
+    return {
+        "role_id": "pld",
+        "verdict": "concern",
+        "perspective_summary": "\u7248\u672c\u5185\u5bb9\u7ec4\u5408\u65b9\u5411\u5408\u7406\uff0c\u4f46\u591a\u6570Feature\u7684WHAT\u4ea4\u4ee3\u4e0d\u8db3\uff0c\u4e0b\u6e38\u96be\u4ee5\u542f\u52a8HOW\u8bbe\u8ba1\u3002\u89c6\u9891Boss\u5f62\u6001\u672a\u786e\u8ba4\u662f\u6838\u5fc3\u98ce\u9669\u3002",
+        "issue_assessments": [
+            {"item_id": "feat-01", "impact": "pass",
+             "comment": "Boss\u6362\u76ae\u5927\u6982\u7387\u5feb\u8f68\uff0c\u89c4\u5212\u9636\u6bb5\u88f8Feature\u53ef\u63a5\u53d7\u3002"},
+            {"item_id": "feat-02", "impact": "block",
+             "comment": "\u547d\u540d\u6697\u793a\u65b0\u5f62\u6001\uff0c\u53ef\u80fd\u662f\u6162\u8f68\u3002\u5f62\u6001\u672a\u786e\u8ba4\u76f4\u63a5\u5f71\u54cd\u8d44\u6e90\u5206\u914d\u3002"},
+            {"item_id": "feat-03", "impact": "pass",
+             "comment": "\u5b9a\u4f4d\u6e05\u6670\uff0c\u6295\u653e\u660e\u786e\uff0c\u53ef\u542f\u52a8\u4e0b\u6e38\u8bbe\u8ba1\u3002"},
+            {"item_id": "feat-04", "impact": "pass",
+             "comment": "\u5b9a\u4f4d\u548c\u6295\u653e\u6e05\u6670\uff0c\u547d\u9898\u5145\u5206\u3002"},
+            {"item_id": "feat-05", "impact": "concern",
+             "comment": "\u89c2\u6d4b\u6307\u6807\u672a\u5b9a\u4e49\uff0c\u65e0\u6cd5\u8bc4\u4f30ROI\u3002"},
+            {"item_id": "ver-timeline", "impact": "pass",
+             "comment": "\u7248\u672c\u89c4\u5212\u4ec5\u8986\u76d6\u6838\u5fc3\u4e0a\u7ebf\u671f\u662f\u5e38\u89c1\u505a\u6cd5\uff0c\u540e\u7eed\u5185\u5bb9\u53ef\u80fd\u6392\u5728\u4e0b\u4e2a\u7248\u672c\u3002"},
+            {"item_id": "ver-weight", "impact": "pass",
+             "comment": "\u4ece\u5185\u5bb9\u6027\u8d28\u53ef\u63a8\u65ad\u51e0\u4e4e\u5168\u5feb\u8f68\uff0c\u5efa\u8bae\u6a21\u677f\u5316\u6807\u6ce8\u3002"},
+            {"item_id": "ver-kpi", "impact": "concern",
+             "comment": "\u65e0\u6210\u529f\u6307\u6807\u65e0\u6cd5\u8861\u91cf\u7248\u672c\u6548\u679c\u548c\u6295\u5165\u4ea7\u51fa\u6bd4\u3002"},
+        ],
+        "supplementary_findings": [
+            {"item_id": "pld-rhythm", "title": "W13\u5185\u5bb9\u624e\u5806vs W14\u7a7a\u7a97", "layer": "VERSION",
+             "category": "reminder",
+             "description": "W13\u5bc6\u96c6\u4e0a\u7ebf\u591a\u4e2a\u6d3b\u52a8\uff0cW14\u7a00\u758f\uff0c\u8282\u594f\u4e0d\u5747",
+             "impact": "concern",
+             "suggested_action": "\u8003\u8651\u5c06\u90e8\u5206W13\u5185\u5bb9\u5ef6\u540e\u5230W14"},
+        ],
+    }
+
+
+def _version_pmo() -> dict:
+    return {
+        "role_id": "pmo",
+        "verdict": "concern",
+        "perspective_summary": "\u7248\u672cscope\u6574\u4f53\u53ef\u63a7\uff0c\u5927\u90e8\u5206\u4e3a\u5feb\u8f68\u914d\u7f6e\u3002AB\u6d4b\u8bd5\u589e\u91cf\u5f00\u53d1\u91cf\u9700\u8bc4\u4f30\u3002",
+        "issue_assessments": [
+            {"item_id": "feat-05", "impact": "concern",
+             "comment": "AB\u6d4b\u8bd5\u57fa\u7840\u80fd\u529b\u5df2\u5177\u5907\uff0c\u4f46\u65b0\u589e\u6d4b\u8bd5\u7684\u57cb\u70b9\u548c\u5206\u7ec4\u903b\u8f91\u6709\u589e\u91cf\u5f00\u53d1\u91cf\uff0c\u9700\u8bc4\u4f30\u3002"},
+            {"item_id": "ver-timeline", "impact": "pass",
+             "comment": "\u7248\u672c\u89c4\u5212\u8986\u76d6\u6838\u5fc3\u4e0a\u7ebf\u671f\u662f\u5e38\u89c4\u505a\u6cd5\u3002"},
+            {"item_id": "ver-weight", "impact": "pass",
+             "comment": "\u53ef\u63a8\u65ad\u5168\u5feb\u8f68\uff0c\u5efa\u8bae\u7eb3\u5165\u7248\u672c\u89c4\u5212\u6a21\u677f\u3002"},
+        ],
+        "supplementary_findings": [
+            {"item_id": "pmo-slow", "title": "\u6162\u8f68\u7ba1\u7ebf\u7a7a\u8f6c\u98ce\u9669", "layer": "VERSION",
+             "category": "reminder",
+             "description": "\u672c\u7248\u672c\u5168\u5feb\u8f68\uff0c\u4e94\u4e00\u5927\u8282\u70b9\u7684\u6162\u8f68Feature\u662f\u5426\u5df2\u542f\u52a8\uff1f",
+             "impact": "concern",
+             "suggested_action": "\u786e\u8ba4\u4e94\u4e00\u7248\u672c\u6162\u8f68\u89c4\u5212\u72b6\u6001"},
         ],
     }
