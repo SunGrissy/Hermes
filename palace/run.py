@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import json
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -82,11 +83,17 @@ def main():
     pipeline_stage = args.stage or scenario_cfg.get("pipeline_stage", "")
     scenario_name = scenario_cfg.get("name", args.scenario)
 
+    title = args.title or ""
+    if not title and args.input_file:
+        stem = Path(args.input_file).stem
+        title = re.sub(r"^report_", "", stem)
+        title = re.sub(r"_v\d+$", "", title)
+
     if args.format == "markdown":
         output_text = generate_markdown(
             result,
             scenario_id=args.scenario,
-            feature_title=args.title or "",
+            feature_title=title,
             feature_owner=args.owner or "",
             pipeline_weight=pipeline_weight,
             pipeline_stage=pipeline_stage,

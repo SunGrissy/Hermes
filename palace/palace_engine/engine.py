@@ -257,8 +257,24 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
         "   \u6bcf\u9879: {item_id, impact(pass/concern/block), comment}\n"
         "5. supplementary_findings: \u6570\u7ec4\uff08\u53ef\u4e3a\u7a7a\uff09\uff0cchecklist \u6ca1\u8986\u76d6\u5230\u7684\u989d\u5916\u53d1\u73b0\n"
         "   \u6bcf\u9879: {item_id(\u65b0\u7684), title, layer, description, impact, suggested_action}\n"
-        "6. highlights: \u6570\u7ec4\uff081-3 \u9879\uff09\uff0c\u4ece\u4f60\u7684\u89c6\u89d2\u770b\u8fd9\u4efd\u6587\u6863/\u89c4\u5212\u505a\u5f97\u597d\u7684\u5730\u65b9\n"
-        "   \u6bcf\u9879: {aspect: \u4e00\u53e5\u8bdd\u6982\u62ec\u4eae\u70b9, detail: \u7b80\u8981\u8bf4\u660e\u4e3a\u4ec0\u4e48\u597d}"
+        "6. highlights: \u6570\u7ec4\uff080-3 \u9879\uff09\uff0c\u4ec5\u6807\u8bb0\u8d85\u51fa\u89c4\u5212\u57fa\u7ebf\u7684\u5de7\u601d\u3002\n"
+        "   \u4ee5\u4e0b\u4e0d\u7b97\u4eae\u70b9\uff1a\u6309\u6a21\u677f\u89c4\u8303\u586b\u5199\uff08\u57fa\u7ebf\u8981\u6c42\uff09\u3001\u7eaf\u6362\u76ae\uff08\u4ec5\u66ff\u6362\u7f8e\u672f\u8d44\u6e90\u65e0\u673a\u5236\u53d8\u5316\uff09\u3002\n"
+        "   \u4f18\u5148\u8bc6\u522b\uff1a\n"
+        "   - \u673a\u5236\u590d\u7528\u521b\u65b0\uff1a\u5728\u73b0\u6709\u73a9\u6cd5\u6846\u67b6\u4e0a\u901a\u8fc7\u53c2\u6570/\u6295\u653e/\u7ec4\u5408\u521b\u9020\u5dee\u5f02\u5316\u4f53\u9a8c\n"
+        "   - \u8d44\u6e90\u6548\u7387\u5de7\u601d\uff1a\u7528\u8f83\u5c11\u8d44\u6e90\u8fbe\u6210\u8f83\u5927\u7528\u6237\u4ef7\u503c\n"
+        "   - \u957f\u7ebf\u751f\u6001\u94fa\u57ab\uff1a\u4e3a\u56de\u6d41/\u7559\u5b58/\u8de8\u7248\u672c\u8854\u63a5\u7684\u524d\u77bb\u5b89\u6392\n"
+        "   \u5982\u679c\u6ca1\u6709\u503c\u5f97\u6807\u8bb0\u7684\u4eae\u70b9\uff0c\u8fd4\u56de\u7a7a\u6570\u7ec4\u3002\n"
+        "   \u6bcf\u9879: {aspect: \u4e00\u53e5\u8bdd\u6982\u62ec, detail: \u7b80\u8981\u8bf4\u660e\u4ef7\u503c\u5224\u65ad\u539f\u56e0}\n"
+        "\n\u8bed\u6c14\u89c4\u5219\uff1a\n"
+        "- comment \u4e2d\u4e0d\u4f7f\u7528\u5938\u8d5e\u6027\u5f62\u5bb9\u8bcd\uff08\u7cbe\u5999\u3001\u51fa\u8272\u3001\u5de7\u5999\u7b49\uff09\n"
+        "- \u4eae\u70b9\u53ea\u9648\u8ff0\u4e8b\u5b9e + \u4ef7\u503c\u5224\u65ad\u539f\u56e0\n"
+        "- \u95ee\u9898\u63cf\u8ff0\u7528'\u5efa\u8bae...'\u800c\u975e'\u7f3a\u5931...\u9700\u8981...'\n"
+        "- \u8de8\u5c42\u5185\u5bb9\u8bc4\u4f30\uff1a\u5173\u6ce8\u4e0b\u6e38\u80fd\u5426\u4ece\u4e2d\u51c6\u786e\u7406\u89e3\u8bbe\u8ba1\u610f\u56fe\uff0c"
+        "\u7528'\u53ef\u4f5c\u4e3aXX\u53c2\u8003\uff0c\u5efa\u8bae\u6807\u6ce8\u7528\u9014'\u66ff\u4ee3'\u672c\u5e94\u7531XX\u4ea7\u51fa'\n"
+        "- \u8bca\u65ad\u8bed\u53e5\u533a\u5206\u4e8b\u5b9e\u4e0e\u5224\u65ad\uff1a\u5148\u5f15\u7528\u6587\u6863\u539f\u6587\u72b6\u6001\uff08\u5982'\u6587\u6863\u6807\u6ce8XX\u5f85\u786e\u8ba4'\uff09\uff0c"
+        "\u518d\u7ed9\u51fa\u5f71\u54cd\u5224\u65ad\uff08\u5982'\u5bfc\u81f4\u4e0b\u6e38\u65e0\u6cd5XX'\uff09\uff0c\u907f\u514d\u8bfb\u8005\u5206\u4e0d\u6e05\u662f\u6587\u6863\u81ea\u8ff0\u8fd8\u662f\u5f15\u64ce\u8bca\u65ad\n"
+        "- \u5efa\u8bae\u5fc5\u987b\u5177\u4f53\u53ef\u64cd\u4f5c\uff1a\u8bf4\u660e'\u8c01\u505a\u4ec0\u4e48\u3001\u8fbe\u5230\u4ec0\u4e48\u72b6\u6001'\uff0c"
+        "\u907f\u514d\u7b3c\u7edf\u7684\u6d41\u7a0b\u6027\u8868\u8ff0\uff08\u5982'\u786e\u4fddXX\u4ecb\u5165'\uff09"
     )
     return "\n".join(parts)
 
@@ -276,12 +292,34 @@ def _build_assessment_user_prompt(topic_text, extraction_result, document_layer)
 # Synthesis v0.4 — merge extraction + assessments into report data
 # ============================================================
 
-_REMINDER_TITLE_KEYWORDS = [
-    "\u65f6\u95f4\u7ebf", "\u8282\u594f", "\u624e\u5806", "\u7a7a\u7a97", "\u7ba1\u7ebf\u6743\u91cd", "\u6743\u91cd\u7f3a\u5931", "\u6743\u91cd\u5168\u90e8",
-    "\u524d\u7f6e\u6761\u4ef6", "DoR", "\u4f53\u9a8c\u8868", "Feature\u6e05\u5355", "\u4fe1\u606f\u4e0d\u5bf9\u79f0", "\u4e0d\u5bf9\u9f50",
-    "\u514d\u8d39\u73a9\u5bb6", "\u6162\u8f68\u7ba1\u7ebf\u7a7a\u8f6c",
+_PIPELINE_KEYWORDS = [
+    "\u7ba1\u7ebf\u6743\u91cd", "\u6743\u91cd\u7f3a\u5931", "\u6743\u91cd\u5168\u90e8",
+    "\u524d\u7f6e\u6761\u4ef6", "DoR", "\u4f53\u9a8c\u8868", "Feature\u6e05\u5355",
+    "\u4fe1\u606f\u4e0d\u5bf9\u79f0", "\u4e0d\u5bf9\u9f50",
     "\u89d2\u8272\u672a\u6307\u6d3e", "PLD/PLE/PLT", "\u7ba1\u7ebf\u89d2\u8272",
+    "Owner", "\u6807\u6ce8", "\u6a21\u677f", "\u89d2\u8272\u6307\u6d3e", "\u7ba1\u7ebf",
 ]
+
+_RHYTHM_KEYWORDS = [
+    "\u65f6\u95f4\u7ebf", "\u8282\u594f", "\u624e\u5806", "\u7a7a\u7a97",
+    "\u514d\u8d39\u73a9\u5bb6", "\u6162\u8f68\u7ba1\u7ebf\u7a7a\u8f6c",
+    "\u8de8\u7248\u672c", "\u8986\u76d6",
+]
+
+_VERSION_LEVEL_KEYWORDS = [
+    "\u6d88\u8017\u7ade\u4e89", "\u8282\u594f", "\u96c6\u4e2d\u5ea6", "\u6295\u653e\u91cd\u53e0",
+    "\u540c\u8d28\u5316", "\u8d44\u6e90\u4e89\u593a", "\u5185\u5bb9\u5bc6\u5ea6",
+]
+
+
+def _reclassify_cross_feature(quality_issues: list[dict]):
+    """Promote WHAT-layer issues with version-level scope to VERSION layer."""
+    for issue in quality_issues:
+        if issue.get("layer") != "WHAT":
+            continue
+        title = issue.get("title", "")
+        if any(kw in title for kw in _VERSION_LEVEL_KEYWORDS):
+            issue["layer"] = "VERSION"
 
 
 def _is_passed_feature(issue: dict) -> bool:
@@ -314,17 +352,26 @@ def _strip_comment_emoji(issue: dict):
         rc["comment"] = _TRAILING_EMOJI.sub("", comment)
 
 
-def _is_reminder_item(item: dict, scenario: dict) -> bool:
-    """Determine if a checklist/issue item belongs to the reminder category."""
+def _classify_reminder(item: dict, scenario: dict) -> str:
+    """Classify an item as pipeline/rhythm reminder or empty string (quality).
+
+    Returns "pipeline", "rhythm", or "" (not a reminder).
+    """
     if scenario.get("target") != "version":
-        return False
+        return ""
     cat = item.get("category", "")
-    if cat == "reminder":
-        return True
     if cat == "quality":
-        return False
+        return ""
     title = item.get("title", "")
-    return any(kw in title for kw in _REMINDER_TITLE_KEYWORDS)
+    if cat == "reminder":
+        if any(kw in title for kw in _RHYTHM_KEYWORDS):
+            return "rhythm"
+        return "pipeline"
+    if any(kw in title for kw in _PIPELINE_KEYWORDS):
+        return "pipeline"
+    if any(kw in title for kw in _RHYTHM_KEYWORDS):
+        return "rhythm"
+    return ""
 
 
 def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> dict:
@@ -357,33 +404,45 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
     merged = _merge_groups(raw_issues)
 
     quality_issues = []
-    reminders = []
+    pipeline_reminders = []
+    rhythm_reminders = []
     passed_features = []
     for issue in merged:
         cat = issue.pop("_category", "")
         issue["category"] = cat
         _strip_comment_emoji(issue)
         issue["_severity_hint"] = issue.pop("_severity_hint", "")
-        if _is_reminder_item(issue, scenario):
+        reminder_type = _classify_reminder(issue, scenario)
+        if reminder_type == "pipeline":
             issue["category"] = "reminder"
-            reminders.append(issue)
+            issue["reminder_type"] = "pipeline"
+            pipeline_reminders.append(issue)
+        elif reminder_type == "rhythm":
+            issue["category"] = "reminder"
+            issue["reminder_type"] = "rhythm"
+            rhythm_reminders.append(issue)
         else:
             issue["category"] = "quality"
             quality_issues.append(issue)
+
+    if target == "version":
+        _reclassify_cross_feature(quality_issues)
+
+    reminders = pipeline_reminders + rhythm_reminders
 
     _assign_severity(quality_issues, scenario)
     for r in reminders:
         r["severity"] = "INFO"
 
-    if target == "version":
-        still_issues = []
-        for issue in quality_issues:
-            if _is_passed_feature(issue):
-                issue["severity"] = "PASS"
+    still_issues = []
+    for issue in quality_issues:
+        if _is_passed_feature(issue):
+            issue["severity"] = "PASS"
+            if target == "version":
                 passed_features.append(issue)
-            else:
-                still_issues.append(issue)
-        quality_issues = still_issues
+        else:
+            still_issues.append(issue)
+    quality_issues = still_issues
 
     verdicts = [a.get("verdict", "pass") for a in assessments]
     rules = scenario.get("synthesis_rules", {})
@@ -411,6 +470,10 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
                 "detail": h.get("detail", ""),
             })
 
+    total_cl = len(checklist)
+    present_cl = sum(1 for c in checklist if c.get("status") == "present")
+    doc_completeness_score = round(present_cl / total_cl * 10) if total_cl else 0
+
     return {
         "overall_verdict": overall,
         "scenario_id": scenario.get("id", ""),
@@ -418,10 +481,13 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
         "issues": quality_issues,
         "passed_features": passed_features,
         "reminders": reminders,
+        "pipeline_reminders": pipeline_reminders,
+        "rhythm_reminders": rhythm_reminders,
         "cross_layer": cross_layer,
         "highlights": highlights,
         "blocker_count": blocker_count,
         "concern_count": concern_count,
+        "doc_completeness_score": doc_completeness_score,
     }
 
 

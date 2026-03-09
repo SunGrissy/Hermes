@@ -1,7 +1,11 @@
-"""Palace report renderer v0.4 — dumb renderer, no analysis.
+"""Palace report renderer v0.6 — information density and architecture overhaul.
 
-Receives structured REPORT_DATA from synthesize_v2 and renders Markdown.
-All intelligence lives in LLM prompts and synthesis logic, not here.
+Changes from v0.5:
+- Dashboard: two tables (overview + dimensions), filtered top concerns, compressed highlights
+- Version issues: merge role comments into bullet points (no role labels)
+- Feature precheck: merge perspectives into bullet list with dimension tags
+- Version report: 2+2 section structure (risk+feature / pipeline+rhythm)
+- Doc completeness score in overview table
 """
 from __future__ import annotations
 
@@ -15,11 +19,12 @@ _NEXT = {
     "pass": "\u53ef\u8fdb\u5165\u4e0b\u4e00\u9636\u6bb5",
     "error": "\u5ba1\u67e5\u5f02\u5e38",
 }
-_SE = {"P0": "\u26a1", "P1": "\U0001f527", "WARN": "\u203c\ufe0f", "P2": "\U0001f536", "P3": "\U0001f4a1", "INFO": "\U0001f4ac", "PASS": "\u2705"}
+_SE = {"P0": "\u26a1", "P1": "\U0001f6a9", "WARN": "\u203c\ufe0f", "P2": "\U0001f536", "P3": "\U0001f4a1", "INFO": "\U0001f4ac", "PASS": "\u2705"}
 _SL = {"P0": "\u963b\u65ad", "P1": "\u5fc5\u6539", "WARN": "\u9884\u8b66", "P2": "\u91cd\u70b9\u5efa\u8bae", "P3": "\u5efa\u8bae", "INFO": "\u63d0\u9192", "PASS": "\u901a\u8fc7"}
 _IE = {"block": "\u274c", "concern": "\U0001f7e1", "pass": "\u2705"}
 _COMP = {
     "complete": "\u2705 \u5b8c\u6574",
+    "present": "\u2705 \u5b8c\u6574",
     "incomplete": "\U0001f7e1 \u4e0d\u5b8c\u6574",
     "fragment": "\U0001f7e0 \u7247\u6bb5",
     "absent": "\u26aa \u672a\u6d89\u53ca",
@@ -76,7 +81,9 @@ def generate_markdown(
     lines.append(f"# {title}{ft}")
     lines.append("")
 
-    _meta(lines, feature_owner, pipeline_weight, pipeline_stage, document_layer, ov, bc, cc)
+    doc_score = data.get("doc_completeness_score")
+    _meta(lines, feature_owner, pipeline_weight, pipeline_stage, document_layer, ov, bc, cc,
+          doc_completeness_score=doc_score)
 
     if layer_overview:
         _layer_overview(lines, layer_overview)
@@ -96,41 +103,43 @@ def generate_markdown(
         _p0_cards(lines, p0s)
         lines.append("")
 
-    lines.append(f"## \U0001f4cb {primary_layer} \u5c42\u6838\u5fc3\u5ba1\u67e5\uff08{len(core_issues)} \u9879\uff09")
-    lines.append("")
-    lines.append("> \u6bcf\u4e2a\u8bae\u9898\u4ece\u4e09\u4e2a\u89c6\u89d2\u8bc4\u5ba1\uff1a**\u5185\u5bb9\u65b9\u5411**\uff08\u5185\u5bb9\u672c\u8eab\u662f\u5426\u8fbe\u6807\uff09| **\u53ef\u8bbe\u8ba1\u6027**\uff08\u4e0b\u6e38UX\u80fd\u5426\u5f00\u5de5\uff09| **\u53ef\u5b9e\u73b0\u6027**\uff08\u6280\u672f\u4e0a\u662f\u5426\u53ef\u884c\uff09")
+    if cross_layer:
+        lines.append("## \u4e0b\u6e38\u4f20\u9012\u8bca\u65ad")
+        lines.append("")
+        _cross_layer_section(lines, cross_layer)
+
+    lines.append(f"## {primary_layer} \u5c42\u5ba1\u67e5\u8be6\u60c5\uff08{len(core_issues)} \u9879\uff09")
     lines.append("")
     for idx, issue in enumerate(core_issues, 1):
         _issue_section(lines, idx, issue)
 
-    all_cross = cross_issues + [{"_obs": True, **obs} for obs in cross_layer]
-    if all_cross:
-        lines.append(f"## \U0001f517 \u8de8\u5c42\u89c2\u5bdf\u4e0e\u63d0\u9192\uff08{len(cross_issues)} + {len(cross_layer)} \u9879\uff09")
+    build_cross = [i for i in cross_issues
+                   if i.get("layer", "").upper() == "BUILD"]
+    if build_cross:
+        lines.append(f"## BUILD \u5c42\u98ce\u9669\u63d0\u793a\uff08{len(build_cross)} \u9879\uff09")
         lines.append("")
-        obs_only = [x for x in all_cross if x.get("_obs")]
-        issue_only = [x for x in all_cross if not x.get("_obs")]
-        if issue_only:
-            for idx, issue in enumerate(issue_only, len(core_issues) + 1):
-                _issue_section(lines, idx, issue)
-        if obs_only:
-            _cross_layer_section(lines, [x for x in cross_layer])
+        lines.append("> \u4ee5\u4e0b\u4e3a\u6280\u672f\u4fa7\u98ce\u9669\u4e0e\u4f9d\u8d56\u63d0\u793a\uff0c\u4f9b PLT \u53c2\u8003\u3002")
+        lines.append("")
+        for idx, issue in enumerate(build_cross, 1):
+            _issue_section(lines, idx, issue)
 
-    non_p0 = [i for i in issues if i.get("severity") != "P0"]
+    rendered = core_issues + build_cross
+    non_p0 = [i for i in rendered if i.get("severity") != "P0"]
     if non_p0:
-        titles = " | ".join(
-            f"#{idx} {i.get('title', '')}"
-            for idx, i in enumerate(
-                (x for x in issues if x.get("severity") != "P0"),
-                len(p0s) + 1,
-            )
-        )
-        lines.append(f"## \U0001f4dd \u5f85\u6539\u8fdb\u7d22\u5f15")
+        lines.append("## \u5f85\u6539\u8fdb\u7d22\u5f15")
         lines.append("")
-        lines.append(f"{_SE['P1']} \u5fc5\u6539\uff1a{titles}")
+        by_sev: dict[str, list[str]] = {}
+        for issue in non_p0:
+            sev = issue.get("severity", "P2")
+            by_sev.setdefault(sev, []).append(issue.get("title", ""))
+        for sev_key in ["P1", "WARN", "P2", "P3"]:
+            items = by_sev.get(sev_key)
+            if items:
+                lines.append(f"{_SE.get(sev_key, '')} {_SL.get(sev_key, sev_key)}\uff1a{' | '.join(items)}")
         lines.append("")
 
     lines.append("---")
-    lines.append(f"*Generated by Palace Engine v0.4 \u00b7 {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
+    lines.append(f"*Generated by Palace Engine v0.6 \u00b7 {datetime.now().strftime('%Y-%m-%d %H:%M')}*")
     lines.append("")
     return "\n".join(lines)
 
@@ -151,7 +160,8 @@ def _detect_primary_layer(scenario_id: str, document_layer: str) -> str:
 # Section renderers (shared)
 # ============================================================
 
-def _meta(lines, owner, weight, stage, dl, ov, bc, cc):
+def _meta(lines, owner, weight, stage, dl, ov, bc, cc,
+          doc_completeness_score=None):
     lines.append("| \u9879\u76ee | \u5185\u5bb9 |")
     lines.append("|------|------|")
     if owner:
@@ -167,6 +177,8 @@ def _meta(lines, owner, weight, stage, dl, ov, bc, cc):
         sl = {"planning": "\u89c4\u5212\u9636\u6bb5", "scoping": "\u51c6\u5907\u9636\u6bb5",
               "dor": "DoR \u95e8\u7981", "production": "\u751f\u4ea7\u9636\u6bb5"}
         lines.append(f"| \u7ba1\u7ebf\u9636\u6bb5 | {sl.get(stage, stage)} |")
+    if doc_completeness_score is not None:
+        lines.append(f"| \u6587\u6863\u5b8c\u5907\u5ea6 | {doc_completeness_score}/10 |")
     lines.append(f"| \u5ba1\u67e5\u7ed3\u679c | {_VE[ov]} **{_VL[ov]}** |")
 
 
@@ -178,10 +190,23 @@ def _layer_overview(lines, overview):
     lines.append("|------|----------|--------|----------|")
     for lo in overview:
         comp = _COMP.get(lo.get("completeness", ""), lo.get("completeness", ""))
-        gaps = lo.get("key_gaps", "\u2014")
+        raw_gaps = lo.get("key_gaps", "\u2014")
+        if isinstance(raw_gaps, list):
+            short = [_trunc(g, _MAX_TABLE_GAP) for g in raw_gaps[:3]]
+            gaps = "\uff1b".join(short) or "\u2014"
+            if len(raw_gaps) > 3:
+                gaps += f" \u7b49 {len(raw_gaps)} \u9879"
+        else:
+            gaps = raw_gaps if raw_gaps else "\u2014"
         layer = lo['layer']
         ratio = lo.get('ratio', '\u2014')
         lines.append(f"| {layer} | {ratio} | {comp} | {gaps} |")
+    lines.append("")
+    lines.append(
+        "*\u5b8c\u6210\u5ea6\uff1a\u2705\u5b8c\u6574 \U0001f7e1\u6709\u7f3a\u9879"
+        " \U0001f7e0\u7247\u6bb5(\u975e\u672c\u5c42\u6b63\u5f0f\u4ea4\u4ed8\uff0c\u5c5e\u53c2\u8003\u5185\u5bb9)"
+        " \u26aa\u672a\u6d89\u53ca*"
+    )
     lines.append("")
 
 
@@ -194,7 +219,7 @@ def _verdict_summary(lines, issues):
     if p0_count:
         lines.append(f"- \u26a1 **{p0_count}** \u9879\u963b\u65ad\uff08\u5fc5\u987b\u89e3\u51b3\uff09")
     if p1_count:
-        lines.append(f"- \U0001f527 **{p1_count}** \u9879\u5fc5\u6539\uff08\u91cd\u8981\u4f46\u4e0d\u963b\u65ad\uff09")
+        lines.append(f"- \U0001f6a9 **{p1_count}** \u9879\u5fc5\u6539\uff08\u91cd\u8981\u4f46\u4e0d\u963b\u65ad\uff09")
     if warn_count:
         lines.append(f"- \u203c\ufe0f **{warn_count}** \u9879\u9884\u8b66\uff08\u7248\u672c\u7ed3\u6784\u6027\u98ce\u9669\uff0c\u9700 PLD \u663e\u5f0f\u5e94\u5bf9\uff09")
     if p2_count:
@@ -228,10 +253,11 @@ def _issue_section(lines, idx, issue):
 
     status_label = {"missing": "\u274c \u7f3a\u5931", "incomplete": "\U0001f7e1 \u4e0d\u5b8c\u6574",
                     "present": "\u2705 \u5df2\u6709", "fragment": "\U0001f7e0 \u7247\u6bb5",
-                    "supplementary": "\U0001f50d \u989d\u5916\u53d1\u73b0"}.get(status, status)
+                    "supplementary": ""}.get(status, status)
 
     layer_tag = f" [{layer}]" if layer else ""
-    lines.append(f"### {idx}. {title}{layer_tag} \u00b7 {_SE.get(sev, '')} {_SL.get(sev, sev)} \u00b7 {status_label}")
+    status_part = f" \u00b7 {status_label}" if status_label else ""
+    lines.append(f"### {idx}. {title}{layer_tag} \u00b7 {_SE.get(sev, '')} {_SL.get(sev, sev)}{status_part}")
     lines.append("")
 
     if gap:
@@ -244,19 +270,22 @@ def _issue_section(lines, idx, issue):
             lines.append(f"- {si}")
         lines.append("")
 
-    if not comments:
-        lines.append("*\u672c\u9879\u65e0\u89d2\u8272\u8bc4\u4f30\uff0c\u4ec5\u57fa\u4e8e\u6587\u6863\u63d0\u53d6\u7ed3\u679c\u3002*")
-        lines.append("")
-    for rc in comments:
-        persp = rc.get("perspective", "")
-        impact = rc.get("impact", "")
-        comment = rc.get("comment", "")
-        ie = _IE.get(impact, "\u26aa")
-        lines.append(f"**{persp}**\uff1a{comment} \u2192 {ie}")
+    if comments:
+        for rc in comments:
+            persp = rc.get("perspective", "")
+            comment = rc.get("comment", "").strip()
+            if not comment:
+                continue
+            dim_label = _dim_short_label(persp)
+            if dim_label:
+                lines.append(f"- **{dim_label}**\uff1a{comment}")
+            else:
+                lines.append(f"- {comment}")
         lines.append("")
 
-    if extracted:
-        lines.append("<details><summary>\u76f8\u5173\u539f\u6587</summary>")
+    if extracted and len(extracted) > 15 and ("\u201c" in extracted or "\u300c" in extracted):
+        lines.append("<details>")
+        lines.append("<summary>\u76f8\u5173\u539f\u6587</summary>")
         lines.append("")
         lines.append(extracted)
         lines.append("")
@@ -325,43 +354,85 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
     lines.append(f"# \u7248\u672c\u5185\u5bb9\u6392\u5e03\u9884\u5ba1{ft}")
     lines.append("")
 
+    doc_score = data.get("doc_completeness_score")
     _health_dashboard(
         lines, pipeline_stage, ov, layer_overview, highlights,
         ver_issues + sup_issues, feat_issues, passed_features,
         p0s, p1s, warns, p2s, p3s, reminders,
+        doc_completeness_score=doc_score,
     )
 
+    pipeline_rem = data.get("pipeline_reminders", [])
+    rhythm_rem = data.get("rhythm_reminders", [])
+
+    cl_risk = [o for o in cross_layer
+               if o.get("category") in ("intent", "readiness")]
+    cl_annotate = [o for o in cross_layer
+                   if o.get("category") == "annotate"]
+
     if p0s:
-        lines.append(f"\u4ee5\u4e0b **{len(p0s)}** \u9879\u5fc5\u987b\u5728\u7248\u672c\u542f\u52a8\u524d\u89e3\u51b3\uff1a")
+        lines.append(f"> \u26a0\ufe0f \u4ee5\u4e0b **{len(p0s)}** \u9879\u5fc5\u987b\u5728\u7248\u672c\u542f\u52a8\u524d\u89e3\u51b3\uff1a")
         lines.append("")
         _p0_cards(lines, p0s)
 
-    if ver_issues or sup_issues:
-        all_ver = ver_issues + sup_issues
-        lines.append(f"## \U0001f3d7\ufe0f \u7248\u672c\u7ea7\u95ee\u9898\u8be6\u60c5\uff08{len(all_ver)} \u9879\uff09")
+    all_risk = ver_issues + sup_issues
+    risk_total = len(all_risk) + len(cl_risk)
+    if risk_total:
+        lines.append(f"## \u7248\u672c\u98ce\u9669\u4e0e\u51b3\u7b56\u7f3a\u53e3\uff08{risk_total} \u9879\uff09")
         lines.append("")
-        for idx, issue in enumerate(all_ver, 1):
+        for idx, issue in enumerate(all_risk, 1):
             _ver_issue_detail(lines, idx, issue)
+        _CL_CAT_LABEL = {
+            "intent": "\U0001f3af \u610f\u56fe\u4f20\u9012",
+            "readiness": "\u231b \u4e0b\u6e38\u5c31\u7eea\u5ea6",
+        }
+        for idx, obs in enumerate(cl_risk, len(all_risk) + 1):
+            cat_label = _CL_CAT_LABEL.get(
+                obs.get("category", ""), "\u8de8\u5c42\u89c2\u5bdf")
+            desc = obs.get("description", "")
+            suggestion = obs.get("suggestion", "")
+            lines.append(f"### {idx}. {cat_label}")
+            lines.append("")
+            if desc:
+                lines.append(f"> {desc}")
+                lines.append("")
+            if suggestion:
+                lines.append(f"\u2192 {suggestion}")
+                lines.append("")
 
     if feat_issues:
-        lines.append(f"## \U0001f4e6 Feature \u95ee\u9898\u8be6\u60c5\uff08{len(feat_issues)} \u9879\uff09")
+        lines.append(f"## Feature \u9010\u9879\u68c0\u89c6\uff08{len(feat_issues)} \u9879\uff09")
         lines.append("")
         lines.append("> \u4ee5\u4e0b\u4ec5\u5217\u51fa\u6709\u95ee\u9898\u7684 Feature\uff0c\u5df2\u901a\u8fc7\u7684\u4e0d\u5c55\u5f00\u3002")
         lines.append("")
         for idx, issue in enumerate(feat_issues, 1):
             _feat_issue_detail(lines, idx, issue)
 
-    if cross_layer:
-        lines.append(f"## \U0001f517 \u8de8 Feature \u89c2\u5bdf\uff08{len(cross_layer)} \u9879\uff09")
+    pipe_total = len(pipeline_rem) + len(cl_annotate)
+    if pipe_total:
+        lines.append(f"## \u7ba1\u7ebf\u63a8\u8fdb\u63d0\u9192\uff08{pipe_total} \u9879\uff09")
         lines.append("")
-        _cross_layer_section(lines, cross_layer)
+        lines.append("> \u4ee5\u4e0b\u4e3a\u7ba1\u7ebf\u6d41\u7a0b\u4e8b\u9879\uff0c\u4e0d\u5f71\u54cd\u4e3b\u5ba1\u7ed3\u8bba\u3002")
+        lines.append("")
+        for idx, r in enumerate(pipeline_rem, 1):
+            _render_reminder_item(lines, idx, r)
+        if pipeline_rem:
+            lines.append("")
+        if cl_annotate:
+            _cross_layer_section(lines, cl_annotate)
 
-    if reminders:
-        _reminder_section(lines, reminders)
+    if rhythm_rem:
+        lines.append(f"## \u8fd0\u8425\u8282\u594f\u63d0\u9192\uff08{len(rhythm_rem)} \u9879\uff09")
+        lines.append("")
+        lines.append("> \u4ee5\u4e0b\u4e3a\u5185\u5bb9\u8282\u594f\u4e0e\u65f6\u95f4\u7ebf\u63d0\u9192\uff0c\u4e0d\u5f71\u54cd\u4e3b\u5ba1\u7ed3\u8bba\u3002")
+        lines.append("")
+        for idx, r in enumerate(rhythm_rem, 1):
+            _render_reminder_item(lines, idx, r)
+        lines.append("")
 
     lines.append("---")
     lines.append(
-        f"*Generated by Palace Engine v0.4 \u00b7 "
+        f"*Generated by Palace Engine v0.6 \u00b7 "
         f"{datetime.now().strftime('%Y-%m-%d %H:%M')}*"
     )
     lines.append("")
@@ -370,22 +441,26 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
 
 def _health_dashboard(lines, stage, ov, overview, highlights,
                       ver_issues, feat_issues, passed_features,
-                      p0s, p1s, warns, p2s, p3s, reminders):
-    """Health dashboard — replaces old speed-scan tables."""
+                      p0s, p1s, warns, p2s, p3s, reminders,
+                      doc_completeness_score=None):
+    """Health dashboard — two tables, filtered concerns, compressed highlights."""
     sl = {"planning": "\u89c4\u5212\u9636\u6bb5", "scoping": "\u51c6\u5907\u9636\u6bb5", "dor": "DoR \u95e8\u7981"}
     stage_label = sl.get(stage, stage) if stage else ""
 
-    lines.append(f"## \U0001f4ca \u89c4\u5212\u5065\u5eb7\u5ea6")
+    lines.append(f"## \u89c4\u5212\u5065\u5eb7\u5ea6")
     lines.append("")
 
-    lines.append(f"{_VE[ov]} **{_VL.get(ov, ov)}** \u2014 {_NEXT[ov]}")
-    if stage_label:
-        lines.append(f"\uff08{stage_label}\uff09")
+    stage_suffix = f" \u00b7 {stage_label}" if stage_label else ""
+    lines.append(f"{_VE[ov]} **{_VL.get(ov, ov)}** \u2014 {_NEXT[ov]}{stage_suffix}")
     lines.append("")
 
-    top_issues = p0s + p1s + warns + p2s
+    top_issues = []
+    for issue in p0s + p1s + warns:
+        impacts = [rc.get("impact", "pass") for rc in issue.get("role_comments", [])]
+        if not impacts or any(i != "pass" for i in impacts):
+            top_issues.append(issue)
     if top_issues:
-        lines.append("**\U0001f511 \u6700\u9700\u5173\u6ce8**")
+        lines.append("**\u6700\u9700\u5173\u6ce8**")
         lines.append("")
         for idx, issue in enumerate(top_issues[:5], 1):
             sev = issue.get("severity", "P2")
@@ -398,62 +473,75 @@ def _health_dashboard(lines, stage, ov, overview, highlights,
         lines.append("")
 
     if highlights:
-        lines.append("**\u2705 \u4eae\u70b9**")
-        lines.append("")
         seen = set()
+        aspects = []
         for h in highlights:
             aspect = h.get("aspect", "")
-            if aspect in seen:
-                continue
-            seen.add(aspect)
-            detail = h.get("detail", "")
-            if detail:
-                lines.append(f"- {aspect}\uff1a{detail}")
-            else:
-                lines.append(f"- {aspect}")
-        lines.append("")
+            if aspect and aspect not in seen and len(aspects) < 3:
+                seen.add(aspect)
+                aspects.append(aspect)
+        if aspects:
+            joined = "\u3001".join(aspects)
+            lines.append(f"**\u4eae\u70b9**\uff1a{joined}")
+            lines.append("")
+
+    lines.append("---")
+    lines.append("")
 
     total_feat = len(feat_issues) + len(passed_features)
     what_ok = len(passed_features)
-    what_problem = len(feat_issues)
     feat_missing = sum(
         1 for i in feat_issues
         if i.get("extraction_status") == "missing"
     )
-    feat_incomplete = what_problem - feat_missing
+    feat_incomplete = len(feat_issues) - feat_missing
 
     total_issues = len(ver_issues) + len(feat_issues)
-    parts = []
-    parts.append(
-        f"\u95ee\u9898 {total_issues}\u9879"
+    issue_cell = (
+        f"{total_issues}\u9879"
         f"\uff08{_SE['P0']}{len(p0s)} {_SE['P1']}{len(p1s)}"
         f" {_SE['WARN']}{len(warns)}"
         f" {_SE['P2']}{len(p2s)} {_SE['P3']}{len(p3s)}\uff09"
     )
-    parts.append(
-        f"Feature {total_feat}\u4e2a"
+    feat_cell = (
+        f"{total_feat}\u4e2a"
         f"\uff08\u2705{what_ok} \U0001f7e1{feat_incomplete} \u274c{feat_missing}\uff09"
     )
-    if reminders:
-        parts.append(f"\u8fd0\u8425\u63d0\u9192 {len(reminders)}\u9879")
+    reminder_cell = f"{len(reminders)}\u9879" if reminders else "0\u9879"
 
-    sep = "  \u00b7  "
-    lines.append(f"**\U0001f4cb \u6982\u89c8** \u00a0\u00a0 {sep.join(parts)}")
+    if doc_completeness_score is not None:
+        lines.append("| \u95ee\u9898 | Feature | \u5b8c\u5907\u5ea6 | \u63d0\u9192 |")
+        lines.append("|------|---------|--------|------|")
+        lines.append(f"| {issue_cell} | {feat_cell} | {doc_completeness_score}/10 | {reminder_cell} |")
+    else:
+        lines.append("| \u95ee\u9898 | Feature | \u63d0\u9192 |")
+        lines.append("|------|---------|------|")
+        lines.append(f"| {issue_cell} | {feat_cell} | {reminder_cell} |")
+    lines.append("")
+    lines.append(
+        "*\u26a1\u963b\u65ad \U0001f6a9\u5fc5\u6539 \u203c\ufe0f\u9884\u8b66"
+        " \U0001f536\u5efa\u8bae \U0001f4a1\u4fe1\u606f"
+        " \u00b7 \u2705\u901a\u8fc7 \U0001f7e1\u4e0d\u5b8c\u6574 \u274c\u7f3a\u5931*"
+    )
     lines.append("")
 
     if overview:
-        dim_parts = []
+        names = [lo.get("layer", "") for lo in overview]
+        icons = []
         for lo in overview:
-            name = lo.get("layer", "")
             comp = lo.get("completeness", "")
             icon = "\u2705" if comp == "complete" else "\u26a0\ufe0f"
-            dim_parts.append(f"{icon}{name}")
-        lines.append(f"**\u7ef4\u5ea6** \u00a0\u00a0 {sep.join(dim_parts)}")
+            icons.append(icon)
+        lines.append("| " + " | ".join(names) + " |")
+        lines.append("|" + "|".join(" ------ " for _ in names) + "|")
+        lines.append("| " + " | ".join(icons) + " |")
+        lines.append("")
+        lines.append("*\u2705\u8fbe\u6807 \u26a0\ufe0f\u6709\u98ce\u9669*")
         lines.append("")
 
 
 def _ver_issue_detail(lines, idx, issue):
-    """Version-level issue detail with improved long-text formatting."""
+    """Version-level issue detail — merge all comments into bullet points."""
     sev = issue.get("severity", "P2")
     title = issue.get("title", "")
     gap = issue.get("gap_description", "")
@@ -466,19 +554,19 @@ def _ver_issue_detail(lines, idx, issue):
     if gap:
         lines.append(f"> {gap}")
         lines.append("")
-    for rc in comments:
-        persp = rc.get("perspective", "")
-        comment = rc.get("comment", "")
-        formatted = _format_long_comment(comment)
-        lines.append(f"- **{persp}**\uff1a{formatted}")
-        lines.append("")
-    if not comments:
+    all_points = _collect_comment_points(comments)
+    if not all_points:
         lines.append("*\u4ec5\u57fa\u4e8e\u6587\u6863\u63d0\u53d6\u7ed3\u679c\u3002*")
-        lines.append("")
+    elif len(all_points) == 1 and len(all_points[0]) < 80:
+        lines.append(all_points[0])
+    else:
+        for pt in all_points:
+            lines.append(f"- {pt}")
+    lines.append("")
 
 
 def _feat_issue_detail(lines, idx, issue):
-    """Feature issue detail — only shows actual problems, not passed items."""
+    """Feature issue detail — compact format with dimension labels."""
     sev = issue.get("severity", "P2")
     title = issue.get("title", "")
     status = issue.get("extraction_status", "")
@@ -490,13 +578,21 @@ def _feat_issue_detail(lines, idx, issue):
         f"**{idx}. {title}** {icon} \u00b7 {_SE.get(sev, '')} {_SL.get(sev, sev)}"
     )
     if gap:
-        lines.append(f"  \u2014 {gap}")
+        lines.append("")
+        lines.append(f"> {gap}")
+    lines.append("")
     for rc in comments:
         persp = rc.get("perspective", "")
-        comment = rc.get("comment", "")
-        formatted = _format_long_comment(comment)
-        lines.append(f"  - **{persp}**\uff1a{formatted}")
-    lines.append("")
+        comment = rc.get("comment", "").strip()
+        if not comment:
+            continue
+        dim_label = _dim_short_label(persp)
+        if dim_label:
+            lines.append(f"- **{dim_label}**\uff1a{comment}")
+        else:
+            lines.append(f"- {comment}")
+    if comments:
+        lines.append("")
 
 
 def _format_long_comment(text: str) -> str:
@@ -509,9 +605,78 @@ def _format_long_comment(text: str) -> str:
     return text
 
 
+_DIM_LABELS = {
+    "WHAT \u5185\u5bb9\u65b9\u5411": None,
+    "WHAT\u2192HOW \u53ef\u8bbe\u8ba1\u6027": "\u53ef\u8bbe\u8ba1\u6027",
+    "WHAT\u2192BUILD \u53ef\u5b9e\u73b0\u6027": "\u53ef\u5b9e\u73b0\u6027",
+    "\u7248\u672c Scope": "Scope",
+    "\u5185\u5bb9\u65b9\u5411": None,
+    "\u8d44\u6e90\u4e0e\u6392\u671f": "\u8d44\u6e90\u4e0e\u6392\u671f",
+}
+
+
+def _dim_short_label(perspective: str) -> str | None:
+    """Return short dimension label, or None for the primary/first perspective."""
+    return _DIM_LABELS.get(perspective, perspective)
+
+
+def _collect_comment_points(comments: list[dict]) -> list[str]:
+    """Merge role_comments into deduplicated discussion points (no role labels)."""
+    if not comments:
+        return []
+    raw = []
+    for rc in comments:
+        text = rc.get("comment", "").strip()
+        if not text:
+            continue
+        for sent in _split_sentences(text):
+            s = sent.strip()
+            if s:
+                raw.append(s)
+    seen: list[str] = []
+    for pt in raw:
+        if not any(_text_overlap(pt, existing) for existing in seen):
+            seen.append(pt)
+    return seen
+
+
+def _split_sentences(text: str) -> list[str]:
+    """Split text on sentence-ending punctuation, keeping each as a point."""
+    import re
+    parts = re.split(r'(?<=[。；！])\s*', text)
+    return [p for p in parts if p.strip()]
+
+
+def _text_overlap(a: str, b: str, threshold: float = 0.6) -> bool:
+    """Return True if two short texts share >threshold of their characters."""
+    if not a or not b:
+        return False
+    short, long_ = (a, b) if len(a) <= len(b) else (b, a)
+    common = sum(1 for c in short if c in long_)
+    return common / len(short) > threshold
+
+
+def _render_reminder_item(lines, idx, r):
+    """Render a single reminder, marking items whose role assessments flag concern/block."""
+    title = r.get("title", "")
+    gap = r.get("gap_description", "")
+    cmt = ""
+    if r.get("role_comments"):
+        cmt = r["role_comments"][0].get("comment", "")
+    detail = gap or cmt
+    is_key = any(
+        rc.get("impact") not in ("pass", "", None)
+        for rc in r.get("role_comments", [])
+    )
+    marker = " \u26a0\ufe0f" if is_key else ""
+    lines.append(f"{idx}. **{title}**{marker}")
+    if detail:
+        lines.append(f"   {detail}")
+
+
 def _reminder_section(lines, reminders):
     """Render operational awareness items in a dedicated section."""
-    lines.append(f"## \U0001f4ac \u7248\u672c\u8fd0\u8425\u63d0\u9192\uff08{len(reminders)} \u9879\uff09")
+    lines.append(f"## \u8fd0\u8425\u63d0\u9192\uff08{len(reminders)} \u9879\uff09")
     lines.append("")
     lines.append("> \u4ee5\u4e0b\u4e3a\u8fd0\u8425 awareness \u63d0\u9192\uff0c\u4e0d\u5f71\u54cd\u4e3b\u5ba1\u7ed3\u8bba\u3002")
     lines.append("")

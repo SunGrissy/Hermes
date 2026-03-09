@@ -167,6 +167,12 @@ class MockProvider(LLMProvider):
             return "tournament"
         if "\u7248\u672c\u5185\u5bb9\u6982\u8981" in prompt or "\u7248\u672c\u89c4\u5212" in prompt:
             return "version"
+        if "\u5f00\u706b" in prompt or "\u6311\u6218" in prompt:
+            return "ops_event"
+        if "\u968f\u5fc3\u8d2d" in prompt or "\u793c\u5305" in prompt or "\u795e\u541b" in prompt:
+            return "shop_event"
+        if "\u56db\u8c61" in prompt or "\u89d2\u529b" in prompt:
+            return "contest_event"
         return "default"
 
 
@@ -203,6 +209,9 @@ def _build_extraction_presets() -> dict:
     return {
         "tournament": _tournament_extraction(),
         "version": _version_extraction(),
+        "ops_event": _ops_event_extraction(),
+        "shop_event": _shop_event_extraction(),
+        "contest_event": _contest_event_extraction(),
         "default": {"layer_overview": [], "checklist": [], "cross_layer_observations": []},
     }
 
@@ -292,17 +301,22 @@ def _tournament_extraction() -> dict:
 # ============================================================
 
 def _build_assessment_presets() -> dict:
-    return {
+    presets = {
         "pld:tournament": _tournament_pld(),
         "ple:tournament": _tournament_ple(),
         "plt:tournament": _tournament_plt(),
         "pld:version": _version_pld(),
         "pmo:version": _version_pmo(),
-        "pld:default": {"role_id": "pld", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
-        "ple:default": {"role_id": "ple", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
-        "plt:default": {"role_id": "plt", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
-        "pmo:default": {"role_id": "pmo", "verdict": "pass", "perspective_summary": "", "issue_assessments": []},
     }
+    for topic in ("ops_event", "shop_event", "contest_event"):
+        presets[f"pld:{topic}"] = _generic_feature_pld(topic)
+        presets[f"ple:{topic}"] = _generic_feature_ple(topic)
+        presets[f"plt:{topic}"] = _generic_feature_plt(topic)
+    for role in ("pld", "ple", "plt", "pmo"):
+        presets.setdefault(f"{role}:default",
+                          {"role_id": role, "verdict": "pass",
+                           "perspective_summary": "", "issue_assessments": []})
+    return presets
 
 
 def _tournament_pld() -> dict:
@@ -349,7 +363,7 @@ def _tournament_ple() -> dict:
             {"item_id": "what-decision-list", "impact": "concern",
              "comment": "\u5206\u7ec4\u65b9\u6848\u3001\u6bb5\u4f4d\u5916\u663e\u3001\u6392\u884c\u699c\u5956\u52b1\u8f6e\u6362\u89c4\u5219\u672a\u51b3\u3002\u8fd9\u56db\u9879\u672a\u95ed\u5408\uff0cUX\u65e0\u6cd5\u4ea7\u51fa\u5b8c\u6574\u4ea4\u4e92\u7a3f\u3002"},
             {"item_id": "how-interaction", "impact": "concern",
-             "comment": "\u6587\u6863\u542bUE\u7ebf\u6846\u56fe\u548c\u4ea4\u4e92\u6d41\u7a0b\u7f16\u6392\uff0c\u672c\u5e94\u7531\u4f53\u9a8c\u7ec4\u5728HOW\u5c42\u72ec\u7acb\u4ea7\u51fa\u3002\u5efa\u8bae\u6807\u6ce8\u4e3a\u53c2\u8003\u793a\u610f\uff0c\u907f\u514d\u9501\u6b7b\u4ea4\u4e92\u65b9\u6848\u3002"},
+             "comment": "\u6587\u6863\u542bUE\u7ebf\u6846\u56fe\u548c\u4ea4\u4e92\u89e6\u70b9\u7f16\u6392\uff0c\u53ef\u4f5c\u4e3a\u4f53\u9a8c\u8282\u594f\u53c2\u8003\u3002\u5efa\u8bae\u660e\u786e\u6807\u6ce8\u2018\u6982\u5ff5\u53c2\u8003\uff0c\u975e\u4ea4\u4e92\u7ea6\u675f\u2019\uff0c\u4ee5\u4fbf\u4f53\u9a8c\u7ec4\u5728HOW\u5c42\u57fa\u4e8e\u9884\u671f\u4f53\u9a8c\u91cd\u65b0\u8bbe\u8ba1\u4ea4\u4e92\u65b9\u6848\u3002"},
             {"item_id": "how-info-arch", "impact": "concern",
              "comment": "\u2018\u79ef\u5206\u2019\u6982\u5ff5\u6df7\u6dc6\u4f1a\u76f4\u63a5\u5f71\u54cdUI\u4fe1\u606f\u5c42\u7ea7\u548c\u7528\u6237\u7406\u89e3\u6210\u672c\u3002\u5efa\u8bae\u5728WHAT\u5c42\u660e\u786e\u547d\u540d\u533a\u5206\uff0c\u4f8b\u5982\u2018\u8d5b\u4e8b\u79ef\u5206\u2019vs\u2018\u6bb5\u4f4d\u661f\u6570\u2019\uff0c\u4ee5\u4fbf\u4f53\u9a8c\u7ec4\u8bbe\u8ba1\u6e05\u6670\u7684\u4fe1\u606f\u67b6\u6784\u3002"},
             {"item_id": "what-ux-input", "impact": "concern",
@@ -378,7 +392,7 @@ def _tournament_plt() -> dict:
             {"item_id": "what-decision-list", "impact": "concern",
              "comment": "\u8fdb\u5ea6\u5956\u7ec8\u70b9\u3001\u5206\u7ec4\u89c4\u5219\u3001\u6bb5\u4f4d\u5916\u663e\u65b9\u6848\u672a\u5b9a\uff0c\u4e09\u79cd\u65b9\u6848\u7684UI\u7ed3\u6784\u548c\u524d\u7aef\u5de5\u4f5c\u91cf\u5dee\u5f02\u5de8\u5927\uff0c\u65e0\u6cd5\u51fa\u53ef\u9760\u6392\u671f\u3002"},
             {"item_id": "build-sys-arch", "impact": "concern",
-             "comment": "\u8be5\u529f\u80fd\u6d89\u53ca\u65b0\u7684\u5206\u7ec4\u5339\u914d\u548c\u6bb5\u4f4d\u7cfb\u7edf\uff0c\u4e0d\u662f\u7eaf\u5feb\u8f68\u914d\u7f6e\u6d3b\u52a8\u3002\u5efa\u8bae\u6807\u6ce8\u4e3a\u6162\u8f68\uff0c\u786e\u4fdd\u7cfb\u7edf\u7b56\u5212\u5728BUILD\u9636\u6bb5\u4ecb\u5165\u3002"},
+             "comment": "\u5206\u7ec4\u5339\u914d(30s\u7a97\u53e3+\u673a\u5668\u4eba\u586b\u5145)\u548c\u6bb5\u4f4d\u5347\u964d\u9700\u65b0\u540e\u7aef\u6846\u67b6\uff0c\u73b0\u6709\u6d3b\u52a8\u914d\u7f6e\u7cfb\u7edf\u65e0\u6cd5\u652f\u6491\u3002\u5efa\u8baeWHAT\u5c42\u5c06\u89c4\u683c\u53c2\u6570\u6539\u4e3a\u610f\u56fe\u63cf\u8ff0\uff0c\u7531\u7cfb\u7edf\u7b56\u5212\u5728BUILD\u5c42\u8f93\u51fa\u6280\u672f\u65b9\u6848\u540e\u8bc4\u4f30\u6392\u671f\u3002"},
         ],
         "supplementary_findings": [
             {"item_id": "plt-perf", "title": "\u6027\u80fd\u98ce\u9669\u8bc4\u4f30", "layer": "BUILD",
@@ -530,4 +544,219 @@ def _version_pmo() -> dict:
              "impact": "concern",
              "suggested_action": "\u786e\u8ba4\u4e94\u4e00\u7248\u672c\u6162\u8f68\u89c4\u5212\u72b6\u6001"},
         ],
+    }
+
+
+# ============================================================
+# Feature extraction presets — ops / shop / contest
+# ============================================================
+
+def _ops_event_extraction() -> dict:
+    return {
+        "layer_overview": [
+            {"layer": "WHAT", "ratio": "~80%", "completeness": "incomplete",
+             "key_gaps": "\u7f3a\u4f53\u9a8c\u610f\u56fe\u58f0\u660e\u3001\u6210\u529f\u6307\u6807\u4e0d\u5b8c\u6574\u3001\u5956\u52b1\u68af\u5ea6\u672a\u4e0e\u6570\u503c\u534f\u8c03"},
+            {"layer": "HOW", "ratio": "~15%", "completeness": "fragment",
+             "key_gaps": "\u542bUI\u6d41\u7a0b\u793a\u610f\u56fe\uff0c\u5c5e\u53c2\u8003\u7ea7"},
+            {"layer": "BUILD", "ratio": "~5%", "completeness": "absent",
+             "key_gaps": ""},
+        ],
+        "checklist": [
+            {"item_id": "what-intent", "title": "\u4f53\u9a8c\u610f\u56fe\u58f0\u660e", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300c\u6d3b\u52a8\u6982\u8ff0\u300d\u7ae0\u8282\uff1a\u201cPVE\u6311\u6218\u73a9\u6cd5\uff0c\u73a9\u5bb6\u901a\u8fc7\u9010\u5173\u6311\u6218\u83b7\u53d6\u79ef\u5206\u548c\u5956\u52b1\uff0c\u6392\u884c\u699c\u6fc0\u53d1\u7ade\u4e89\u3002\u201d\u2014\u2014\u8fd9\u6bb5\u63cf\u8ff0\u7684\u662f\u73a9\u6cd5\u673a\u5236\uff0c\u672a\u5b9a\u4e49\u73a9\u5bb6\u5e94\u4ea7\u751f\u7684\u60c5\u611f\u4f53\u9a8c\u3002",
+             "gap_description": "\u6709\u73a9\u6cd5\u63cf\u8ff0\u4f46\u7f3a\u4f53\u9a8c\u610f\u56fe\u3002'PVE\u6311\u6218+\u6392\u884c\u699c'\u662f\u673a\u5236\u4e0d\u662f\u4f53\u9a8c",
+             "acceptance_criteria": "\u7528\u4e00\u53e5\u8bdd\u5b9a\u4e49\u73a9\u5bb6\u5e94\u4ea7\u751f\u7684\u6838\u5fc3\u60c5\u7eea"},
+            {"item_id": "what-content-structure", "title": "\u5185\u5bb9\u7ed3\u6784", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u5173\u5361\u8bbe\u8ba1\u300d\u7ae0\u8282\uff1a\u201c\u5171\u8bbe\u7f6e15\u5173\uff0c\u96be\u5ea6\u968f\u5173\u5361\u9012\u589e\u3002\u524d5\u5173\u4e3a\u65b0\u624b\u5f15\u5bfc\uff0c6-10\u5173\u4e3a\u6838\u5fc3\u6311\u6218\uff0c11-15\u5173\u4e3a\u7cbe\u82f1\u5173\u5361\u3002\u6bcf\u5173\u8bbe\u7f6e3\u661f\u8bc4\u4ef7\u4f53\u7cfb\uff0c\u5956\u52b1\u6309\u661f\u7ea7\u68af\u5ea6\u53d1\u653e\u3002\u201d",
+             "gap_description": "",
+             "acceptance_criteria": ""},
+            {"item_id": "what-success-metrics", "title": "\u6210\u529f\u6307\u6807", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300c\u76ee\u6807\u300d\u7ae0\u8282\uff1a\u201c\u6d3b\u52a8\u53c2\u4e0e\u7387\u76ee\u6807>60%\uff0c\u6d3b\u52a8\u671f\u95f4\u6536\u5165\u8d21\u732e\u76ee\u6807\u53e6\u884c\u786e\u8ba4\u3002\u201d\u2014\u2014\u53c2\u4e0e\u7387\u76ee\u6807\u660e\u786e\uff0c\u4f46\u7f3a\u5c11\u7528\u6237\u6ee1\u610f\u5ea6\u3001\u590d\u8d2d\u7387\u7b49\u5065\u5eb7\u5ea6\u6307\u6807\u3002",
+             "gap_description": "\u53c2\u4e0e\u7387\u76ee\u6807\u6709\uff0c\u4f46\u7f3a\u5065\u5eb7\u5ea6\u6307\u6807\u548c\u6536\u5165\u76ee\u6807",
+             "acceptance_criteria": "\u8865\u5145\u5065\u5eb7\u5ea6\u6307\u6807\u548c\u6536\u5165\u8d21\u732e\u9884\u671f"},
+            {"item_id": "what-decision-list", "title": "\u51b3\u7b56\u6e05\u5355", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u6d3b\u52a8\u53c2\u6570\u300d\u7ae0\u8282\uff1a\u201c\u5173\u5361\u603b\u6570\uff1a15\u5173\uff1b\u96be\u5ea6\u7cfb\u6570\uff1a1.0/1.3/1.6\u4e09\u6863\uff1b\u6d3b\u52a8\u65f6\u957f\uff1a7\u5929\uff1b\u6bcf\u65e5\u6311\u6218\u6b21\u6570\u4e0a\u9650\uff1a5\u6b21\u3002\u201d",
+             "gap_description": "",
+             "acceptance_criteria": ""},
+            {"item_id": "what-econ-model", "title": "\u6570\u503c/\u7ecf\u6d4e\u6a21\u578b\u534f\u8c03", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300c\u5956\u52b1\u8bbe\u8ba1\u300d\u7ae0\u8282\uff1a\u201c\u8fc7\u5173\u5956\u52b1\uff1a\u94bb\u77f3\u00d7100/\u91d1\u5e01\u00d750000/\u4f53\u9a8c\u5361\u00d71\uff08\u5177\u4f53\u6570\u503c\u5f85\u6570\u503c\u7b56\u5212\u786e\u8ba4\uff09\uff1b\u6392\u884c\u699c\u5956\u52b1\uff1a\u524d10\u540d\u53d1\u653e\u6392\u884c\u5956\u52b1\uff08\u5f85\u5b9a\uff09\u3002\u201d",
+             "gap_description": "\u5956\u52b1\u68af\u5ea6\u672a\u4e0e\u6570\u503c\u7b56\u5212\u534f\u8c03\uff0c\u65e0\u9884\u7b97\u8303\u56f4",
+             "acceptance_criteria": "\u5956\u52b1\u68af\u5ea6\u5df2\u4e0e\u6570\u503c\u7b56\u5212\u534f\u8c03\u6216\u660e\u786e\u6807\u6ce8\u8bc4\u5ba1\u72b6\u6001"},
+            {"item_id": "doc-pipeline", "title": "\u7ba1\u7ebf\u6743\u91cd\u6807\u6ce8", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u6587\u6863\u5f00\u5934\u6807\u6ce8\uff1a\u201c\u7ba1\u7ebf\u6743\u91cd\uff1a\u5feb\u8f68\uff0c\u9884\u8ba1\u5f00\u53d1\u5468\u671f2\u5468\u3002\u201d",
+             "gap_description": "",
+             "acceptance_criteria": ""},
+            {"item_id": "how-interaction", "title": "\u4ea4\u4e92\u6d41\u7a0b\u793a\u610f", "layer": "HOW", "status": "fragment",
+             "extracted_text": "\u6587\u6863\u5185\u542b\u4e00\u5f20UI\u6d41\u7a0b\u793a\u610f\u56fe\uff08\u4e3b\u754c\u9762\u2192\u5173\u5361\u9009\u62e9\u2192\u6218\u6597\u2192\u7ed3\u7b97\uff09\uff0c\u672a\u6807\u6ce8\u201c\u4ec5\u4f9b\u53c2\u8003\u201d\u6216\u201c\u4ea4\u4e92\u9700\u6c42\u201d\u3002",
+             "gap_description": "\u5c5e\u53c2\u8003\u7ea7\u5185\u5bb9\uff0c\u5efa\u8bae\u6807\u6ce8",
+             "acceptance_criteria": "\u660e\u786e\u6807\u6ce8\u4e3a\u53c2\u8003\u793a\u610f"},
+        ],
+        "cross_layer_observations": [
+            {"category": "readiness",
+             "description": "\u6587\u6863\u6807\u6ce8\u5956\u52b1\u6570\u503c'\u5f85\u6570\u503c\u7b56\u5212\u786e\u8ba4'\uff0c\u672a\u7ed9\u51fa\u9884\u7b97\u8303\u56f4\u6216\u534f\u8c03\u65f6\u95f4\u7ebf\u3002HOW\u5c42\u65e0\u6cd5\u786e\u5b9a\u5956\u52b1\u5c55\u793a\u7684\u4fe1\u606f\u5c42\u7ea7\u548c\u60c5\u7eea\u8282\u594f\u3002",
+             "suggestion": "\u660e\u786e\u6570\u503c\u534f\u8c03\u65f6\u95f4\u7ebf\uff0c\u6216\u6807\u6ce8\u4e3a'BUILD\u9636\u6bb5\u7531\u6570\u503c\u7b56\u5212\u786e\u5b9a'\uff0c\u4ee5\u4fbfHOW\u5c42\u542f\u52a8\u6982\u5ff5\u8bbe\u8ba1"},
+            {"category": "annotate",
+             "description": "UI\u6d41\u7a0b\u793a\u610f\u56fe\u672a\u6807\u6ce8\u4e3a'\u53c2\u8003'\u8fd8\u662f'\u9700\u6c42'\u3002",
+             "suggestion": "\u660e\u786e\u6807\u6ce8\u4e3a'\u6982\u5ff5\u53c2\u8003\uff0c\u975e\u4ea4\u4e92\u7ea6\u675f'"},
+        ],
+    }
+
+
+def _shop_event_extraction() -> dict:
+    return {
+        "layer_overview": [
+            {"layer": "WHAT", "ratio": "~90%", "completeness": "present",
+             "key_gaps": "\u6210\u529f\u6307\u6807\u53ef\u518d\u7ec6\u5316"},
+        ],
+        "checklist": [
+            {"item_id": "what-intent", "title": "\u4f53\u9a8c\u610f\u56fe\u58f0\u660e", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u8bbe\u8ba1\u76ee\u6807\u300d\u7ae0\u8282\uff1a\u201c\u8ba9\u73a9\u5bb6\u6709\u81ea\u4e3b\u9009\u62e9\u611f\u7684\u793c\u5305\u4f53\u9a8c\uff0c\u6838\u5fc3\u60c5\u7eea\u662f\u2018\u7cbe\u660e\u6d88\u8d39\u7684\u6ee1\u8db3\u611f\u2019\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "what-content-structure", "title": "\u5185\u5bb9\u7ed3\u6784", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u5546\u54c1\u77e9\u9635\u300d\u7ae0\u8282\uff1a\u201c\u5171\u8bbe\u7f6e3\u6863\u793c\u5305\uff1a\u57fa\u7840\u6863\uff0868\u5143\uff09\u3001\u8fdb\u9636\u6863\uff08168\u5143\uff09\u3001\u5c0a\u4eab\u6863\uff08328\u5143\uff09\u3002\u6bcf\u6863\u542b\u56fa\u5b9a\u5956\u52b1+\u81ea\u9009\u5956\u52b1\uff0c\u81ea\u9009\u5956\u52b1\u4ece\u5956\u6c60\u4e2d\u62bd\u53d6\u3002\u201d\u300c\u4e0a\u67b6\u8282\u594f\u300d\u7ae0\u8282\uff1a\u201c\u7b2c1\u5468\u4e0a\u67b6\u57fa\u7840\u6863\uff0c\u7b2c2\u5468\u89e3\u9501\u8fdb\u9636\u6863\uff0c\u7b2c3\u5468\u89e3\u9501\u5c0a\u4eab\u6863\uff0c\u6bcf\u6863\u9650\u65f6\u6298\u6263\u7a97\u53e348\u5c0f\u65f6\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "what-success-metrics", "title": "\u6210\u529f\u6307\u6807", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300cKPI\u300d\u7ae0\u8282\uff1a\u201c\u6d3b\u52a8\u671f\u95f4\u793c\u5305\u6536\u5165\u76ee\u6807\uff1a50\u4e07\u5143\uff0c\u4ed8\u8d39\u7387\u76ee\u6807>15%\u3002\u201d\u2014\u2014\u6536\u5165\u548c\u4ed8\u8d39\u7387\u76ee\u6807\u660e\u786e\uff0c\u4f46\u7f3a\u5c11\u7528\u6237\u6ee1\u610f\u5ea6\u3001\u590d\u8d2d\u7387\u7b49\u5065\u5eb7\u5ea6\u7ef4\u5ea6\u6307\u6807\u3002",
+             "gap_description": "\u53ea\u6709\u6536\u5165\u6307\u6807\uff0c\u7f3a\u7528\u6237\u6ee1\u610f\u5ea6\u548c\u590d\u8d2d\u7387\u6307\u6807",
+             "acceptance_criteria": "\u8865\u5145\u7528\u6237\u4f53\u9a8c\u7ef4\u5ea6\u6307\u6807"},
+            {"item_id": "what-decision-list", "title": "\u51b3\u7b56\u6e05\u5355", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u5b9a\u4ef7\u7b56\u7565\u300d\u7ae0\u8282\uff1a\u201c\u57fa\u7840\u6863\u5b9a\u4ef768\u5143\uff0c\u53c2\u8003\u7ade\u54c1X\u540c\u6863\u4f4d\u5546\u54c1\u5747\u4ef7\u3002SKU\u77e9\u9635\u786e\u8ba4\u4e3a3\u6863\u00d73\u5468\u671f\u3002\u6298\u6263\u7b56\u7565\uff1a\u9996\u8d2d9\u6298\uff0c\u590d\u8d2d\u65e0\u6298\u6263\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "what-econ-model", "title": "\u6570\u503c/\u7ecf\u6d4e\u6a21\u578b\u534f\u8c03", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u6570\u503c\u534f\u8c03\u300d\u7ae0\u8282\uff1a\u201c\u5df2\u4e0e\u6570\u503c\u7b56\u5212\u786e\u8ba4\u5b9a\u4ef7\u533a\u95f4\uff0868-328\u5143\uff09\u548c\u6298\u6263\u4e0a\u9650\uff089\u6298\uff09\uff0c\u5956\u6c60\u4ef7\u503c\u6bd4\u63a7\u5236\u57281.2-1.5\u500d\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "doc-pipeline", "title": "\u7ba1\u7ebf\u6743\u91cd\u6807\u6ce8", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u6587\u6863\u5f00\u5934\u6807\u6ce8\uff1a\u201c\u7ba1\u7ebf\u6743\u91cd\uff1a\u5feb\u8f68\uff0c\u8fd0\u8425\u6d3b\u52a8\uff0c\u9884\u8ba1\u5f00\u53d1\u5468\u671f1.5\u5468\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+        ],
+        "cross_layer_observations": [],
+    }
+
+
+def _contest_event_extraction() -> dict:
+    return {
+        "layer_overview": [
+            {"layer": "WHAT", "ratio": "~70%", "completeness": "incomplete",
+             "key_gaps": "\u7f3a\u4f53\u9a8c\u610f\u56fe\u58f0\u660e\u3001\u5206\u5c42\u4f53\u9a8c\u76ee\u6807\u4e0d\u5177\u4f53"},
+            {"layer": "HOW", "ratio": "~20%", "completeness": "fragment",
+             "key_gaps": "\u542b\u5bf9\u5c40\u6d41\u7a0b\u7ebf\u6846\uff0c\u5c5e\u53c2\u8003\u7ea7"},
+            {"layer": "BUILD", "ratio": "~10%", "completeness": "fragment",
+             "key_gaps": "\u5339\u914d\u7b97\u6cd5\u53c2\u6570\u5c5eBUILD\u5c42"},
+        ],
+        "checklist": [
+            {"item_id": "what-intent", "title": "\u4f53\u9a8c\u610f\u56fe\u58f0\u660e", "layer": "WHAT", "status": "missing",
+             "extracted_text": "\u300c\u6d3b\u52a8\u6982\u8ff0\u300d\u7ae0\u8282\uff1a\u201c\u56db\u8c61\u9635\u8425\u5bf9\u6297\uff0c\u73a9\u5bb6\u9009\u62e9\u9635\u8425\u540e\u901a\u8fc7PVP\u5bf9\u6218\u79ef\u7d2f\u9635\u8425\u8d21\u732e\uff0c\u4e89\u593a\u9635\u8425\u6392\u884c\u548c\u4e2a\u4eba\u6392\u884c\u5956\u52b1\u3002\u201d\u2014\u2014\u8fd9\u6bb5\u63cf\u8ff0\u7684\u662f\u5bf9\u6218\u673a\u5236\uff0c\u672a\u5b9a\u4e49\u73a9\u5bb6\u5e94\u4ea7\u751f\u7684\u60c5\u611f\u4f53\u9a8c\u3002",
+             "gap_description": "\u7f3a\u5c11\u4f53\u9a8c\u610f\u56fe\u58f0\u660e\u3002'\u56db\u8c61\u5bf9\u6218'\u662f\u673a\u5236\u4e0d\u662f\u4f53\u9a8c",
+             "acceptance_criteria": "\u7528\u4e00\u53e5\u8bdd\u5b9a\u4e49\u73a9\u5bb6\u5e94\u4ea7\u751f\u7684\u6838\u5fc3\u60c5\u7eea"},
+            {"item_id": "what-layered-goals", "title": "\u5206\u5c42\u4f53\u9a8c\u76ee\u6807", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300c\u5339\u914d\u89c4\u5219\u300d\u7ae0\u8282\uff1a\u201c\u4f4e\u6d88\u8017\u73a9\u5bb6\uff1a\u540c\u9635\u8425\u5185\u5339\u914d\uff0c\u964d\u4f4e\u5bf9\u6218\u538b\u529b\uff1b\u4e2d\u6d88\u8017\u73a9\u5bb6\uff1a\u8de8\u9635\u8425\u5339\u914d\uff0c\u4fdd\u8bc1\u5bf9\u6218\u8d28\u91cf\uff1b\u9ad8\u6d88\u8017\u73a9\u5bb6\uff1a\u5168\u670d\u5339\u914d\uff0c\u8ffd\u6c42\u6781\u81f4\u7ade\u4e89\u3002\u201d\u2014\u2014\u6709\u5206\u5c42\u5339\u914d\u89c4\u5219\uff0c\u4f46\u672a\u5b9a\u4e49\u5404\u5c42\u73a9\u5bb6\u5e94\u4ea7\u751f\u7684\u60c5\u7eea\u76ee\u6807\u3002",
+             "gap_description": "\u6709\u5206\u5c42\u5339\u914d\u89c4\u5219\u4f46\u7f3a\u5404\u5c42\u60c5\u7eea\u76ee\u6807",
+             "acceptance_criteria": "\u5404\u5c42\u73a9\u5bb6\u6709\u660e\u786e\u7684\u60c5\u7eea\u76ee\u6807\u63cf\u8ff0"},
+            {"item_id": "what-content-structure", "title": "\u5185\u5bb9\u7ed3\u6784", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u8d5b\u5236\u8bbe\u8ba1\u300d\u7ae0\u8282\uff1a\u201c\u56db\u5927\u9635\u8425\uff1a\u9752\u9f99/\u767d\u864e/\u6731\u96c0/\u7384\u6b66\uff0c\u73a9\u5bb6\u968f\u673a\u5206\u914d\u9635\u8425\uff0c\u6d3b\u52a8\u671f\u95f4\u4e0d\u53ef\u66f4\u6362\u3002\u5bf9\u6218\u91c7\u7528\u6dd8\u6c70\u8d5b\u5236\uff0c\u6bcf\u8f6e\u5bf9\u6218\u6d88\u80173\u70b9\u4f53\u529b\u3002\u9635\u8425\u603b\u5206=\u6240\u6709\u6210\u5458\u80dc\u573a\u6c42\u548c\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "what-success-metrics", "title": "\u6210\u529f\u6307\u6807", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300cKPI\u300d\u7ae0\u8282\uff1a\u201c\u6d3b\u52a8\u53c2\u4e0e\u7387\u76ee\u6807>55%\uff0c\u65e5\u5747\u5bf9\u6218\u573a\u6b21\u76ee\u6807>3\u3002\u201d\u2014\u2014\u53c2\u4e0e\u7387\u548c\u6d3b\u8dc3\u5ea6\u76ee\u6807\u660e\u786e\uff0c\u4f46\u7f3a\u5c11\u5bf9\u6218\u8d28\u91cf\uff08\u5339\u914d\u5dee\u5f02\u7387\u3001\u653e\u5f03\u7387\uff09\u548c\u751f\u6001\u5065\u5eb7\u5ea6\u6307\u6807\u3002",
+             "gap_description": "\u53c2\u4e0e\u7387\u76ee\u6807\u6709\uff0c\u7f3a\u5bf9\u6218\u8d28\u91cf\u548c\u751f\u6001\u5065\u5eb7\u5ea6\u6307\u6807",
+             "acceptance_criteria": "\u8865\u5145\u5bf9\u6218\u8d28\u91cf\u548c\u751f\u6001\u5065\u5eb7\u5ea6\u6307\u6807"},
+            {"item_id": "what-decision-list", "title": "\u51b3\u7b56\u6e05\u5355", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u300c\u6d3b\u52a8\u53c2\u6570\u300d\u7ae0\u8282\uff1a\u201c\u9635\u8425\u6570\uff1a4\u4e2a\uff1b\u6bcf\u8f6e\u5bf9\u6218\u6d88\u80173\u70b9\u4f53\u529b\uff1b\u6d3b\u52a8\u65f6\u957f\uff1a14\u5929\uff1b\u6bcf\u65e5\u5bf9\u6218\u6b21\u6570\u4e0a\u9650\uff1a10\u6b21\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "what-econ-model", "title": "\u6570\u503c/\u7ecf\u6d4e\u6a21\u578b\u534f\u8c03", "layer": "WHAT", "status": "incomplete",
+             "extracted_text": "\u300c\u5956\u52b1\u8bbe\u8ba1\u300d\u7ae0\u8282\uff1a\u201c\u9635\u8425\u6392\u884c\u5956\u52b1\uff1a\u524d3\u540d\u53d1\u653e\u9635\u8425\u4e13\u5c5e\u5916\u663e+\u94bb\u77f3\u00d7500\uff08\u5177\u4f53\u6570\u503c\u5f85\u6570\u503c\u7b56\u5212\u534f\u8c03\uff09\uff1b\u4e2a\u4eba\u6392\u884c\u5956\u52b1\uff1a\u524d50\u540d\u6309\u6392\u540d\u68af\u5ea6\u53d1\u653e\uff08\u5f85\u5b9a\uff09\u3002\u201d",
+             "gap_description": "\u5956\u52b1\u6570\u503c\u5f85\u534f\u8c03\uff0c\u65e0\u9884\u7b97\u8303\u56f4",
+             "acceptance_criteria": "\u5956\u52b1\u68af\u5ea6\u5df2\u4e0e\u6570\u503c\u7b56\u5212\u534f\u8c03"},
+            {"item_id": "doc-pipeline", "title": "\u7ba1\u7ebf\u6743\u91cd\u6807\u6ce8", "layer": "WHAT", "status": "present",
+             "extracted_text": "\u6587\u6863\u5f00\u5934\u6807\u6ce8\uff1a\u201c\u7ba1\u7ebf\u6743\u91cd\uff1a\u5feb\u8f68\uff0c\u4e94\u4e00\u6d3b\u52a8\uff0c\u9884\u8ba1\u5f00\u53d1\u5468\u671f2\u5468\u3002\u201d",
+             "gap_description": "", "acceptance_criteria": ""},
+            {"item_id": "build-match-algo", "title": "\u5339\u914d\u7b97\u6cd5\u53c2\u6570", "layer": "BUILD", "status": "fragment",
+             "extracted_text": "\u300c\u5339\u914d\u7cfb\u7edf\u300d\u7ae0\u8282\uff1a\u201c\u5339\u914d\u7b97\u6cd5\uff1a\u6309\u6218\u529b\u503c\u00b1200\u8303\u56f4\u5339\u914d\uff0c\u7b49\u5f8530\u79d2\u540e\u6269\u5927\u8303\u56f4\u81f3\u00b1500\uff0c60\u79d2\u540e\u586b\u5145AI\u5bf9\u624b\u3002\u201d\u2014\u2014\u8fd9\u4e9b\u53c2\u6570\u5c5eBUILD\u5c42\u7cfb\u7edf\u8bbe\u8ba1\u7a7a\u95f4\uff0cWHAT\u5c42\u5e94\u8868\u8fbe\u4e3a\u610f\u56fe\u800c\u975e\u89c4\u683c\u3002",
+             "gap_description": "\u5339\u914d\u53c2\u6570\u5c5eBUILD\u5c42\uff0cWHAT\u5c42\u5e94\u8868\u8fbe\u4e3a\u610f\u56fe",
+             "acceptance_criteria": "\u6539\u4e3a\u610f\u56fe\u63cf\u8ff0\uff0c\u5c06\u53c2\u6570\u6807\u6ce8\u4e3a'BUILD\u5c42\u786e\u5b9a'"},
+        ],
+        "cross_layer_observations": [
+            {"category": "intent",
+             "description": "\u5bf9\u6218\u6d41\u7a0b\u7f16\u6392\u4e86\u5177\u4f53\u4ea4\u4e92\u6b65\u9aa4\uff0c\u5c5eHOW\u5c42\u7528\u6237\u65c5\u7a0b\u8bbe\u8ba1\u3002WHAT\u5c42\u5e94\u63cf\u8ff0\u4f53\u9a8c\u610f\u56fe\u800c\u975e\u64cd\u4f5c\u6b65\u9aa4\u3002",
+             "suggestion": "\u6539\u4e3a\u4f53\u9a8c\u8282\u594f\u610f\u56fe\u63cf\u8ff0"},
+            {"category": "readiness",
+             "description": "\u6587\u6863\u6807\u6ce8\u5956\u52b1\u6570\u503c'\u5f85\u534f\u8c03'\uff0c\u672a\u7ed9\u51fa\u9884\u7b97\u533a\u95f4\u6216\u534f\u8c03\u65f6\u95f4\u7ebf\u3002\u4f53\u9a8c\u7ec4\u65e0\u6cd5\u786e\u5b9a\u5956\u52b1\u5c55\u793a\u7684\u89c6\u89c9\u5f3a\u5ea6\u3002",
+             "suggestion": "\u660e\u786e\u6570\u503c\u534f\u8c03\u65f6\u95f4\u7ebf\uff0c\u6216\u6807\u6ce8\u4e3a'BUILD\u9636\u6bb5\u7531\u6570\u503c\u7b56\u5212\u786e\u5b9a'"},
+            {"category": "annotate",
+             "description": "\u5bf9\u5c40\u6d41\u7a0b\u7ebf\u6846\u672a\u6807\u6ce8\u4e3a\u53c2\u8003\u8fd8\u662f\u9700\u6c42\u3002",
+             "suggestion": "\u6807\u6ce8\u4e3a'\u6982\u5ff5\u53c2\u8003\uff0c\u975e\u4ea4\u4e92\u7ea6\u675f'"},
+        ],
+    }
+
+
+# ============================================================
+# Feature assessment presets — generic (reused for ops/shop/contest)
+# ============================================================
+
+def _generic_feature_pld(topic: str) -> dict:
+    _topic_ctx = {
+        "ops_event": ("\u5feb\u8f68\u6d3b\u52a8", "PVE\u6311\u6218"),
+        "shop_event": ("\u5feb\u8f68\u793c\u5305", "\u5546\u4e1a\u5316"),
+        "contest_event": ("\u5feb\u8f68\u6d3b\u52a8", "\u5bf9\u6218\u7ade\u6280"),
+    }
+    label, domain = _topic_ctx.get(topic, ("\u6d3b\u52a8", "\u73a9\u6cd5"))
+    if topic == "shop_event":
+        return {
+            "role_id": "pld",
+            "verdict": "pass",
+            "perspective_summary": f"WHAT\u5c42\u6838\u5fc3\u4ea4\u4ed8\u7269\u5b8c\u6574\uff0c{label}\u6587\u6863\u8d28\u91cf\u8fbe\u6807\u3002\u6210\u529f\u6307\u6807\u53ef\u518d\u7ec6\u5316\u3002",
+            "issue_assessments": [
+                {"item_id": "what-success-metrics", "impact": "concern",
+                 "comment": "\u4ec5\u6709\u6536\u5165\u6307\u6807\uff0c\u5efa\u8bae\u8865\u5145\u7528\u6237\u6ee1\u610f\u5ea6\u548c\u590d\u8d2d\u7387\u6307\u6807\uff0c\u4f5c\u4e3a\u5065\u5eb7\u5ea6\u62a4\u680f\u3002"},
+            ],
+        }
+    return {
+        "role_id": "pld",
+        "verdict": "concern",
+        "perspective_summary": f"WHAT\u5c42\u6846\u67b6\u53ef\u8fa8\u8bc6\uff0c\u4f46\u7f3a\u4f53\u9a8c\u610f\u56fe\u58f0\u660e\u548c\u5b8c\u6574\u6210\u529f\u6307\u6807\u3002{label}\u53ef\u8fdb\u5165\u4e0b\u4e00\u9636\u6bb5\uff0c\u4f46\u9700\u5173\u6ce8\u98ce\u9669\u9879\u3002",
+        "issue_assessments": [
+            {"item_id": "what-intent", "impact": "concern",
+             "comment": f"\u6587\u6863\u63cf\u8ff0\u4e86{domain}\u89c4\u5219\u4f46\u672a\u5b9a\u4e49\u4f53\u9a8c\u610f\u56fe\u3002\u5efa\u8bae\u7528\u4e00\u53e5\u8bdd\u5b9a\u4e49\u6838\u5fc3\u4f53\u9a8c\u611f\u53d7\uff0c\u5e2e\u52a9\u4e0b\u6e38\u5bf9\u9f50\u8bbe\u8ba1\u65b9\u5411\u3002"},
+            {"item_id": "what-success-metrics", "impact": "concern",
+             "comment": "\u53c2\u4e0e\u7387\u76ee\u6807\u6709\uff0c\u4f46\u7f3a\u5065\u5eb7\u5ea6\u548c\u6536\u5165\u7ef4\u5ea6\u6307\u6807\u3002\u5efa\u8bae\u8865\u5145\u540e\u8fdb\u5165\u4e0b\u4e00\u9636\u6bb5\u3002"},
+            {"item_id": "what-econ-model", "impact": "concern",
+             "comment": "\u5956\u52b1\u68af\u5ea6\u5f85\u6570\u503c\u534f\u8c03\uff0c\u5efa\u8bae\u660e\u786e\u6807\u6ce8\u6570\u503c\u8bc4\u5ba1\u72b6\u6001\u548c\u9884\u671f\u65f6\u95f4\u70b9\u3002"},
+        ],
+    }
+
+
+def _generic_feature_ple(topic: str) -> dict:
+    if topic == "shop_event":
+        return {
+            "role_id": "ple",
+            "verdict": "pass",
+            "perspective_summary": "\u793c\u5305\u4f53\u9a8c\u610f\u56fe\u6e05\u6670\uff0c\u4ea4\u4e92\u8bbe\u8ba1\u53ef\u76f4\u63a5\u542f\u52a8\u3002",
+            "issue_assessments": [],
+        }
+    return {
+        "role_id": "ple",
+        "verdict": "pass",
+        "perspective_summary": "\u6d3b\u52a8\u7c7b\u578b\u4e3a\u5feb\u8f68\u914d\u7f6e\uff0c\u4ea4\u4e92\u590d\u6742\u5ea6\u4f4e\uff0c\u53ef\u590d\u7528\u73b0\u6709\u6a21\u677f\u3002",
+        "issue_assessments": [
+            {"item_id": "what-intent", "impact": "concern",
+             "comment": "\u4f53\u9a8c\u610f\u56fe\u672a\u58f0\u660e\uff0c\u4f53\u9a8c\u7ec4\u53ea\u80fd\u57fa\u4e8e\u89c4\u5219\u63a8\u65ad\u4f53\u9a8c\u65b9\u5411\u3002\u5feb\u8f68\u6d3b\u52a8\u53ef\u63a5\u53d7\uff0c\u4f46\u5efa\u8bae\u8865\u5145\u3002"},
+        ],
+    }
+
+
+def _generic_feature_plt(topic: str) -> dict:
+    if topic == "contest_event":
+        return {
+            "role_id": "plt",
+            "verdict": "pass",
+            "perspective_summary": "\u6d3b\u52a8\u6846\u67b6\u53ef\u590d\u7528\u73b0\u6709\u7cfb\u7edf\uff0c\u5339\u914d\u7b97\u6cd5\u53c2\u6570\u5efa\u8baeBUILD\u5c42\u786e\u5b9a\u3002",
+            "issue_assessments": [
+                {"item_id": "build-match-algo", "impact": "concern",
+                 "comment": "\u5339\u914d\u7b97\u6cd5\u53c2\u6570\u5c5eBUILD\u5c42\u8bbe\u8ba1\u7a7a\u95f4\uff0cWHAT\u5c42\u5e94\u8868\u8fbe\u4e3a\u610f\u56fe\u3002\u5efa\u8baeWHAT\u5c42\u6539\u4e3a'\u5e0c\u671b\u5339\u914d\u611f\u53d7\u516c\u5e73'\uff0c\u5177\u4f53\u53c2\u6570\u7531\u7cfb\u7edf\u7b56\u5212\u5728BUILD\u5c42\u786e\u5b9a\u3002"},
+            ],
+        }
+    return {
+        "role_id": "plt",
+        "verdict": "pass",
+        "perspective_summary": "\u5feb\u8f68\u6d3b\u52a8\uff0c\u53ef\u590d\u7528\u73b0\u6709\u6846\u67b6\uff0c\u65e0\u6280\u672f\u98ce\u9669\u3002",
+        "issue_assessments": [],
     }
