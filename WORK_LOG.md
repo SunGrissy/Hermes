@@ -20,6 +20,23 @@
 - Bridge 项目代码尚未开始，本次仅输出设计文档
 - 推送通道原则上交给 Ultra，Bridge 保留应急直连钉钉 webhook
 
+## 2026-03-03 - Palace Instructor 集成方案文档
+
+**状态**: 方案文档已输出，待 Palace Agent 评审
+
+**内容**:
+- 新建 `palace/INSTRUCTOR_INTEGRATION.md`：Instructor 集成的完整技术方案
+- 改造范围：schemas.py（新增 Pydantic 模型）+ llm_client.py（Instructor 路径 + fallback）+ requirements.txt
+- 不改动文件：engine.py / report.py / MockProvider / config.py / knowledge.py / run.py / 所有 YAML
+- 7 项已识别风险及应对措施
+- 完整字段一致性验证清单（engine.py 中所有 .get() 访问点 vs Pydantic 字段名）
+- 6 项测试验证计划
+
+**备注**:
+- 方案核心思路：Provider 内部消化类型转换，对外接口返回 dict 不变
+- _robust_json_parse 保留为 fallback，Instructor 是增强层不是替代层
+- 待 Palace Agent 评审后执行
+
 ## 2026-03-03 - 工作室会议体系架构设计
 
 **状态**: v2 已完成，待验收
