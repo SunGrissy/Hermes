@@ -79,10 +79,16 @@ async def _run_two_step(provider, scenario, extraction_role_id, topic_text, docu
         scenario["id"], extraction_role_id, assessment_role_ids,
     )
 
+    detected_doc_type = extraction_result.get("detected_doc_type", "")
+    effective_scenario = scenario
+    if detected_doc_type == "feature" and scenario.get("target") == "version":
+        logger.info("doc type mismatch: scenario target=version but doc detected as feature")
+        effective_scenario = _adapt_scenario_for_feature(scenario)
+
     tasks = [
         _invoke_assessment(
             provider, role, topic_text, playbook_text,
-            extraction_result, scenario, document_layer,
+            extraction_result, effective_scenario, document_layer,
         )
         for role in assessment_roles
     ]
@@ -98,6 +104,8 @@ async def _run_two_step(provider, scenario, extraction_role_id, topic_text, docu
             assessments.append(result)
 
     report_data = synthesize_v2(extraction_result, assessments, scenario)
+    if detected_doc_type:
+        report_data["detected_doc_type"] = detected_doc_type
     if errors:
         report_data["errors"] = errors
 
@@ -138,6 +146,32 @@ async def _invoke_assessment(provider, role_config, topic_text, playbook_text,
     logger.info("assessment role=%s verdict=%s elapsed=%.2fs",
                 role_config["id"], result.get("verdict", "?"), elapsed)
     return result
+
+
+# ============================================================
+# Doc-type adaptation (version scenario + feature doc)
+# ============================================================
+
+def _adapt_scenario_for_feature(scenario: dict) -> dict:
+    """Create a shallow copy of the scenario with review_dimensions swapped to feature set."""
+    adapted = {**scenario}
+    overrides = scenario.get("role_overrides", {})
+    if not overrides:
+        return adapted
+    new_overrides = {}
+    for role_id, role_ov in overrides.items():
+        new_ov = {**role_ov}
+        feature_dims = new_ov.pop("review_dimensions_feature", None)
+        if feature_dims:
+            new_ov["review_dimensions"] = feature_dims
+        elif "review_dimensions" in new_ov:
+            new_ov["review_dimensions"] = [
+                d for d in new_ov["review_dimensions"]
+                if not d.startswith("[版本级]")
+            ]
+        new_overrides[role_id] = new_ov
+    adapted["role_overrides"] = new_overrides
+    return adapted
 
 
 # ============================================================
@@ -266,9 +300,11 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
         "   \u5982\u679c\u6ca1\u6709\u503c\u5f97\u6807\u8bb0\u7684\u4eae\u70b9\uff0c\u8fd4\u56de\u7a7a\u6570\u7ec4\u3002\n"
         "   \u6bcf\u9879: {aspect: \u4e00\u53e5\u8bdd\u6982\u62ec, detail: \u7b80\u8981\u8bf4\u660e\u4ef7\u503c\u5224\u65ad\u539f\u56e0}\n"
         "\n\u8bed\u6c14\u89c4\u5219\uff1a\n"
+        "- \u786e\u8ba4\u5f0f\u8868\u8fbe\uff1a\u5224\u65ad\u5fc5\u987b\u6709\u4f9d\u636e\u94fe\uff08\u201c\u6587\u6863X\u5904\u51fa\u73b0Y\uff0c\u56e0\u6b64Z\u201d\uff09\uff0c"
+        "\u7528\u201c\u8bf7\u786e\u8ba4\u201d\u66ff\u4ee3\u201c\u5efa\u8bae\u8865\u5145/\u8bf7\u6267\u884c\u201d\uff0c"
+        "\u7528\u201c\u5982\u679c\u6b64\u5224\u65ad\u6210\u7acb\uff0c\u90a3\u4e48\u2026\u201d\u5f15\u51fa\u6709\u6761\u4ef6\u7684\u4e0b\u4e00\u6b65\n"
         "- comment \u4e2d\u4e0d\u4f7f\u7528\u5938\u8d5e\u6027\u5f62\u5bb9\u8bcd\uff08\u7cbe\u5999\u3001\u51fa\u8272\u3001\u5de7\u5999\u7b49\uff09\n"
         "- \u4eae\u70b9\u53ea\u9648\u8ff0\u4e8b\u5b9e + \u4ef7\u503c\u5224\u65ad\u539f\u56e0\n"
-        "- \u95ee\u9898\u63cf\u8ff0\u7528'\u5efa\u8bae...'\u800c\u975e'\u7f3a\u5931...\u9700\u8981...'\n"
         "- \u8de8\u5c42\u5185\u5bb9\u8bc4\u4f30\uff1a\u5173\u6ce8\u4e0b\u6e38\u80fd\u5426\u4ece\u4e2d\u51c6\u786e\u7406\u89e3\u8bbe\u8ba1\u610f\u56fe\uff0c"
         "\u7528'\u53ef\u4f5c\u4e3aXX\u53c2\u8003\uff0c\u5efa\u8bae\u6807\u6ce8\u7528\u9014'\u66ff\u4ee3'\u672c\u5e94\u7531XX\u4ea7\u51fa'\n"
         "- \u8bca\u65ad\u8bed\u53e5\u533a\u5206\u4e8b\u5b9e\u4e0e\u5224\u65ad\uff1a\u5148\u5f15\u7528\u6587\u6863\u539f\u6587\u72b6\u6001\uff08\u5982'\u6587\u6863\u6807\u6ce8XX\u5f85\u786e\u8ba4'\uff09\uff0c"
@@ -282,9 +318,18 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
 def _build_assessment_user_prompt(topic_text, extraction_result, document_layer):
     checklist_json = json.dumps(extraction_result, ensure_ascii=False, indent=2)
     layer_hint = f"\n文档层级: {document_layer}" if document_layer else ""
+    doc_type_hint = ""
+    detected = extraction_result.get("detected_doc_type", "")
+    if detected == "feature":
+        doc_type_hint = (
+            "\n\n**文档类型检测：单 Feature 文档（非版本规划）。**"
+            "请聚焦 Feature 内部有意义的维度进行评审，"
+            "跳过纯版本级维度（如版本体验主线、快慢轨配比、多Feature互补性等）。"
+            "不要因版本级信息缺失而扣分。"
+        )
     return (
         f"## 文档结构提取结果\n\n```json\n{checklist_json}\n```\n\n"
-        f"## 原始文档{layer_hint}\n\n{topic_text}"
+        f"## 原始文档{layer_hint}\n\n{topic_text}{doc_type_hint}"
     )
 
 
@@ -304,6 +349,7 @@ _RHYTHM_KEYWORDS = [
     "\u65f6\u95f4\u7ebf", "\u8282\u594f", "\u624e\u5806", "\u7a7a\u7a97",
     "\u514d\u8d39\u73a9\u5bb6", "\u6162\u8f68\u7ba1\u7ebf\u7a7a\u8f6c",
     "\u8de8\u7248\u672c", "\u8986\u76d6",
+    "\u65b0\u9c9c\u5ea6", "\u9884\u70ed", "\u6295\u653e",
 ]
 
 _VERSION_LEVEL_KEYWORDS = [
@@ -350,6 +396,25 @@ def _strip_comment_emoji(issue: dict):
     for rc in issue.get("role_comments", []):
         comment = rc.get("comment", "")
         rc["comment"] = _TRAILING_EMOJI.sub("", comment)
+
+
+def _dedup_reminders(reminders: list[dict]) -> list[dict]:
+    """Remove near-duplicate reminders based on title + gap_description overlap."""
+    result: list[dict] = []
+    for r in reminders:
+        key = r.get("title", "") + " " + r.get("gap_description", "")
+        if not any(_reminder_overlap(key, existing) for existing in result):
+            result.append(r)
+    return result
+
+
+def _reminder_overlap(new_key: str, existing: dict) -> bool:
+    existing_key = existing.get("title", "") + " " + existing.get("gap_description", "")
+    if not new_key or not existing_key:
+        return False
+    short, long_ = (new_key, existing_key) if len(new_key) <= len(existing_key) else (existing_key, new_key)
+    common = sum(1 for c in short if c in long_)
+    return common / len(short) > 0.6
 
 
 def _classify_reminder(item: dict, scenario: dict) -> str:
@@ -428,6 +493,8 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
     if target == "version":
         _reclassify_cross_feature(quality_issues)
 
+    pipeline_reminders = _dedup_reminders(pipeline_reminders)
+    rhythm_reminders = _dedup_reminders(rhythm_reminders)
     reminders = pipeline_reminders + rhythm_reminders
 
     _assign_severity(quality_issues, scenario)

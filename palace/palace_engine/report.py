@@ -336,6 +336,14 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
     layer_overview = data.get("layer_overview", [])
     cross_layer = data.get("cross_layer", [])
     highlights = data.get("highlights", [])
+    detected_doc_type = data.get("detected_doc_type", "version")
+    is_feature_mode = (detected_doc_type == "feature")
+
+    if is_feature_mode:
+        layer_overview = [
+            lo for lo in layer_overview
+            if lo.get("completeness") != "absent"
+        ]
 
     feat_issues = [i for i in issues if i.get("layer", "") == "WHAT"]
     ver_issues = [i for i in issues if i.get("layer", "") == "VERSION"]
@@ -351,8 +359,19 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
     lines: list[str] = []
 
     ft = f" \u00b7 {feature_title}" if feature_title else ""
-    lines.append(f"# \u7248\u672c\u5185\u5bb9\u6392\u5e03\u9884\u5ba1{ft}")
+    mode_suffix = " \u00b7 Feature \u6a21\u5f0f" if is_feature_mode else ""
+    lines.append(f"# \u7248\u672c\u5185\u5bb9\u6392\u5e03\u9884\u5ba1{ft}{mode_suffix}")
     lines.append("")
+
+    if is_feature_mode:
+        lines.append(
+            "> \u26a0\ufe0f **\u6587\u6863\u7c7b\u578b\u68c0\u6d4b\uff1a\u5355 Feature \u6587\u6863\uff08\u975e\u7248\u672c\u89c4\u5212\uff09\u3002**"
+            " \u7cfb\u7edf\u5df2\u81ea\u52a8\u8c03\u6574\u4e3a Feature \u7ea7\u89c6\u89d2\uff0c"
+            "\u7248\u672c\u7ea7\u7ef4\u5ea6\uff08\u5feb\u6162\u8f68\u914d\u6bd4\u3001Owner\u8d1f\u8377\u7b49\uff09"
+            "\u5df2\u8df3\u8fc7\u3002\u5982\u9700\u7248\u672c\u7ea7\u5b8c\u6574\u5206\u6790\uff0c"
+            "\u8bf7\u63d0\u4f9b\u7248\u672c\u89c4\u5212\u6587\u6863\u3002"
+        )
+        lines.append("")
 
     doc_score = data.get("doc_completeness_score")
     _health_dashboard(
@@ -360,6 +379,7 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
         ver_issues + sup_issues, feat_issues, passed_features,
         p0s, p1s, warns, p2s, p3s, reminders,
         doc_completeness_score=doc_score,
+        is_feature_mode=is_feature_mode,
     )
 
     pipeline_rem = data.get("pipeline_reminders", [])
@@ -376,37 +396,60 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
         _p0_cards(lines, p0s)
 
     all_risk = ver_issues + sup_issues
-    risk_total = len(all_risk) + len(cl_risk)
-    if risk_total:
-        lines.append(f"## \u7248\u672c\u98ce\u9669\u4e0e\u51b3\u7b56\u7f3a\u53e3\uff08{risk_total} \u9879\uff09")
+    if all_risk:
+        risk_title = "\u98ce\u9669\u4e0e\u4f9d\u8d56\u5206\u6790" if is_feature_mode else "\u7248\u672c\u98ce\u9669\u4e0e\u51b3\u7b56\u7f3a\u53e3"
+        lines.append(f"## {risk_title}\uff08{len(all_risk)} \u9879\uff09")
         lines.append("")
         for idx, issue in enumerate(all_risk, 1):
             _ver_issue_detail(lines, idx, issue)
+
+    if rhythm_rem:
+        lines.append(f"## \u8fd0\u8425\u8282\u594f\u89c2\u5bdf\uff08{len(rhythm_rem)} \u9879\uff09")
+        lines.append("")
+        lines.append("> \u4ee5\u4e0b\u4e3a\u7248\u672c\u5185\u5bb9\u8282\u594f\u89c2\u5bdf\uff0c\u4f9b PLD \u5728\u7ec4\u76d8\u51b3\u7b56\u65f6\u53c2\u8003\u3002")
+        lines.append("")
+        for idx, r in enumerate(rhythm_rem, 1):
+            _render_reminder_item(lines, idx, r)
+        lines.append("")
+
+    if cl_risk:
+        lines.append(f"## \u8de8 Feature \u89c2\u5bdf\uff08{len(cl_risk)} \u9879\uff09")
+        lines.append("")
+        lines.append(
+            "> Feature \u4e4b\u95f4\uff08\u6216 Feature \u5185\u90e8\u5b50\u6a21\u5757\u4e4b\u95f4\uff09"
+            "\u7684\u4f53\u9a8c\u610f\u56fe\u4f20\u9012\u3001\u4f9d\u8d56\u5173\u7cfb\u548c"
+            "\u4e0b\u6e38\u5c31\u7eea\u5ea6\u89c2\u5bdf\u3002"
+        )
+        lines.append("")
         _CL_CAT_LABEL = {
-            "intent": "\U0001f3af \u610f\u56fe\u4f20\u9012",
-            "readiness": "\u231b \u4e0b\u6e38\u5c31\u7eea\u5ea6",
+            "intent": ("\U0001f3af", "\u610f\u56fe\u4f20\u9012"),
+            "readiness": ("\u231b", "\u4e0b\u6e38\u5c31\u7eea\u5ea6"),
         }
-        for idx, obs in enumerate(cl_risk, len(all_risk) + 1):
-            cat_label = _CL_CAT_LABEL.get(
-                obs.get("category", ""), "\u8de8\u5c42\u89c2\u5bdf")
-            desc = obs.get("description", "")
-            suggestion = obs.get("suggestion", "")
-            lines.append(f"### {idx}. {cat_label}")
+        grouped: dict[str, list] = {}
+        for obs in cl_risk:
+            cat = obs.get("category", "readiness")
+            grouped.setdefault(cat, []).append(obs)
+        for cat_key in ["intent", "readiness"]:
+            items = grouped.get(cat_key, [])
+            if not items:
+                continue
+            emoji, label = _CL_CAT_LABEL.get(cat_key, ("\U0001f4cc", cat_key))
+            lines.append(f"**{emoji} {label}** ({len(items)})")
             lines.append("")
-            if desc:
-                lines.append(f"> {desc}")
-                lines.append("")
-            if suggestion:
-                lines.append(f"\u2192 {suggestion}")
+            for idx, obs in enumerate(items, 1):
+                desc = obs.get("description", "")
+                sug = obs.get("suggestion", "")
+                paras = _break_long_text(desc)
+                lines.append(f"{idx}. {paras[0]}")
+                for p in paras[1:]:
+                    lines.append("")
+                    lines.append(f"   {p}")
+                if sug:
+                    lines.append("")
+                    lines.append(f"   \u2192 {sug}")
                 lines.append("")
 
-    if feat_issues:
-        lines.append(f"## Feature \u9010\u9879\u68c0\u89c6\uff08{len(feat_issues)} \u9879\uff09")
-        lines.append("")
-        lines.append("> \u4ee5\u4e0b\u4ec5\u5217\u51fa\u6709\u95ee\u9898\u7684 Feature\uff0c\u5df2\u901a\u8fc7\u7684\u4e0d\u5c55\u5f00\u3002")
-        lines.append("")
-        for idx, issue in enumerate(feat_issues, 1):
-            _feat_issue_detail(lines, idx, issue)
+    _feature_completeness_table(lines, feat_issues, passed_features)
 
     pipe_total = len(pipeline_rem) + len(cl_annotate)
     if pipe_total:
@@ -421,33 +464,45 @@ def _generate_version_layout(data, *, feature_title="", pipeline_stage=""):
         if cl_annotate:
             _cross_layer_section(lines, cl_annotate)
 
-    if rhythm_rem:
-        lines.append(f"## \u8fd0\u8425\u8282\u594f\u63d0\u9192\uff08{len(rhythm_rem)} \u9879\uff09")
-        lines.append("")
-        lines.append("> \u4ee5\u4e0b\u4e3a\u5185\u5bb9\u8282\u594f\u4e0e\u65f6\u95f4\u7ebf\u63d0\u9192\uff0c\u4e0d\u5f71\u54cd\u4e3b\u5ba1\u7ed3\u8bba\u3002")
-        lines.append("")
-        for idx, r in enumerate(rhythm_rem, 1):
-            _render_reminder_item(lines, idx, r)
-        lines.append("")
-
     lines.append("---")
     lines.append(
         f"*Generated by Palace Engine v0.6 \u00b7 "
         f"{datetime.now().strftime('%Y-%m-%d %H:%M')}*"
     )
     lines.append("")
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    import re
+    result = re.sub(
+        r'\u514d\u8d39\u73a9\u5bb6(?!\uff08)',
+        '\u514d\u8d39\u73a9\u5bb6\uff08\u6682\u65f6\u4e0d\u60f3\u4ed8\u8d39\u7684\u73a9\u5bb6\uff09',
+        result, count=1,
+    )
+    return result
 
 
 def _health_dashboard(lines, stage, ov, overview, highlights,
                       ver_issues, feat_issues, passed_features,
                       p0s, p1s, warns, p2s, p3s, reminders,
-                      doc_completeness_score=None):
+                      doc_completeness_score=None,
+                      is_feature_mode=False):
     """Health dashboard — two tables, filtered concerns, compressed highlights."""
     sl = {"planning": "\u89c4\u5212\u9636\u6bb5", "scoping": "\u51c6\u5907\u9636\u6bb5", "dor": "DoR \u95e8\u7981"}
     stage_label = sl.get(stage, stage) if stage else ""
 
-    lines.append(f"## \u89c4\u5212\u5065\u5eb7\u5ea6")
+    dashboard_title = "Feature \u5065\u5eb7\u5ea6" if is_feature_mode else "\u89c4\u5212\u5065\u5eb7\u5ea6"
+    lines.append(f"## {dashboard_title}")
+    lines.append("")
+    if is_feature_mode:
+        lines.append(
+            "> Feature \u5185\u90e8\u7684\u8bbe\u8ba1\u5b8c\u6574\u6027\u3001"
+            "\u4f9d\u8d56\u98ce\u9669\u548c\u51b3\u7b56\u8d28\u91cf\u7efc\u5408\u8bc4\u4f30\u3002"
+        )
+    else:
+        lines.append(
+            "> \u7248\u672c\u7ec4\u76d8\u7684\u6574\u4f53\u5065\u5eb7\u5ea6\u8bc4\u4f30\uff0c"
+            "\u542b\u5feb\u6162\u8f68\u914d\u6bd4\u3001\u7528\u6237\u4ef7\u503c\u8986\u76d6\u3001"
+            "\u5185\u5bb9\u8282\u594f\u3001\u7814\u53d1\u8d1f\u8377\u7b49\u7ef4\u5ea6\u3002"
+        )
     lines.append("")
 
     stage_suffix = f" \u00b7 {stage_label}" if stage_label else ""
@@ -525,7 +580,7 @@ def _health_dashboard(lines, stage, ov, overview, highlights,
     )
     lines.append("")
 
-    if overview:
+    if overview and not is_feature_mode:
         names = [lo.get("layer", "") for lo in overview]
         icons = []
         for lo in overview:
@@ -593,6 +648,46 @@ def _feat_issue_detail(lines, idx, issue):
             lines.append(f"- {comment}")
     if comments:
         lines.append("")
+
+
+def _feature_completeness_table(lines, feat_issues, passed_features):
+    """Compact Feature completeness table — replaces expanded Feature section."""
+    rows: list[tuple[str, str, str, int]] = []
+    _SEV_ORDER = {"P0": 0, "P1": 1, "WARN": 2, "P2": 3, "P3": 4, "INFO": 8, "PASS": 9}
+
+    for f in feat_issues:
+        status = f.get("extraction_status", "")
+        icon = _STATUS_ICON.get(status, "\u26aa")
+        sev = f.get("severity", "P2")
+        sev_tag = f"{_SE.get(sev, '')} {_SL.get(sev, sev)}"
+        gap = f.get("gap_description", "")
+        note = gap.split("\u3002")[0] if "\u3002" in gap else gap
+        note = _trunc(note, 80)
+        rows.append((f.get("title", ""), f"{icon} {sev_tag}", note or "\u2014", _SEV_ORDER.get(sev, 5)))
+
+    for f in passed_features:
+        rows.append((f.get("title", ""), "\u2705", "\u2014", 9))
+
+    if not rows:
+        return
+
+    rows.sort(key=lambda r: r[3])
+    total = len(rows)
+    ok = sum(1 for _, _, _, s in rows if s >= 9)
+
+    lines.append(f"## Feature \u5b8c\u5907\u5ea6\u901f\u67e5\uff08{ok}/{total} \u901a\u8fc7\uff09")
+    lines.append("")
+    lines.append(
+        "> \u9010\u9879\u68c0\u67e5\u6bcf\u4e2a Feature \u7684 WHAT \u4ea4\u4ee3\u662f\u5426\u6e05\u6670\uff0c"
+        "\u901a\u8fc7 = \u547d\u9898\u6e05\u6670\u53ef\u542f\u52a8\u8be6\u8bbe\uff0c"
+        "\u4e0d\u5b8c\u6574 = \u9700\u8865\u5145\u4fe1\u606f\u540e\u518d\u63a8\u8fdb\u3002"
+    )
+    lines.append("")
+    lines.append("| # | Feature | \u72b6\u6001 | \u5907\u6ce8 |")
+    lines.append("|---|---------|------|------|")
+    for idx, (title, status_cell, note, _) in enumerate(rows, 1):
+        lines.append(f"| {idx} | {title} | {status_cell} | {note} |")
+    lines.append("")
 
 
 def _format_long_comment(text: str) -> str:
@@ -692,6 +787,13 @@ def _reminder_section(lines, reminders):
         if detail:
             lines.append(f"   {detail}")
     lines.append("")
+
+
+def _break_long_text(text: str) -> list[str]:
+    """Split long text into visual paragraphs at logical transition points."""
+    import re
+    parts = re.split(r'(?<=\u3002)(?=[\u4f46\u6839\u636e\u8bf7\u5982\u679c\u540c\u65f6\u6b64\u5916])', text)
+    return [p.strip() for p in parts if p.strip()] or [text]
 
 
 def _trunc(text: str, max_len: int) -> str:

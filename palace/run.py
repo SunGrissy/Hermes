@@ -54,6 +54,14 @@ def main():
     parser.add_argument(
         "--from-json", help="Skip LLM call, generate report from existing JSON result",
     )
+    parser.add_argument(
+        "--publish", action="store_true",
+        help="Publish report to Palace Web (POST to http://localhost:8300/api/reports)",
+    )
+    parser.add_argument(
+        "--publish-url", default="http://localhost:8300",
+        help="Palace Web base URL (default: http://localhost:8300)",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
 
@@ -109,6 +117,51 @@ def main():
     else:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
         print(output_text)
+
+    if args.publish:
+        _publish_report(
+            base_url=args.publish_url,
+            title=title or scenario_name,
+            scenario_id=args.scenario,
+            feature_title=title,
+            pipeline_weight=pipeline_weight,
+            pipeline_stage=pipeline_stage,
+            document_layer=args.doc_layer or "",
+            data=result,
+        )
+
+
+def _publish_report(
+    base_url: str, title: str, scenario_id: str, feature_title: str,
+    pipeline_weight: str, pipeline_stage: str, document_layer: str, data: dict,
+):
+    """POST report JSON to Palace Web service."""
+    import urllib.request
+    import urllib.error
+
+    payload = json.dumps({
+        "title": title,
+        "scenario_id": scenario_id,
+        "feature_title": feature_title,
+        "pipeline_weight": pipeline_weight,
+        "pipeline_stage": pipeline_stage,
+        "document_layer": document_layer,
+        "data": data,
+    }).encode("utf-8")
+
+    url = f"{base_url.rstrip('/')}/api/reports"
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Content-Type", "application/json")
+
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            body = json.loads(resp.read())
+            report_id = body.get("id", "?")
+            print(f"Published to Palace Web: {base_url}/report/{report_id}")
+    except urllib.error.URLError as e:
+        print(f"Failed to publish (is Palace Web running?): {e}")
+    except Exception as e:
+        print(f"Publish error: {e}")
 
 
 if __name__ == "__main__":

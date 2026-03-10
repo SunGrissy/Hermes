@@ -27,6 +27,16 @@ def _robust_json_parse(text: str) -> dict:
     except json.JSONDecodeError:
         pass
 
+    for block in reversed(re.split(r"```", text)):
+        block = block.strip()
+        if block.lower().startswith("json"):
+            block = block[4:].strip()
+        if block.startswith("{") and block.endswith("}"):
+            try:
+                return json.loads(block, strict=False)
+            except json.JSONDecodeError:
+                pass
+
     start = text.find("{")
     end = text.rfind("}")
     if start >= 0 and end > start:

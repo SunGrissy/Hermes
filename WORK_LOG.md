@@ -1,5 +1,23 @@
 # Work Log - MyAgents Root
 
+## 2026-03-10 - Palace Engine 文档类型检测 + Feature 模式降级
+
+**状态**: 验收通过
+
+**内容**:
+- layout_analyst.yaml: 新增第零步文档类型前置检测，自动识别版本规划 vs 单 Feature 文档
+- schemas.py: extraction 输出新增 detected_doc_type 字段
+- engine.py: 检测到 Feature 文档时自动切换评审维度（版本级维度跳过，Feature 级维度替代）
+- version_layout.yaml: review_dimensions 标注 [版本级]/[通用]，增加 review_dimensions_feature 替代集
+- report.py: Feature 模式渲染适配（标题后缀、disclaimer、dashboard 标题、维度表跳过、区块解释文案）
+- report.py: Feature 完备度速查表截断从 35→80 字符 + 增加编号列
+- llm_client.py: JSON 解析增强，处理 Claude 的 code fence 包裹和 thinking 前缀
+- DOC_SPEC.md: 扩展版本规划模板、扩展标签体系、交互需求四要素、数值框架增强
+- run.py: 增加 --publish 参数支持 Palace Web 推送
+- requirements.txt: 新增 fastapi/uvicorn/httpx 依赖
+
+---
+
 ## 2026-03-10 - PerformEval 新增面试文档目录
 
 **状态**: 已提交

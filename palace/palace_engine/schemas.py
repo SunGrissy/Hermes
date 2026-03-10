@@ -50,11 +50,16 @@ CROSS_LAYER_OBS = {
 EXTRACTION_SCHEMA = {
     "type": "object",
     "properties": {
+        "detected_doc_type": {
+            "type": "string",
+            "enum": ["version", "feature"],
+            "description": "Pre-analysis classification: version plan or single feature doc",
+        },
         "layer_overview": {"type": "array", "items": LAYER_OVERVIEW_ITEM},
         "checklist": {"type": "array", "items": CHECKLIST_ITEM},
         "cross_layer_observations": {"type": "array", "items": CROSS_LAYER_OBS},
     },
-    "required": ["layer_overview", "checklist", "cross_layer_observations"],
+    "required": ["detected_doc_type", "layer_overview", "checklist", "cross_layer_observations"],
 }
 
 # ---------------------------------------------------------------------------
