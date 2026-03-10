@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-10 - PerformEval 新增面试文档目录
+
+**状态**: 已提交
+
+**内容**:
+- performeval 下新建「面试」目录，存放复试考察清单、初试评价等面试相关文档
+- 子模块提交并推送后，根仓库更新 performeval 指针并推送
+
+---
+
 ## 2026-03-09 - Palace Engine v0.6 报告渲染迭代
 
 **状态**: 已提交
