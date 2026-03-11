@@ -34,6 +34,18 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
 #sidebar-header { padding:16px; border-bottom:1px solid var(--border); }
 #sidebar-header h1 { font-size:18px; font-weight:600; margin-bottom:12px; display:flex; align-items:center; gap:8px; }
 #sidebar-header h1 svg { width:20px; height:20px; }
+#root-bar {
+  display:flex; align-items:center; gap:4px; margin-bottom:8px;
+  padding:4px 8px; background:var(--hover); border-radius:6px; font-size:12px; color:var(--text-dim);
+  cursor:pointer; overflow:hidden;
+}
+#root-bar:hover { background:#e8eaed; }
+#root-bar span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:rtl; text-align:left; }
+#root-input-wrap { display:none; margin-bottom:8px; }
+#root-input {
+  width:100%; padding:6px 8px; border:1px solid var(--accent); border-radius:6px;
+  font-size:12px; outline:none; font-family:monospace;
+}
 #search-box {
   width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px;
   font-size:14px; outline:none; transition:border .2s;
@@ -63,7 +75,6 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
 .dir-name:hover { background:var(--hover); }
 .dir-name .arrow { transition:transform .15s; font-size:10px; }
 .dir-name.collapsed .arrow { transform:rotate(-90deg); }
-.dir-files { }
 .dir-name.collapsed + .dir-files { display:none; }
 .file-item {
   padding:6px 16px 6px 28px; font-size:13px; cursor:pointer; display:flex;
@@ -85,6 +96,75 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
 .search-result-path { font-size:13px; font-weight:600; color:var(--accent); margin-bottom:4px; }
 .search-result-snippet { font-size:12px; color:var(--text-dim); line-height:1.5; }
 .search-result-snippet mark { background:var(--search-hl); padding:1px 2px; border-radius:2px; }
+
+/* === SIDEBAR COLLAPSE === */
+#sidebar { transition:width .2s, min-width .2s; }
+#sidebar.collapsed { width:0; min-width:0; border-right:none; overflow:hidden; }
+#sidebar-toggle {
+  position:absolute; top:8px; left:var(--sidebar-w); z-index:10;
+  width:24px; height:24px; border:1px solid var(--border); border-radius:4px;
+  background:var(--sidebar-bg); cursor:pointer; display:flex; align-items:center;
+  justify-content:center; font-size:12px; color:var(--text-dim); transition:left .2s;
+}
+#sidebar-toggle:hover { background:var(--hover); color:var(--accent); }
+#sidebar-toggle.collapsed-pos { left:0; }
+
+/* === ANNOTATION SIDEBAR === */
+:root { --anno-w: 280px; }
+#anno-panel {
+  width:0; min-width:0; background:var(--sidebar-bg); border-left:none;
+  display:flex; flex-direction:column; overflow:hidden; transition:width .2s, min-width .2s, border .2s;
+}
+#anno-panel.open { width:var(--anno-w); min-width:var(--anno-w); border-left:1px solid var(--border); }
+#anno-header {
+  padding:12px 16px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+}
+#anno-header h3 { font-size:14px; font-weight:600; }
+#anno-close { background:none; border:none; cursor:pointer; font-size:16px; color:var(--text-dim); padding:2px 6px; border-radius:4px; }
+#anno-close:hover { background:var(--hover); color:var(--text); }
+#anno-list { flex:1; overflow-y:auto; padding:8px 0; }
+.anno-card {
+  padding:10px 16px; border-bottom:1px solid var(--border); cursor:pointer; transition:background .1s;
+}
+.anno-card:hover { background:var(--hover); }
+.anno-card.active { background:var(--accent-light); }
+.anno-card-text { font-size:13px; color:var(--text); line-height:1.5; white-space:pre-wrap; word-break:break-word; }
+.anno-card-meta { font-size:11px; color:var(--text-dim); margin-top:6px; display:flex; align-items:center; justify-content:space-between; }
+.anno-card-actions { display:flex; gap:4px; }
+.anno-card-actions button {
+  background:none; border:none; cursor:pointer; font-size:11px; color:var(--text-dim); padding:2px 4px; border-radius:3px;
+}
+.anno-card-actions button:hover { background:var(--hover); color:var(--accent); }
+.anno-card-preview { font-size:11px; color:var(--text-dim); margin-bottom:4px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* paragraph annotation interaction */
+.markdown-body [data-p-idx] { position:relative; padding-right:28px; }
+.markdown-body [data-p-idx] .p-anno-btn {
+  position:absolute; right:2px; top:2px; width:22px; height:22px;
+  border:1px solid transparent; border-radius:4px; background:transparent;
+  cursor:pointer; display:none; align-items:center; justify-content:center;
+  font-size:13px; color:var(--text-dim); line-height:1;
+}
+.markdown-body [data-p-idx]:hover .p-anno-btn { display:flex; }
+.markdown-body [data-p-idx] .p-anno-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-light); }
+.markdown-body [data-p-idx].has-anno { background:rgba(227,179,65,.08); border-radius:4px; }
+
+/* anno input */
+.anno-input-wrap { padding:12px 16px; border-bottom:1px solid var(--border); }
+.anno-input-wrap textarea {
+  width:100%; min-height:60px; border:1px solid var(--border); border-radius:6px;
+  padding:8px; font-size:13px; font-family:inherit; resize:vertical; outline:none;
+}
+.anno-input-wrap textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(9,105,218,.12); }
+.anno-input-actions { display:flex; gap:8px; margin-top:8px; justify-content:flex-end; }
+.anno-input-actions button {
+  padding:4px 12px; border-radius:4px; font-size:12px; cursor:pointer; border:1px solid var(--border);
+  background:white; color:var(--text);
+}
+.anno-input-actions .anno-save { background:var(--accent); color:white; border-color:var(--accent); }
+.anno-input-actions .anno-save:hover { opacity:.9; }
+.anno-input-actions .anno-cancel:hover { background:var(--hover); }
 
 /* === MAIN CONTENT === */
 #main {
@@ -129,7 +209,7 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
     padding: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
   #welcome { display: none !important; }
-  #sidebar, #toolbar { display: none !important; }
+  #sidebar, #toolbar, #anno-panel, #sidebar-toggle { display: none !important; }
   #md-body { display: block !important; max-width: 100%; }
   #md-body .markdown-body { font-size: 12px; }
   /* 减少段落/标题内部分页，使导出更连续 */
@@ -157,6 +237,7 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
 </head>
 <body>
 <div id="app">
+  <button id="sidebar-toggle" title="折叠/展开侧边栏">◀</button>
   <!-- SIDEBAR -->
   <div id="sidebar">
     <div id="sidebar-header">
@@ -164,6 +245,13 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"/></svg>
         MD Reader
       </h1>
+      <div id="root-bar" onclick="App.showRootInput()" title="点击切换目录">
+        <svg viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1Z"/></svg>
+        <span id="root-display">loading...</span>
+      </div>
+      <div id="root-input-wrap">
+        <input id="root-input" type="text" placeholder="输入目录绝对路径，回车确认">
+      </div>
       <input id="search-box" type="text" placeholder="搜索文件名或全文内容...">
     </div>
     <div id="sidebar-tabs">
@@ -182,6 +270,10 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
         <span>收藏</span>
       </button>
+      <button class="toolbar-btn" id="btn-anno-toggle" title="批注" style="display:none">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.75.75 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+        <span>批注</span>
+      </button>
       <button class="toolbar-btn" id="btn-pdf" title="导出 PDF" style="display:none">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.75 7.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h3.5a.75.75 0 0 0 0-1.5h-3.5Z"/><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914-.013-.011Z"/></svg>
         导出 PDF
@@ -194,6 +286,22 @@ html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI
       </div>
       <div id="md-body"><div class="markdown-body"></div></div>
     </div>
+  </div>
+
+  <!-- ANNOTATION PANEL -->
+  <div id="anno-panel">
+    <div id="anno-header">
+      <h3>批注</h3>
+      <button id="anno-close" title="关闭">✕</button>
+    </div>
+    <div id="anno-input" class="anno-input-wrap" style="display:none">
+      <textarea id="anno-textarea" placeholder="输入批注内容..."></textarea>
+      <div class="anno-input-actions">
+        <button class="anno-cancel" onclick="Annotations.cancelInput()">取消</button>
+        <button class="anno-save" onclick="Annotations.saveFromInput()">保存</button>
+      </div>
+    </div>
+    <div id="anno-list"></div>
   </div>
 </div>
 
@@ -216,8 +324,67 @@ const App = {
       gfm: true, breaks: true,
     });
     this.bindEvents();
+    await this.loadRoot();
     await this.loadFiles();
     this.renderFileTree();
+    const lastFile = localStorage.getItem('md-reader-last-file');
+    if (lastFile && this.files.some(f => f.path === lastFile)) {
+      await this.openFile(lastFile);
+      const savedScroll = parseInt(localStorage.getItem('md-reader-last-scroll') || '0');
+      if (savedScroll) document.getElementById('content-area').scrollTop = savedScroll;
+    }
+  },
+
+  async loadRoot() {
+    try {
+      const res = await fetch('/api/root');
+      const data = await res.json();
+      this.rootPath = data.root || '';
+      document.getElementById('root-display').textContent = this.rootPath;
+      document.getElementById('root-display').title = this.rootPath;
+    } catch (e) { /* ignore */ }
+  },
+
+  showRootInput() {
+    const wrap = document.getElementById('root-input-wrap');
+    const input = document.getElementById('root-input');
+    const bar = document.getElementById('root-bar');
+    wrap.style.display = 'block';
+    bar.style.display = 'none';
+    input.value = this.rootPath || '';
+    input.focus();
+    input.select();
+  },
+
+  async changeRoot(newPath) {
+    if (!newPath.trim()) { this.hideRootInput(); return; }
+    try {
+      const res = await fetch('/api/set-root', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ root: newPath.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        this.rootPath = data.root;
+        document.getElementById('root-display').textContent = data.root;
+        document.getElementById('root-display').title = data.root;
+        await this.loadFiles();
+        this.renderFileTree();
+        this.currentPath = null;
+        document.getElementById('md-body').style.display = 'none';
+        document.getElementById('welcome').style.display = '';
+        document.getElementById('breadcrumb').textContent = '\u9009\u62e9\u4e00\u4e2a\u6587\u4ef6\u5f00\u59cb\u9605\u8bfb';
+      } else {
+        alert(data.error || '\u76ee\u5f55\u4e0d\u5b58\u5728');
+      }
+    } catch (e) { alert('\u5207\u6362\u5931\u8d25: ' + e.message); }
+    this.hideRootInput();
+  },
+
+  hideRootInput() {
+    document.getElementById('root-input-wrap').style.display = 'none';
+    document.getElementById('root-bar').style.display = '';
   },
 
   bindEvents() {
@@ -244,6 +411,28 @@ const App = {
 
     document.getElementById('btn-fav').addEventListener('click', () => this.toggleFavorite());
     document.getElementById('btn-pdf').addEventListener('click', () => this.exportPDF());
+    document.getElementById('btn-anno-toggle').addEventListener('click', () => Annotations.togglePanel());
+    document.getElementById('anno-close').addEventListener('click', () => Annotations.closePanel());
+
+    const sidebarToggle = document.getElementById('sidebar-toggle');
+    sidebarToggle.addEventListener('click', () => {
+      const sb = document.getElementById('sidebar');
+      sb.classList.toggle('collapsed');
+      const collapsed = sb.classList.contains('collapsed');
+      sidebarToggle.textContent = collapsed ? '▶' : '◀';
+      sidebarToggle.classList.toggle('collapsed-pos', collapsed);
+      localStorage.setItem('md-reader-sidebar', collapsed ? 'collapsed' : 'open');
+    });
+    if (localStorage.getItem('md-reader-sidebar') === 'collapsed') {
+      sidebarToggle.click();
+    }
+
+    const rootInput = document.getElementById('root-input');
+    rootInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.changeRoot(rootInput.value);
+      else if (e.key === 'Escape') this.hideRootInput();
+    });
+    rootInput.addEventListener('blur', () => this.hideRootInput());
   },
 
   async loadFiles() {
@@ -297,6 +486,7 @@ const App = {
     document.getElementById('breadcrumb').textContent = path;
     document.getElementById('btn-fav').style.display = '';
     document.getElementById('btn-pdf').style.display = '';
+    document.getElementById('btn-anno-toggle').style.display = '';
     this.updateFavButton();
 
     const mdBody = document.getElementById('md-body');
@@ -314,8 +504,15 @@ const App = {
       }
       const html = marked.parse(data.content);
       mdBody.querySelector('.markdown-body').innerHTML = html;
-      document.getElementById('content-area').scrollTop = 0;
+      Annotations.processParagraphs();
+      Annotations.load(path);
+      const contentArea = document.getElementById('content-area');
+      contentArea.scrollTop = 0;
       document.title = `${path.split('/').pop()} — MD Reader`;
+      localStorage.setItem('md-reader-last-file', path);
+      this._scrollListener && contentArea.removeEventListener('scroll', this._scrollListener);
+      this._scrollListener = () => localStorage.setItem('md-reader-last-scroll', contentArea.scrollTop);
+      contentArea.addEventListener('scroll', this._scrollListener, { passive: true });
     } catch (e) {
       mdBody.querySelector('.markdown-body').innerHTML = `<div class="empty-state">加载失败: ${e.message}</div>`;
     }
@@ -331,7 +528,7 @@ const App = {
     const fileList = document.getElementById('file-list');
     const searchResults = document.getElementById('search-results');
     fileList.style.display = 'none';
-    searchResults.style.display = '';
+    searchResults.style.display = 'block';
     searchResults.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
 
     let results;
@@ -401,6 +598,156 @@ const App = {
 
   escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; },
   escAttr(s) { return s.replace(/'/g, "\\'").replace(/"/g, '&quot;'); },
+};
+
+const Annotations = {
+  data: [],
+  editingId: null,
+  targetIdx: null,
+
+  togglePanel() {
+    document.getElementById('anno-panel').classList.toggle('open');
+  },
+  closePanel() {
+    document.getElementById('anno-panel').classList.remove('open');
+  },
+
+  processParagraphs() {
+    const body = document.querySelector('#md-body .markdown-body');
+    if (!body) return;
+    let idx = 0;
+    const blocks = body.querySelectorAll(':scope > p, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, :scope > blockquote, :scope > ul, :scope > ol, :scope > table, :scope > pre');
+    blocks.forEach(el => {
+      el.setAttribute('data-p-idx', idx);
+      const btn = document.createElement('span');
+      btn.className = 'p-anno-btn';
+      btn.textContent = '+';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        Annotations.startNew(parseInt(el.getAttribute('data-p-idx')), el);
+      });
+      el.prepend(btn);
+      idx++;
+    });
+  },
+
+  async load(path) {
+    try {
+      const res = await fetch(`/api/annotations?path=${encodeURIComponent(path)}`);
+      this.data = await res.json();
+    } catch (e) { this.data = []; }
+    this.renderCards();
+    this.applyHighlights();
+  },
+
+  renderCards() {
+    const list = document.getElementById('anno-list');
+    if (!this.data.length) {
+      list.innerHTML = '<div class="empty-state">暂无批注<br>悬浮段落，点击右侧 + 添加</div>';
+      return;
+    }
+    const sorted = [...this.data].sort((a, b) => (a.paragraph_index || 0) - (b.paragraph_index || 0));
+    let html = '';
+    for (const a of sorted) {
+      const time = a.updated ? a.updated.slice(5, 16).replace('T', ' ') : '';
+      const preview = App.escHtml(a.text_fragment || '').slice(0, 40);
+      html += `<div class="anno-card" data-anno-id="${a.id}" onclick="Annotations.scrollTo(${a.paragraph_index})">`;
+      if (preview) html += `<div class="anno-card-preview">${preview}...</div>`;
+      html += `<div class="anno-card-text">${App.escHtml(a.content)}</div>`;
+      html += `<div class="anno-card-meta"><span>${time}</span><div class="anno-card-actions">`;
+      html += `<button onclick="event.stopPropagation();Annotations.startEdit('${a.id}')">编辑</button>`;
+      html += `<button onclick="event.stopPropagation();Annotations.remove('${a.id}')">删除</button>`;
+      html += `</div></div></div>`;
+    }
+    list.innerHTML = html;
+  },
+
+  applyHighlights() {
+    document.querySelectorAll('.markdown-body [data-p-idx]').forEach(el => el.classList.remove('has-anno'));
+    for (const a of this.data) {
+      const el = document.querySelector(`.markdown-body [data-p-idx="${a.paragraph_index}"]`);
+      if (el) el.classList.add('has-anno');
+    }
+  },
+
+  scrollTo(idx) {
+    const el = document.querySelector(`.markdown-body [data-p-idx="${idx}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'background .3s';
+      el.style.background = '#fff8c5';
+      setTimeout(() => { el.style.background = ''; }, 1500);
+    }
+  },
+
+  startNew(idx, el) {
+    this.editingId = null;
+    this.targetIdx = idx;
+    const frag = (el.textContent || '').slice(0, 60).trim();
+    document.getElementById('anno-textarea').value = '';
+    document.getElementById('anno-textarea').dataset.fragment = frag;
+    document.getElementById('anno-input').style.display = '';
+    document.getElementById('anno-panel').classList.add('open');
+    document.getElementById('anno-textarea').focus();
+  },
+
+  startEdit(id) {
+    const a = this.data.find(x => x.id === id);
+    if (!a) return;
+    this.editingId = id;
+    this.targetIdx = a.paragraph_index;
+    document.getElementById('anno-textarea').value = a.content;
+    document.getElementById('anno-textarea').dataset.fragment = a.text_fragment || '';
+    document.getElementById('anno-input').style.display = '';
+    document.getElementById('anno-textarea').focus();
+  },
+
+  cancelInput() {
+    document.getElementById('anno-input').style.display = 'none';
+    document.getElementById('anno-textarea').value = '';
+    this.editingId = null;
+    this.targetIdx = null;
+  },
+
+  async saveFromInput() {
+    const text = document.getElementById('anno-textarea').value.trim();
+    if (!text || !App.currentPath) return;
+    const frag = document.getElementById('anno-textarea').dataset.fragment || '';
+    const annotation = {
+      id: this.editingId || ('a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+      paragraph_index: this.targetIdx,
+      text_fragment: frag,
+      content: text,
+    };
+    try {
+      const res = await fetch('/api/annotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: App.currentPath, annotation }),
+      });
+      const result = await res.json();
+      if (result.ok) this.data = result.annotations;
+    } catch (e) { /* silently fail */ }
+    this.cancelInput();
+    this.renderCards();
+    this.applyHighlights();
+  },
+
+  async remove(id) {
+    if (!App.currentPath) return;
+    if (!confirm('确定删除这条批注？')) return;
+    try {
+      const res = await fetch('/api/annotations/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: App.currentPath, id }),
+      });
+      const result = await res.json();
+      if (result.ok) this.data = result.annotations;
+    } catch (e) { /* silently fail */ }
+    this.renderCards();
+    this.applyHighlights();
+  },
 };
 
 document.addEventListener('DOMContentLoaded', () => App.init());
