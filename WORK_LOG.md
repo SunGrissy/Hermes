@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-10 - MD Reader 导出 PDF 完整内容且不分页
+
+**状态**: 验收通过
+
+**内容**:
+- index.html：增强 @media print 样式，使导出 PDF 时输出完整内容（解除 height/overflow 限制），并对标题/段落/列表等设置 break-inside: avoid 减少分页断裂
+
+---
+
 ## 2026-03-10 - Palace Engine 文档类型检测 + Feature 模式降级
 
 **状态**: 验收通过
