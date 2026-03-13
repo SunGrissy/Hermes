@@ -13,3 +13,6 @@
 [submodule "teamscore"]
 	path = teamscore
 	url = ../teamscore.git
+[submodule "md-reader"]
+	path = md-reader
+	url = ../md-reader.git
