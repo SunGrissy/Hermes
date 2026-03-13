@@ -40,6 +40,7 @@ ENV/
 # ========================
 backend/data/
 *.json.bak
+*.annotations.json
 
 # ========================
 # Environment / Secrets
