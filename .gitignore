@@ -11,6 +11,8 @@ Desktop.ini
 # ========================
 .cursor/*
 !.cursor/rules/
+!.cursor/skills/
+!.cursor/skills/resume-screening/
 
 # ========================
 # Python
