@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>Palace - Report</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<div class="layout">
+  <header class="top-bar">
+    <a href="/" class="logo">Palace <span class="logo-sub">Annotation System</span></a>
+    <div class="top-bar-right">
+      <div class="annotator-picker">
+        <label>Annotator:</label>
+        <select id="annotator-role">
+          <option value="producer">Producer</option>
+          <option value="pld">PLD</option>
+          <option value="pmo">PMO</option>
+          <option value="ple">PLE</option>
+          <option value="plt">PLT</option>
+        </select>
+        <input id="annotator-name" type="text" placeholder="Name" maxlength="20">
+      </div>
+      <span id="version-info" class="version-info"></span>
+    </div>
+  </header>
+
+  <main class="report-layout">
+    <!-- Left: report content -->
+    <section id="report-content" class="report-panel">
+      <p class="loading">Loading...</p>
+    </section>
+    <!-- Right: annotation sidebar -->
+    <aside id="annotation-sidebar" class="annotation-panel">
+      <div class="sidebar-header">
+        <h3>Annotations</h3>
+        <div id="anno-stats" class="anno-stats"></div>
+      </div>
+      <div id="anno-cards" class="anno-cards"></div>
+      <div class="sidebar-footer">
+        <button id="btn-submit" class="btn btn-primary btn-submit" disabled>Submit Annotations</button>
+        <div id="submit-status" class="submit-status"></div>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- DingTalk webhook modal -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Submit Annotations</h3>
+    <p>After submission, a DingTalk notification will be sent (optional).</p>
+    <label>DingTalk Webhook URL (optional):</label>
+    <input id="dingtalk-webhook" type="text" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." class="input-full">
+    <div class="modal-actions">
+      <button id="btn-cancel-submit" class="btn btn-secondary">Cancel</button>
+      <button id="btn-confirm-submit" class="btn btn-primary">Confirm Submit</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  PalaceApp.initReport();
+});
+</script>
+</body>
+</html>

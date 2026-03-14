@@ -197,6 +197,12 @@ _SENSITIVITY_RULE = (
 _DEFAULT_EXTRACTION_OUTPUT_SPEC = (
     "以 JSON 格式输出，包含三个字段：\n\n"
     "1. layer_overview: 数组，每层一项 {layer, ratio, completeness(complete/incomplete/fragment/absent), key_gaps}\n"
+    "   completeness 判定标准：\n"
+    "   - complete：该层核心交付物全部存在且内容充分，可直接流转下游\n"
+    "   - incomplete：多数核心交付物已有框架/内容，但存在明确缺项或细节不足（如有体验意图但缺优先级，有指标但缺目标值）\n"
+    "   - fragment：仅有少量碎片式内容，不构成完整的层级交付（如只有零散描述无结构化产出）\n"
+    "   - absent：该层内容完全不存在\n"
+    "   注意：一个层级只要搭建了结构框架且核心交付物过半有内容，就应判为 incomplete 而非 fragment\n"
     "2. checklist: 数组，每个核心交付物一项 {item_id, title, layer, status(present/incomplete/missing), extracted_text, gap_description, acceptance_criteria, group_id}\n"
     "   - item_id 用英文短横线格式如 what-intent, what-success-metrics, how-interaction\n"
     "   - group_id（可选）：语义相关的检查项共享同一 group_id（如术语表和信息架构共享 'terminology'），合成时会合并为一条\n"
@@ -258,6 +264,10 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
     if knowledge:
         parts.append(f"\n## 参考知识\n\n{knowledge}")
 
+    layer_focus = role_config.get("layer_focus", "")
+    if layer_focus:
+        parts.append(f"\n## 层级聚焦（必须遵守）\n\n{layer_focus}")
+
     dims = role_config.get("review_dimensions", [])
     if dims:
         dim_text = "\n".join(f"- {d}" for d in dims)
@@ -289,6 +299,10 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
         "3. perspective_summary: \u4e00\u6bb5\u8bdd\u6982\u8ff0\u4f60\u7684\u603b\u4f53\u5224\u65ad\n"
         "4. issue_assessments: \u6570\u7ec4\uff0c\u5bf9 checklist \u4e2d\u6bcf\u4e2a\u4e0e\u4f60\u89c6\u89d2\u76f8\u5173\u7684\u9879\u7ed9\u51fa\u8bc4\u4f30\n"
         "   \u6bcf\u9879: {item_id, impact(pass/concern/block), comment}\n"
+        "   impact 判定标准：\n"
+        "   - block：仅用于——(1)下游团队完全无法启动工作（关键参数/定义全部缺失），或(2)存在数据/体验安全风险（可能导致不可逆的用户损失）\n"
+        "   - concern：有明确缺口会影响交付质量，但下游可以有条件地启动工作\n"
+        "   - pass：达标或仅有改进建议（'表述可以更精炼''建议补充'类反馈用 pass + comment）\n"
         "5. supplementary_findings: \u6570\u7ec4\uff08\u53ef\u4e3a\u7a7a\uff09\uff0cchecklist \u6ca1\u8986\u76d6\u5230\u7684\u989d\u5916\u53d1\u73b0\n"
         "   \u6bcf\u9879: {item_id(\u65b0\u7684), title, layer, description, impact, suggested_action}\n"
         "6. highlights: \u6570\u7ec4\uff080-3 \u9879\uff09\uff0c\u4ec5\u6807\u8bb0\u8d85\u51fa\u89c4\u5212\u57fa\u7ebf\u7684\u5de7\u601d\u3002\n"
@@ -310,7 +324,13 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
         "- \u8bca\u65ad\u8bed\u53e5\u533a\u5206\u4e8b\u5b9e\u4e0e\u5224\u65ad\uff1a\u5148\u5f15\u7528\u6587\u6863\u539f\u6587\u72b6\u6001\uff08\u5982'\u6587\u6863\u6807\u6ce8XX\u5f85\u786e\u8ba4'\uff09\uff0c"
         "\u518d\u7ed9\u51fa\u5f71\u54cd\u5224\u65ad\uff08\u5982'\u5bfc\u81f4\u4e0b\u6e38\u65e0\u6cd5XX'\uff09\uff0c\u907f\u514d\u8bfb\u8005\u5206\u4e0d\u6e05\u662f\u6587\u6863\u81ea\u8ff0\u8fd8\u662f\u5f15\u64ce\u8bca\u65ad\n"
         "- \u5efa\u8bae\u5fc5\u987b\u5177\u4f53\u53ef\u64cd\u4f5c\uff1a\u8bf4\u660e'\u8c01\u505a\u4ec0\u4e48\u3001\u8fbe\u5230\u4ec0\u4e48\u72b6\u6001'\uff0c"
-        "\u907f\u514d\u7b3c\u7edf\u7684\u6d41\u7a0b\u6027\u8868\u8ff0\uff08\u5982'\u786e\u4fddXX\u4ecb\u5165'\uff09"
+        "\u907f\u514d\u7b3c\u7edf\u7684\u6d41\u7a0b\u6027\u8868\u8ff0\uff08\u5982'\u786e\u4fddXX\u4ecb\u5165'\uff09\n"
+        "\n跨角色去重规则（重要）：\n"
+        "- gap_description 中已陈述的事实状态，不要在 comment 中重复描述\n"
+        "- 聚焦你的视角独特能贡献的判断：PLD 聚焦内容方向和决策依据链；"
+        "PLE 聚焦对体验设计的影响和可转化性；PLT 聚焦技术可行性和实现成本\n"
+        "- 如果某个 checklist 项与你的视角完全无关，给 pass 评级即可，不要为凑内容而复述其他视角的判断\n"
+        "- comment 应只包含你的角色能独特贡献的信息，不要猜测或代替其他角色发言"
     )
     return "\n".join(parts)
 
@@ -538,8 +558,9 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
             })
 
     total_cl = len(checklist)
-    present_cl = sum(1 for c in checklist if c.get("status") == "present")
-    doc_completeness_score = round(present_cl / total_cl * 10) if total_cl else 0
+    _STATUS_WEIGHT = {"present": 1.0, "incomplete": 0.5, "missing": 0.0}
+    weighted = sum(_STATUS_WEIGHT.get(c.get("status", "missing"), 0.0) for c in checklist)
+    doc_completeness_score = round(weighted / total_cl * 10) if total_cl else 0
 
     return {
         "overall_verdict": overall,
