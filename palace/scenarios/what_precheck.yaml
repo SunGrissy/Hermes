@@ -11,8 +11,17 @@ assessment_roles: [pld, ple, plt]
 role_overrides:
   ple:
     authority: concern
+    layer_focus: >-
+      本场景为 WHAT 预审。你的职责是评估 WHAT 内容能否顺利转化为交互设计方案。
+      聚焦可设计性风险（如体验意图模糊导致 UX 无法启动），
+      不要展开 HOW 层的交互方案细节（如具体控件选型、动效方案）。
   plt:
     authority: concern
+    layer_focus: >-
+      本场景为 WHAT 预审。你的职责是识别 WHAT 内容中的技术可行性风险
+      （如"40人实时排行需评估性能方案"），而不是给出 BUILD 层技术方案
+      （如"建议用 WebSocket"、"需要超时重试"）。
+      只标记风险点和需要确认的技术前提，不展开实现方案。
 
 synthesis_rules:
   any_block_means_block: true

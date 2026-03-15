@@ -11,6 +11,8 @@ Desktop.ini
 # ========================
 .cursor/*
 !.cursor/rules/
+!.cursor/skills/
+!.cursor/skills/resume-screening/
 
 # ========================
 # Python
@@ -40,6 +42,7 @@ ENV/
 # ========================
 backend/data/
 *.json.bak
+*.annotations.json
 
 # ========================
 # Environment / Secrets
@@ -66,6 +69,11 @@ package-lock.json
 .coverage
 htmlcov/
 .screenshots/
+
+# Palace Engine test/run outputs
+palace/_test_*
+palace/_run_*
+palace/report_*
 
 # ========================
 # Assets (uploaded images etc.)
