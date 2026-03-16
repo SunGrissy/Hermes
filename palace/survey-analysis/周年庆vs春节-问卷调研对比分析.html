@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>问卷调研对比分析 | 途游休闲捕鱼</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c0e14;
+  --surface: #151820;
+  --surface2: #1c2030;
+  --border: #2a2f42;
+  --text: #e2e4ea;
+  --text2: #8b90a5;
+  --accent: #4e7cff;
+  --accent2: #00d4aa;
+  --warn: #ff6b6b;
+  --gold: #ffc554;
+  --pink: #e966a0;
+  --font: 'Noto Sans SC', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ''; position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: radial-gradient(ellipse at 30% 20%, rgba(78,124,255,.06) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, rgba(0,212,170,.04) 0%, transparent 50%);
+  pointer-events: none; z-index: 0;
+}
+.wrap { max-width: 1200px; margin: 0 auto; padding: 24px 20px; position: relative; z-index: 1; }
+
+/* Header */
+.header { text-align: center; padding: 48px 0 32px; }
+.header h1 {
+  font-size: 2.2rem; font-weight: 900; letter-spacing: -1px;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.header .sub { color: var(--text2); font-size: .9rem; margin-top: 8px; font-weight: 300; }
+
+/* KPI cards */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 22px 20px; position: relative; overflow: hidden;
+  transition: transform .2s, border-color .3s;
+}
+.kpi:hover { transform: translateY(-3px); border-color: var(--accent); }
+.kpi::after {
+  content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2)); opacity: 0;
+  transition: opacity .3s;
+}
+.kpi:hover::after { opacity: 1; }
+.kpi .label { font-size: .78rem; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; }
+.kpi .val { font-size: 2rem; font-weight: 900; font-family: var(--mono); margin: 6px 0 2px; }
+.kpi .note { font-size: .75rem; color: var(--text2); }
+.kpi .trend { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: .72rem; font-weight: 500; margin-left: 6px; }
+.kpi .trend.up { background: rgba(0,212,170,.15); color: var(--accent2); }
+.kpi .trend.down { background: rgba(255,107,107,.15); color: var(--warn); }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+.tab-btn {
+  padding: 12px 24px; font-size: .88rem; font-weight: 500; color: var(--text2);
+  background: none; border: none; cursor: pointer; position: relative;
+  transition: color .2s; font-family: var(--font);
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); }
+.tab-btn.active::after {
+  content: ''; position: absolute; bottom: -1px; left: 12px; right: 12px; height: 2px;
+  background: var(--accent); border-radius: 2px;
+}
+.tab-panel { display: none; animation: fadeUp .35s ease; }
+.tab-panel.active { display: block; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Sections */
+.section { margin-bottom: 36px; }
+.section-title {
+  font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; padding-left: 14px;
+  border-left: 3px solid var(--accent); line-height: 1.4;
+}
+.section-title .badge {
+  display: inline-block; font-size: .65rem; font-weight: 500; padding: 2px 8px;
+  border-radius: 4px; vertical-align: middle; margin-left: 8px;
+  background: rgba(78,124,255,.15); color: var(--accent);
+}
+
+/* Chart containers */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.chart-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 22px; position: relative;
+}
+.chart-card.full { grid-column: 1 / -1; }
+.chart-card h3 { font-size: .85rem; font-weight: 500; color: var(--text2); margin-bottom: 14px; }
+.chart-card canvas { max-height: 300px; }
+
+/* Data tables */
+.data-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.data-table th {
+  text-align: left; padding: 10px 14px; color: var(--text2); font-weight: 500;
+  border-bottom: 1px solid var(--border); font-size: .78rem; text-transform: uppercase; letter-spacing: .5px;
+}
+.data-table td { padding: 10px 14px; border-bottom: 1px solid rgba(42,47,66,.5); }
+.data-table tr:hover td { background: rgba(78,124,255,.04); }
+.data-table .bar-cell { width: 40%; }
+.mini-bar {
+  height: 22px; border-radius: 4px; position: relative; overflow: hidden;
+  background: rgba(78,124,255,.08);
+}
+.mini-bar .fill {
+  height: 100%; border-radius: 4px; transition: width .6s cubic-bezier(.22,1,.36,1);
+  display: flex; align-items: center; padding-left: 8px; font-size: .72rem; font-weight: 500; color: #fff;
+  min-width: 32px;
+}
+.mini-bar .fill.blue { background: linear-gradient(90deg, #4e7cff, #6b9aff); }
+.mini-bar .fill.green { background: linear-gradient(90deg, #00d4aa, #40e8c4); }
+.mini-bar .fill.gold { background: linear-gradient(90deg, #ffc554, #ffe08a); color: #333; }
+.mini-bar .fill.pink { background: linear-gradient(90deg, #e966a0, #ff8ec5); }
+.mini-bar .fill.red { background: linear-gradient(90deg, #ff6b6b, #ff9a9a); }
+
+/* Insight boxes */
+.insight {
+  background: linear-gradient(135deg, rgba(78,124,255,.08), rgba(0,212,170,.05));
+  border: 1px solid rgba(78,124,255,.2); border-radius: 12px;
+  padding: 18px 22px; margin: 16px 0; font-size: .85rem; line-height: 1.7;
+}
+.insight strong { color: var(--accent); }
+.insight .tag {
+  display: inline-block; font-size: .68rem; font-weight: 700; padding: 2px 8px;
+  border-radius: 4px; margin-right: 6px; vertical-align: middle;
+}
+.insight .tag.p0 { background: rgba(255,107,107,.2); color: var(--warn); }
+.insight .tag.p1 { background: rgba(255,197,84,.2); color: var(--gold); }
+.insight .tag.p2 { background: rgba(78,124,255,.2); color: var(--accent); }
+
+/* Comparison arrows */
+.cmp-arrow { font-family: var(--mono); font-size: .82rem; }
+.cmp-arrow.up { color: var(--accent2); }
+.cmp-arrow.down { color: var(--warn); }
+.cmp-arrow.flat { color: var(--text2); }
+
+/* Recommendation cards */
+.rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.rec-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 20px; transition: border-color .3s;
+}
+.rec-card:hover { border-color: var(--accent); }
+.rec-card .pri { font-size: .68rem; font-weight: 700; padding: 3px 10px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+.rec-card .pri.p0 { background: rgba(255,107,107,.15); color: var(--warn); }
+.rec-card .pri.p1 { background: rgba(255,197,84,.15); color: var(--gold); }
+.rec-card .pri.p2 { background: rgba(78,124,255,.15); color: var(--accent); }
+.rec-card h4 { font-size: .92rem; font-weight: 700; margin-bottom: 8px; }
+.rec-card p { font-size: .82rem; color: var(--text2); line-height: 1.6; }
+
+/* Design review */
+.design-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.design-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px;
+}
+.design-card h4 { font-size: .92rem; margin-bottom: 12px; }
+.design-card ul { list-style: none; padding: 0; }
+.design-card li { font-size: .82rem; line-height: 1.7; color: var(--text2); padding: 4px 0; padding-left: 18px; position: relative; }
+.design-card li::before { content: ''; position: absolute; left: 0; top: 12px; width: 6px; height: 6px; border-radius: 50%; }
+.design-card.pro li::before { background: var(--accent2); }
+.design-card.con li::before { background: var(--warn); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chart-grid, .rec-grid, .design-grid { grid-template-columns: 1fr; }
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .header h1 { font-size: 1.6rem; }
+  .tabs { overflow-x: auto; }
+  .tab-btn { padding: 10px 16px; font-size: .82rem; white-space: nowrap; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="header">
+  <h1>问卷调研对比分析</h1>
+  <div class="sub">途游休闲捕鱼 · 周年庆 vs 春节版本 · 2026</div>
+</div>
+
+<div class="kpi-row">
+  <div class="kpi">
+    <div class="label">周年庆 · 满意度</div>
+    <div class="val" style="color:var(--accent)">4.07</div>
+    <div class="note">n=2,894 · Top2 72.4%</div>
+  </div>
+  <div class="kpi">
+    <div class="label">春节 · 满意度</div>
+    <div class="val" style="color:var(--accent2)">4.00</div>
+    <div class="note">n=2,459 · Top2 69.5% <span class="trend down">-0.07</span></div>
+  </div>
+  <div class="kpi">
+    <div class="label">春节视听好评</div>
+    <div class="val" style="color:var(--gold)">66.9%</div>
+    <div class="note">认为视觉表现显著提升</div>
+  </div>
+  <div class="kpi">
+    <div class="label">春节第一痛点</div>
+    <div class="val" style="color:var(--warn)">53.2%</div>
+    <div class="note">福利金币跟不上消耗速度</div>
+  </div>
+</div>
+<div class="tabs">
+  <button class="tab-btn active" data-tab="compare">对比总览</button>
+  <button class="tab-btn" data-tab="anniv">周年庆版本</button>
+  <button class="tab-btn" data-tab="spring">春节版本</button>
+  <button class="tab-btn" data-tab="design">问卷设计评析</button>
+  <button class="tab-btn" data-tab="action">行动建议</button>
+</div>
+<!-- ============ TAB: COMPARE ============ -->
+<div class="tab-panel active" id="panel-compare">
+
+  <div class="section">
+    <div class="section-title">满意度分布对比</div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>评分分布（1-5分）</h3><canvas id="chartSatCmp"></canvas></div>
+      <div class="chart-card"><h3>满意度结构</h3><canvas id="chartSatStructure"></canvas></div>
+    </div>
+    <div class="insight">
+      <span class="tag p1">P1</span>
+      春节版本满意度均分 <strong>4.00</strong>，较周年庆 <strong>4.07</strong> 下滑 0.07 分。Top2（4+5分）从 72.4% 降至 69.5%，Bot2（1+2分）从 14.9% 升至 16.2%。尽管视听投入获得 66.9% 好评，但<strong>未能完全抵消经济体感恶化</strong>带来的负面影响。
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">答题质量对比</div>
+    <div class="chart-card full">
+      <h3>答题时长分布</h3>
+      <table class="data-table">
+        <thead><tr><th>指标</th><th>周年庆</th><th>春节</th><th>变化</th></tr></thead>
+        <tbody>
+          <tr><td>中位时长</td><td>138 秒</td><td>114 秒</td><td><span class="cmp-arrow down">-24s</span></td></tr>
+          <tr><td>P25-P75</td><td>97s ~ 196s</td><td>80s ~ 163s</td><td><span class="cmp-arrow flat">整体缩短</span></td></tr>
+          <tr><td>速答率 (&lt;30s)</td><td>0.2%</td><td>0.7%</td><td><span class="cmp-arrow down">+0.5pp</span></td></tr>
+          <tr><td>开放题填写率</td><td>52.7%</td><td>48.1%</td><td><span class="cmp-arrow down">-4.6pp</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="insight">
+      春节问卷精简至 13 题（周年庆 15 题），答题中位时长下降 24 秒，用户体验改善。但速答率翻了 3 倍（0.2%→0.7%），<strong>开放题填写率也降了 4.6pp</strong>，需关注数据清洗规则。
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">宝藏守卫认知度对比 <span class="badge">同类问题</span></div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>周年庆 · 守卫认知率（n=2,894）</h3>
+        <canvas id="chartGuardCmpA"></canvas>
+      </div>
+      <div class="chart-card">
+        <h3>春节 · 守卫认知率（n=2,459）</h3>
+        <canvas id="chartGuardCmpS"></canvas>
+      </div>
+    </div>
+    <div class="chart-card full">
+      <h3>认知度结构指标对比</h3>
+      <table class="data-table">
+        <thead><tr><th>指标</th><th>周年庆</th><th>春节</th><th>变化</th></tr></thead>
+        <tbody>
+          <tr><td>Top1 认知率</td><td>56.0%（时光种子）</td><td>48.8%（春三十娘）</td><td><span class="cmp-arrow down">-7.2pp</span></td></tr>
+          <tr><td>Top3 平均认知率</td><td>54.8%</td><td>45.5%</td><td><span class="cmp-arrow down">-9.3pp</span></td></tr>
+          <tr><td>最高-最低 极差</td><td>46.6pp</td><td>15.1pp</td><td><span class="cmp-arrow up">更均匀</span></td></tr>
+          <tr><td>≥30% 认知率的守卫数</td><td>4 / 9</td><td>6 / 6</td><td><span class="cmp-arrow up">全部达标</span></td></tr>
+          <tr><td>≤15% 认知率的守卫数</td><td>5 / 9</td><td>0 / 6</td><td><span class="cmp-arrow up">消除了长尾</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="insight">
+      <span class="tag p1">P1</span>
+      两版守卫不同，但认知度结构呈现<strong>此消彼长的矛盾</strong>：<br>
+      <strong>好消息</strong>：春节版极差从 46.6pp 缩至 15.1pp，不再有"被忽视的守卫"（周年庆有 5 个 ≤15%），大话西游 IP 的群体辨识度确实更均衡。<br>
+      <strong>坏消息</strong>：Top1 从 56% 降到 48.8%，Top3 均值从 54.8% 降到 45.5%——<strong>没有"明星守卫"了</strong>。均匀≠好，如果没有一个守卫能打穿 50% 认知度形成话题效应，整体传播势能会更弱。<br>
+      <strong>建议</strong>：每版保留至少 1 个"旗舰守卫"做重点资源倾斜（目标 ≥55%），其余守卫维持当前均匀水平即可。
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">开放题主题对比</div>
+    <div class="chart-grid">
+      <div class="chart-card full"><h3>关键词主题频率对比</h3><canvas id="chartThemeCmp"></canvas></div>
+    </div>
+    <div class="insight">
+      <span class="tag p0">P0</span>
+      "希望提高爆率" 从 8.1% <strong>腰斩至 4.1%</strong>，但 "爆率低" 的抱怨不减（6.9%→7.7%）。玩家不是不在意了，而是<strong>放弃了表达改善期望</strong>——这是比显性不满更危险的信号。"太贵/经济压力" 从 2.5% 升至 3.6%，负面评价翻倍（1.1%→2.0%）。
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ TAB: ANNIVERSARY ============ -->
+<div class="tab-panel" id="panel-anniv">
+
+  <div class="section">
+    <div class="section-title">整体满意度 <span class="badge">均分 4.07</span></div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>满意度分布</h3><canvas id="chartAnnivSat"></canvas></div>
+      <div class="chart-card"><h3>黄金觉醒场满意度</h3><canvas id="chartGoldenSat"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">王者远征评价 <span class="badge">4维度</span></div>
+    <div class="chart-card full"><canvas id="chartExpedition"></canvas></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">宝藏守卫认知度</div>
+    <div class="chart-card full" id="guardianTableAnniv">
+      <h3>多选题 · 有印象且尝试捕获（n=2,894）</h3>
+      <table class="data-table" id="tblGuardianAnniv"></table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">玩家偏好</div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>大奖偏好</h3><canvas id="chartPrize"></canvas></div>
+      <div class="chart-card"><h3>关注内容</h3><canvas id="chartFocus"></canvas></div>
+      <div class="chart-card"><h3>特权期待</h3><canvas id="chartPrivilege"></canvas></div>
+      <div class="chart-card"><h3>回流驱动（曾离开者 n=1,814）</h3><canvas id="chartReturn"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">流失画像</div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>是否离开过</h3><canvas id="chartChurn"></canvas></div>
+      <div class="chart-card"><h3>最长离开时长</h3><canvas id="chartChurnDur"></canvas></div>
+    </div>
+    <div class="insight">
+      <strong>62.7%</strong> 用户曾离开过游戏，其中 <strong>42.7%</strong> 离开超 3 个月（深度流失）。回流第一驱动力是"免费福利多"（43.8%），而非新内容或新玩法。
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ TAB: SPRING ============ -->
+<div class="tab-panel" id="panel-spring">
+
+  <div class="section">
+    <div class="section-title">整体满意度 <span class="badge">均分 4.00</span></div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>满意度分布</h3><canvas id="chartSpringSat"></canvas></div>
+      <div class="chart-card"><h3>视听效果评价</h3><canvas id="chartVisual"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">核心模块评价</div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>福利金币感受</h3><canvas id="chartCoins"></canvas></div>
+      <div class="chart-card"><h3>大话西游IP认知</h3><canvas id="chartIP"></canvas></div>
+      <div class="chart-card"><h3>奇缘商铺体验</h3><canvas id="chartShop"></canvas></div>
+      <div class="chart-card"><h3>白晶晶神翼评价</h3><canvas id="chartWing"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">新玩法感受</div>
+    <div class="chart-grid">
+      <div class="chart-card"><h3>四象神君（多选）</h3><canvas id="chartGods"></canvas></div>
+      <div class="chart-card"><h3>绝杀令（多选）</h3><canvas id="chartKill"></canvas></div>
+      <div class="chart-card full"><h3>天下第一争霸赛（多选）</h3><canvas id="chartChamp"></canvas></div>
+    </div>
+    <div class="insight">
+      <span class="tag p0">P0</span>
+      绝杀令 "无感" 占比最高（<strong>33.3%</strong>），"看别人用觉得酷"(31.7%) 远超 "自己用觉得爽"(26.1%)——核心创新<strong>只惠及头部玩家</strong>。争霸赛 "保榜压力大" 排首位（<strong>38.5%</strong>），负面感受超过正面。
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">宝藏守卫认知度（春节）</div>
+    <div class="chart-card full">
+      <h3>多选题 · 有印象且尝试捕获（n=2,459）</h3>
+      <table class="data-table" id="tblGuardianSpring"></table>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ TAB: DESIGN ============ -->
+<div class="tab-panel" id="panel-design">
+
+  <div class="section">
+    <div class="section-title">周年庆问卷设计评析 <span class="badge">15 题</span></div>
+    <div class="design-grid">
+      <div class="design-card pro">
+        <h4 style="color:var(--accent2)">优点</h4>
+        <ul>
+          <li>多选题设计合理，能捕捉多维偏好（守卫认知、大奖偏好、特权期待）</li>
+          <li>回流问题形成完整漏斗：是否离开 → 离开多久 → 什么能拉回来</li>
+          <li>王者远征拆为 4 个子维度（整体/趣味/难度/丰富度），颗粒度适当</li>
+          <li>开放题填写率 52.7%，说明题目引导得当</li>
+        </ul>
+      </div>
+      <div class="design-card con">
+        <h4 style="color:var(--warn)">不足</h4>
+        <ul>
+          <li>1-5 分量表出现 U 型分布（5 分 + 1 分 = 71.7%），中间刻度被压缩，区分度差</li>
+          <li>15 题 + 大量多选子项偏长，6.6% 用户超 300 秒存在疲劳效应</li>
+          <li>Q6 选项混杂"感受"和"行为"（使用冰冻锁定是行为非感受），不利分析</li>
+          <li>建议改用 7 点量表或语义差分量表增加区分度</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">春节问卷设计评析 <span class="badge">13 题</span></div>
+    <div class="design-grid">
+      <div class="design-card pro">
+        <h4 style="color:var(--accent2)">优点</h4>
+        <ul>
+          <li>精简至 13 题，中位时长缩短到 114 秒，用户体验更好</li>
+          <li>单选题选项为完整态度描述（如福利金币 4 选项），信息量远大于纯数字</li>
+          <li>视听效果做纵向对比设计（"相比往年"），有参照锚点</li>
+          <li>问题与版本重点一一对应，覆盖了 IP/商铺/配器/神翼等核心系统</li>
+        </ul>
+      </div>
+      <div class="design-card con">
+        <h4 style="color:var(--warn)">不足</h4>
+        <ul>
+          <li>砍掉了回流相关问题（是否离开/离开多久/回流驱动），对存量产品是关键数据缺口</li>
+          <li>绝杀令和争霸赛的多选选项间无互斥逻辑，存在矛盾选择</li>
+          <li>速答率从 0.2% 升至 0.7%（翻 3 倍），数据清洗规则需收紧</li>
+          <li>缺少跨版本锚点题，无法建立严格的纵向可比基准</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">跨版本对比设计问题</div>
+    <div class="insight">
+      <strong>1. 量表不一致：</strong>周年庆用纯数字 1-5 分，春节部分题改为语义选项（A/B/C/D），两种量表回答倾向不同，严格来说不能直接比较均值。<br>
+      <strong>2. 守卫认知不可比：</strong>两版上线守卫完全不同，认知率对比没有统一基准。建议保留 1-2 个跨版本参照守卫。<br>
+      <strong>3. 缺少共同锚点：</strong>建议固定 3-5 道跨版本标准化问题（NPS、整体满意度、最大痛点单选），确保纵向可比。
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ TAB: ACTION ============ -->
+<div class="tab-panel" id="panel-action">
+
+  <div class="section">
+    <div class="section-title">核心结论</div>
+    <div class="chart-card full">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>结论</th><th>数据支撑</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>满意度微降但未崩盘，视听投入获认可但未能抵消经济体感恶化</td><td>均分 4.07→4.00；视听好评 66.9%</td></tr>
+          <tr><td>2</td><td>"金币消耗速度 > 福利补给" 是春节版本第一痛点</td><td>53.2% 觉得福利金币几下就打光了</td></tr>
+          <tr><td>3</td><td>核心创新（绝杀令）覆盖面不足，只惠及头部玩家</td><td>33.3% 无感 + 31.7% 仅旁观</td></tr>
+          <tr><td>4</td><td>争霸赛压力 > 吸引力</td><td>38.5% 觉得压力大，排名第一</td></tr>
+          <tr><td>5</td><td>IP 返场仍有效但审美疲劳苗头已现</td><td>82.9% 正面 vs 17.1% 审美疲劳</td></tr>
+          <tr><td>6</td><td>玩家诉求从 "期望改善" 转向 "消极接受"</td><td>"希望提高爆率" 减半，"爆率低" 不减</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">行动建议</div>
+    <div class="rec-grid">
+      <div class="rec-card">
+        <div class="pri p0">P0 · 紧急</div>
+        <h4>金币消耗体感优化</h4>
+        <p>拉长福利金币的"有效游戏时长"：降低高炮倍场最低消耗、增加分次领取机制、设置"福利场"专用低消耗区。</p>
+      </div>
+      <div class="rec-card">
+        <div class="pri p0">P0 · 紧急</div>
+        <h4>新机制普惠化</h4>
+        <p>绝杀令等核心创新要让更多玩家"亲手体验到"——引入限时体验券、低门槛触发场景、新手引导展示。</p>
+      </div>
+      <div class="rec-card">
+        <div class="pri p1">P1 · 重要</div>
+        <h4>争霸赛减压</h4>
+        <p>保榜压力是最大负面反馈（38.5%）。引入"赛段保底"、降低掉榜惩罚、增加阶段性奖励缓冲。</p>
+      </div>
+      <div class="rec-card">
+        <div class="pri p1">P1 · 重要</div>
+        <h4>恢复回流调研</h4>
+        <p>下版问卷必须恢复"是否离开/离开多久/回流驱动"三连题，这对存量博弈期产品是不可或缺的核心数据。</p>
+      </div>
+      <div class="rec-card">
+        <div class="pri p2">P2 · 优化</div>
+        <h4>问卷标准化</h4>
+        <p>固定 3-5 道跨版本锚点题（NPS、整体满意度、Top1 痛点、Top1 期待），确保纵向趋势可追踪。</p>
+      </div>
+      <div class="rec-card">
+        <div class="pri p2">P2 · 优化</div>
+        <h4>配器系统简化</h4>
+        <p>12.2% 表示 "逻辑太复杂没搞懂"。优化配器系统引导说明，简化组合路径，降低认知门槛。</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</div><!-- end .wrap -->
+<script>
+/* ── Tab switching ── */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const panel = document.getElementById('panel-' + btn.dataset.tab);
+    panel.classList.add('active');
+    panel.querySelectorAll('canvas').forEach(c => {
+      const ci = Chart.getChart(c);
+      if (ci) ci.resize();
+    });
+  });
+});
+
+const C = Chart;
+C.defaults.color = '#8b90a5';
+C.defaults.borderColor = 'rgba(42,47,66,.5)';
+C.defaults.font.family = "'Noto Sans SC', sans-serif";
+C.defaults.font.size = 12;
+C.defaults.plugins.legend.labels.usePointStyle = true;
+C.defaults.plugins.legend.labels.pointStyleWidth = 10;
+
+const BLUE = '#4e7cff', GREEN = '#00d4aa', GOLD = '#ffc554', PINK = '#e966a0', RED = '#ff6b6b';
+const BLUE_A = 'rgba(78,124,255,.7)', GREEN_A = 'rgba(0,212,170,.7)';
+
+/* ── Helper: horizontal bar ── */
+function hBar(ctx, labels, data, colors, title) {
+  return new C(ctx, {
+    type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, barThickness: 24 }] },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: i => i.raw + '%' } } },
+      scales: { x: { max: 100, ticks: { callback: v => v + '%' } }, y: { grid: { display: false } } }
+    }
+  });
+}
+function doughnut(ctx, labels, data, colors) {
+  return new C(ctx, {
+    type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0, spacing: 2 }] },
+    options: {
+      responsive: true, cutout: '60%',
+      plugins: { legend: { position: 'bottom', labels: { padding: 12 } }, tooltip: { callbacks: { label: i => i.label + ': ' + i.raw + '%' } } }
+    }
+  });
+}
+
+/* ── Compare Tab ── */
+new C(document.getElementById('chartSatCmp'), {
+  type: 'bar',
+  data: {
+    labels: ['1分', '2分', '3分', '4分', '5分'],
+    datasets: [
+      { label: '周年庆', data: [11.0, 3.9, 12.7, 11.6, 60.7], backgroundColor: BLUE_A, borderRadius: 4, barPercentage: .7 },
+      { label: '春节', data: [12.2, 4.0, 14.3, 10.7, 58.9], backgroundColor: GREEN_A, borderRadius: 4, barPercentage: .7 }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { tooltip: { callbacks: { label: i => i.dataset.label + ': ' + i.raw + '%' } } },
+    scales: { y: { ticks: { callback: v => v + '%' } } }
+  }
+});
+
+new C(document.getElementById('chartSatStructure'), {
+  type: 'bar',
+  data: {
+    labels: ['Top2 (4+5分)', 'Mid (3分)', 'Bot2 (1+2分)'],
+    datasets: [
+      { label: '周年庆', data: [72.4, 12.7, 14.9], backgroundColor: BLUE_A, borderRadius: 4 },
+      { label: '春节', data: [69.5, 14.3, 16.2], backgroundColor: GREEN_A, borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true, indexAxis: 'y',
+    plugins: { tooltip: { callbacks: { label: i => i.dataset.label + ': ' + i.raw + '%' } } },
+    scales: { x: { ticks: { callback: v => v + '%' } } }
+  }
+});
+
+/* ── Guardian Awareness Compare ── */
+hBar(document.getElementById('chartGuardCmpA'),
+  ['时光种子', '招财猫王', '欢庆蛋糕', '朱雀·焚天', '白虎·斩雷', '玄武·碎星', '黑暗使徒', '冠军鲨鱼', '旋风鲨鱼'],
+  [56.0, 54.6, 53.9, 36.7, 15.1, 15.0, 12.7, 9.6, 9.4],
+  [BLUE, BLUE, BLUE, GREEN, '#8b90a5', '#8b90a5', '#8b90a5', '#8b90a5', '#8b90a5']
+);
+hBar(document.getElementById('chartGuardCmpS'),
+  ['春三十娘', '玄武神君', '凌云马', '月光宝盒', '白晶晶', '大圣娶亲'],
+  [48.8, 46.3, 41.4, 41.0, 37.2, 33.7],
+  [GREEN, GREEN, GREEN, GREEN, GREEN, GREEN]
+);
+
+new C(document.getElementById('chartThemeCmp'), {
+  type: 'bar',
+  data: {
+    labels: ['爆率低/难打', '希望提高爆率', '太贵/经济压力', '希望更多免费', '正面评价', '负面评价', '倍率相关'],
+    datasets: [
+      { label: '周年庆', data: [6.9, 8.1, 2.5, 5.4, 18.0, 1.1, 11.7], backgroundColor: BLUE_A, borderRadius: 4 },
+      { label: '春节', data: [7.7, 4.1, 3.6, 4.3, 21.7, 2.0, 7.9], backgroundColor: GREEN_A, borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: { tooltip: { callbacks: { label: i => i.dataset.label + ': ' + i.raw + '%' } } },
+    scales: { y: { ticks: { callback: v => v + '%' } } }
+  }
+});
+
+/* ── Anniversary Tab ── */
+doughnut(document.getElementById('chartAnnivSat'),
+  ['5分', '4分', '3分', '2分', '1分'],
+  [60.7, 11.6, 12.7, 3.9, 11.0],
+  [BLUE, GREEN, GOLD, PINK, RED]
+);
+doughnut(document.getElementById('chartGoldenSat'),
+  ['5分', '4分', '3分', '2分', '1分'],
+  [56.4, 10.8, 14.8, 6.0, 11.9],
+  [BLUE, GREEN, GOLD, PINK, RED]
+);
+
+new C(document.getElementById('chartExpedition'), {
+  type: 'radar',
+  data: {
+    labels: ['整体满意度', '玩法趣味性', '奖励获取难度', '奖励丰富程度'],
+    datasets: [{ label: '王者远征', data: [3.98, 3.96, 3.94, 3.93], backgroundColor: 'rgba(78,124,255,.15)', borderColor: BLUE, pointBackgroundColor: BLUE, pointRadius: 5 }]
+  },
+  options: {
+    responsive: true,
+    scales: {
+      r: {
+        min: 3.0, max: 5.0,
+        ticks: { stepSize: .5, color: '#8b90a5', backdropColor: 'transparent', font: { size: 11 } },
+        grid: { color: 'rgba(139,144,165,.3)', lineWidth: 1 },
+        angleLines: { color: 'rgba(139,144,165,.3)', lineWidth: 1 },
+        pointLabels: { color: '#e2e4ea', font: { size: 13, weight: '500' } }
+      }
+    }
+  }
+});
+
+function renderGuardianTable(tableId, data) {
+  const tbl = document.getElementById(tableId);
+  let html = '<thead><tr><th>守卫名称</th><th>认知率</th><th class="bar-cell">分布</th></tr></thead><tbody>';
+  const maxPct = Math.max(...data.map(d => d[1]));
+  data.sort((a, b) => b[1] - a[1]);
+  const colors = [BLUE, GREEN, GOLD, PINK, RED, '#a78bfa', '#f97316', '#06b6d4', '#84cc16'];
+  data.forEach((d, i) => {
+    const w = (d[1] / maxPct * 100).toFixed(1);
+    const c = colors[i % colors.length];
+    html += '<tr><td>' + d[0] + '</td><td>' + d[1] + '%</td><td class="bar-cell"><div class="mini-bar"><div class="fill" style="width:' + w + '%;background:' + c + '">' + d[1] + '%</div></div></td></tr>';
+  });
+  html += '</tbody>';
+  tbl.innerHTML = html;
+}
+renderGuardianTable('tblGuardianAnniv', [
+  ['时光种子', 56.0], ['招财猫王', 54.6], ['欢庆蛋糕', 53.9], ['朱雀战士·焚天', 36.7],
+  ['白虎战士·斩雷', 15.1], ['玄武战士·碎星', 15.0], ['黑暗使徒·末日', 12.7],
+  ['冠军鲨鱼', 9.6], ['旋风鲨鱼', 9.4]
+]);
+
+hBar(document.getElementById('chartPrize'),
+  ['战魂', '神器', '英雄', '翅膀', '无偏好'],
+  [55.2, 47.3, 37.1, 18.3, 13.8],
+  [BLUE, GREEN, GOLD, PINK, '#8b90a5']
+);
+hBar(document.getElementById('chartFocus'),
+  ['活动免费福利', '新宝藏守卫', '抽奖活动', '战魂/羁绊', '小游戏新玩法'],
+  [76.3, 41.6, 40.8, 31.8, 20.5],
+  [BLUE, GREEN, GOLD, PINK, '#a78bfa']
+);
+hBar(document.getElementById('chartPrivilege'),
+  ['定制变色昵称', '限时称号', '专属头像框', '自定义头像', '表情包'],
+  [55.6, 42.8, 37.0, 33.4, 20.7],
+  [BLUE, GREEN, GOLD, PINK, '#a78bfa']
+);
+hBar(document.getElementById('chartReturn'),
+  ['免费福利多', '高倍守卫', '送技能卡与月卡', '充值回馈力度', '喜欢的守卫题材', '荣誉外观/头像框'],
+  [43.8, 31.2, 18.7, 18.6, 11.6, 8.1],
+  [BLUE, GREEN, GOLD, PINK, '#a78bfa', '#f97316']
+);
+
+doughnut(document.getElementById('chartChurn'),
+  ['曾离开', '从未离开'], [62.7, 37.3], [RED, GREEN]
+);
+doughnut(document.getElementById('chartChurnDur'),
+  ['三个月及以上', '一周至一个月', '一至三个月'], [42.7, 31.8, 25.6], [RED, GOLD, GREEN]
+);
+
+/* ── Spring Tab ── */
+doughnut(document.getElementById('chartSpringSat'),
+  ['5分', '4分', '3分', '2分', '1分'],
+  [58.9, 10.7, 14.3, 4.0, 12.2],
+  [BLUE, GREEN, GOLD, PINK, RED]
+);
+doughnut(document.getElementById('chartVisual'),
+  ['提升显著', '基本持平', '有所下降'],
+  [66.9, 23.6, 9.5],
+  [GREEN, GOLD, RED]
+);
+doughnut(document.getElementById('chartCoins'),
+  ['几下就打光了', '支撑30分钟+', '买礼包补充', '习惯性领'],
+  [53.2, 25.7, 12.9, 8.1],
+  [RED, GREEN, GOLD, '#8b90a5']
+);
+doughnut(document.getElementById('chartIP'),
+  ['经典重现越多越好', '比较认可', '审美疲劳'],
+  [49.4, 33.5, 17.1],
+  [GREEN, GOLD, RED]
+);
+doughnut(document.getElementById('chartShop'),
+  ['非常良心', '力度尚可', '没兴趣'],
+  [54.4, 39.9, 5.7],
+  [GREEN, GOLD, RED]
+);
+doughnut(document.getElementById('chartWing'),
+  ['非常美观', '尚可', '没关注', '一般'],
+  [50.2, 17.7, 17.1, 15.0],
+  [GREEN, GOLD, '#8b90a5', RED]
+);
+
+hBar(document.getElementById('chartGods'),
+  ['羁绊效果有吸引力', '神君外观很酷', '关注增益', '没怎么关注'],
+  [43.8, 41.2, 29.0, 27.9],
+  [BLUE, GREEN, GOLD, '#8b90a5']
+);
+hBar(document.getElementById('chartKill'),
+  ['对此没什么感觉', '看别人用觉得酷', '极致爽快', '比较满意', '表现力不足'],
+  [33.3, 31.7, 26.1, 23.3, 19.2],
+  ['#8b90a5', GOLD, GREEN, BLUE, RED]
+);
+hBar(document.getElementById('chartChamp'),
+  ['保榜压力大', '进度奖有吸引力', '天幕有吸引力', '没怎么注意'],
+  [38.5, 34.4, 33.7, 30.0],
+  [RED, GREEN, BLUE, '#8b90a5']
+);
+
+renderGuardianTable('tblGuardianSpring', [
+  ['春三十娘', 48.8], ['执明玄武神君', 46.3], ['凌云马', 41.4],
+  ['月光宝盒', 41.0], ['白晶晶', 37.2], ['大圣娶亲', 33.7]
+]);
+</script>
+</body>
+</html>
