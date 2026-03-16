@@ -1,9 +1,111 @@
-"""Palace v0.4 schemas — two-step extraction + assessment architecture.
+"""Palace v0.5 schemas — two-step extraction + assessment with doc classification.
 
+Step 0 (Classification): auto-detect or accept user-provided doc_type → resolve review_tier
 Step 1 (Extraction): boundary role extracts structured checklist from document.
 Step 2 (Assessment): PLD/PLE/PLT each assess checklist items from their perspective.
 Synthesis: code merges extraction + assessments into REPORT_DATA for rendering.
+
+Doc types: full_spec / delta / campaign / hotfix / version
+Review tiers: full / incremental / campaign / minimal / version
 """
+
+# ---------------------------------------------------------------------------
+# Doc classification constants
+# ---------------------------------------------------------------------------
+
+DOC_TYPES = ("full_spec", "delta", "campaign", "hotfix", "version")
+
+REVIEW_TIERS = ("full", "incremental", "campaign", "minimal", "version")
+
+TIER_RESOLUTION = {
+    ("full_spec", "slow"): "full",
+    ("full_spec", "fast"): "full",
+    ("full_spec", ""): "full",
+    ("delta", "fast"): "incremental",
+    ("delta", "slow"): "incremental",
+    ("delta", ""): "incremental",
+    ("campaign", "fast"): "campaign",
+    ("campaign", "slow"): "campaign",
+    ("campaign", ""): "campaign",
+    ("hotfix", "fast"): "minimal",
+    ("hotfix", "slow"): "minimal",
+    ("hotfix", ""): "minimal",
+    ("version", ""): "version",
+    ("version", "slow"): "version",
+    ("version", "fast"): "version",
+}
+
+TIER_SEVERITY_MAP = {
+    "full": {
+        "what-intent": "P0",
+        "what-success-metrics": "P0",
+        "what-content-structure": "P1",
+        "what-decision-list": "P1",
+        "what-interaction-input": "P1",
+        "how-interaction": "P1",
+        "how-info-architecture": "P1",
+        "build-architecture": "P1",
+        "build-api": "P1",
+        "build-performance": "P1",
+        "doc-terminology": "P1",
+        "doc-pipeline-weight": "P1",
+        "doc-scope": "P1",
+        "_default_block": "P0",
+        "_default_concern": "P1",
+        "_default_missing": "P1",
+        "_default_other": "P2",
+    },
+    "incremental": {
+        "what-intent": "P2",
+        "what-success-metrics": "P0",
+        "what-content-structure": "P1",
+        "what-decision-list": "P1",
+        "what-interaction-input": "P2",
+        "how-interaction": "SKIP",
+        "how-info-architecture": "SKIP",
+        "build-architecture": "SKIP",
+        "build-api": "SKIP",
+        "build-performance": "SKIP",
+        "doc-terminology": "P2",
+        "doc-pipeline-weight": "P2",
+        "doc-scope": "P1",
+        "delta-base-system": "P0",
+        "delta-diff-completeness": "P0",
+        "delta-compatibility": "P0",
+        "delta-downstream-impact": "P1",
+        "_default_block": "P0",
+        "_default_concern": "P1",
+        "_default_missing": "P2",
+        "_default_other": "P3",
+    },
+    "campaign": {
+        "what-intent": "P1",
+        "what-success-metrics": "P0",
+        "what-content-structure": "P0",
+        "what-decision-list": "P1",
+        "what-interaction-input": "P1",
+        "how-interaction": "P1",
+        "build-architecture": "P2",
+        "build-api": "P2",
+        "build-performance": "P2",
+        "_default_block": "P0",
+        "_default_concern": "P1",
+        "_default_missing": "P1",
+        "_default_other": "P2",
+    },
+    "minimal": {
+        "what-intent": "SKIP",
+        "what-success-metrics": "SKIP",
+        "what-content-structure": "SKIP",
+        "what-decision-list": "SKIP",
+        "what-interaction-input": "SKIP",
+        "build-architecture": "SKIP",
+        "_default_block": "P0",
+        "_default_concern": "P1",
+        "_default_missing": "P2",
+        "_default_other": "P3",
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Step 1: Extraction output (boundary role)
@@ -52,14 +154,19 @@ EXTRACTION_SCHEMA = {
     "properties": {
         "detected_doc_type": {
             "type": "string",
-            "enum": ["version", "feature"],
-            "description": "Pre-analysis classification: version plan or single feature doc",
+            "enum": ["full_spec", "delta", "campaign", "hotfix", "version"],
+            "description": "Document type classification: full_spec (new system), delta (variant), campaign (ops activity), hotfix, version (release plan)",
+        },
+        "review_tier": {
+            "type": "string",
+            "enum": ["full", "incremental", "campaign", "minimal", "version"],
+            "description": "Resolved review tier based on doc_type + pipeline_weight",
         },
         "layer_overview": {"type": "array", "items": LAYER_OVERVIEW_ITEM},
         "checklist": {"type": "array", "items": CHECKLIST_ITEM},
         "cross_layer_observations": {"type": "array", "items": CROSS_LAYER_OBS},
     },
-    "required": ["detected_doc_type", "layer_overview", "checklist", "cross_layer_observations"],
+    "required": ["detected_doc_type", "review_tier", "layer_overview", "checklist", "cross_layer_observations"],
 }
 
 # ---------------------------------------------------------------------------

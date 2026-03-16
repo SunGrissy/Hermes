@@ -1,11 +1,9 @@
-"""Palace report renderer v0.6 — information density and architecture overhaul.
+"""Palace report renderer v0.7 — doc classification and review tier display.
 
-Changes from v0.5:
-- Dashboard: two tables (overview + dimensions), filtered top concerns, compressed highlights
-- Version issues: merge role comments into bullet points (no role labels)
-- Feature precheck: merge perspectives into bullet list with dimension tags
-- Version report: 2+2 section structure (risk+feature / pipeline+rhythm)
-- Doc completeness score in overview table
+Changes from v0.6:
+- Display doc_type and review_tier in report header/meta
+- Tier-specific report titling and context notes
+- Skipped items no longer appear in report
 """
 from __future__ import annotations
 
@@ -83,7 +81,9 @@ def generate_markdown(
 
     doc_score = data.get("doc_completeness_score")
     _meta(lines, feature_owner, pipeline_weight, pipeline_stage, document_layer, ov, bc, cc,
-          doc_completeness_score=doc_score)
+          doc_completeness_score=doc_score,
+          doc_type=data.get("detected_doc_type", ""),
+          review_tier=data.get("review_tier", ""))
 
     if layer_overview:
         _layer_overview(lines, layer_overview)
@@ -164,10 +164,31 @@ def _detect_primary_layer(scenario_id: str, document_layer: str) -> str:
 # Section renderers (shared)
 # ============================================================
 
+_DOC_TYPE_LABEL = {
+    "full_spec": "\u5168\u65b0\u7cfb\u7edf/\u73a9\u6cd5",
+    "delta": "\u5b58\u91cf\u7cfb\u7edf\u53d8\u4f53",
+    "campaign": "\u8fd0\u8425\u6d3b\u52a8",
+    "hotfix": "\u7d27\u6025\u4fee\u590d",
+    "version": "\u7248\u672c\u89c4\u5212",
+}
+
+_TIER_LABEL = {
+    "full": "\u5168\u91cf\u5ba1\u67e5",
+    "incremental": "\u589e\u91cf\u5ba1\u67e5",
+    "campaign": "\u6d3b\u52a8\u5ba1\u67e5",
+    "minimal": "\u6700\u5c0f\u5ba1\u67e5",
+    "version": "\u7248\u672c\u5ba1\u67e5",
+}
+
+
 def _meta(lines, owner, weight, stage, dl, ov, bc, cc,
-          doc_completeness_score=None):
+          doc_completeness_score=None, doc_type="", review_tier=""):
     lines.append("| \u9879\u76ee | \u5185\u5bb9 |")
     lines.append("|------|------|")
+    if doc_type:
+        lines.append(f"| \u6587\u6863\u7c7b\u578b | {_DOC_TYPE_LABEL.get(doc_type, doc_type)} |")
+    if review_tier:
+        lines.append(f"| \u5ba1\u67e5\u6863\u4f4d | {_TIER_LABEL.get(review_tier, review_tier)} |")
     if owner:
         lines.append(f"| Owner | {owner} |")
     if dl:

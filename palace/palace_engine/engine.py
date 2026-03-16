@@ -17,7 +17,10 @@ import time
 
 from .config import PLAYBOOK_PATH, get_provider, load_role, load_scenario
 from .knowledge import get_knowledge_for_role, load_playbook
-from .schemas import EXTRACTION_SCHEMA, ROLE_ASSESSMENT_SCHEMA, ROLE_REVIEW_SCHEMA
+from .schemas import (
+    DOC_TYPES, EXTRACTION_SCHEMA, ROLE_ASSESSMENT_SCHEMA, ROLE_REVIEW_SCHEMA,
+    TIER_RESOLUTION, TIER_SEVERITY_MAP,
+)
 
 logger = logging.getLogger("palace.engine")
 
@@ -42,6 +45,7 @@ async def run_scenario(
     topic_text: str,
     provider=None,
     document_layer: str = "",
+    doc_type: str = "",
 ) -> dict:
     scenario = load_scenario(scenario_id)
     if provider is None:
@@ -52,6 +56,7 @@ async def run_scenario(
     if extraction_role_id:
         return await _run_two_step(
             provider, scenario, extraction_role_id, topic_text, document_layer,
+            user_doc_type=doc_type,
         )
     return await _run_legacy_parallel(
         provider, scenario, topic_text, document_layer,
@@ -62,27 +67,35 @@ async def run_scenario(
 # Two-step flow (v0.4)
 # ============================================================
 
-async def _run_two_step(provider, scenario, extraction_role_id, topic_text, document_layer):
+async def _run_two_step(provider, scenario, extraction_role_id, topic_text, document_layer,
+                        user_doc_type=""):
     playbook_text = load_playbook(PLAYBOOK_PATH)
-    mode = scenario.get("mode", "review")
 
     extraction_role = load_role(extraction_role_id)
     extraction_result = await _invoke_extraction(
         provider, extraction_role, topic_text, playbook_text, scenario, document_layer,
+        user_doc_type=user_doc_type,
     )
 
     assessment_role_ids = scenario.get("assessment_roles", [])
     assessment_roles = [load_role(r) for r in assessment_role_ids]
 
+    detected_doc_type = _resolve_doc_type(extraction_result, user_doc_type, scenario)
+    pipeline_weight = scenario.get("pipeline_weight", "")
+    review_tier = _resolve_review_tier(detected_doc_type, pipeline_weight)
+
+    extraction_result["detected_doc_type"] = detected_doc_type
+    extraction_result["review_tier"] = review_tier
+
     logger.info(
-        "scenario=%s extraction=%s assessors=%s",
+        "scenario=%s extraction=%s assessors=%s doc_type=%s tier=%s",
         scenario["id"], extraction_role_id, assessment_role_ids,
+        detected_doc_type, review_tier,
     )
 
-    detected_doc_type = extraction_result.get("detected_doc_type", "")
     effective_scenario = scenario
-    if detected_doc_type == "feature" and scenario.get("target") == "version":
-        logger.info("doc type mismatch: scenario target=version but doc detected as feature")
+    if detected_doc_type != "version" and scenario.get("target") == "version":
+        logger.info("doc type mismatch: scenario target=version but doc detected as %s", detected_doc_type)
         effective_scenario = _adapt_scenario_for_feature(scenario)
 
     tasks = [
@@ -103,24 +116,47 @@ async def _run_two_step(provider, scenario, extraction_role_id, topic_text, docu
         else:
             assessments.append(result)
 
-    report_data = synthesize_v2(extraction_result, assessments, scenario)
-    if detected_doc_type:
-        report_data["detected_doc_type"] = detected_doc_type
+    report_data = synthesize_v2(extraction_result, assessments, scenario,
+                                review_tier=review_tier)
+    report_data["detected_doc_type"] = detected_doc_type
+    report_data["review_tier"] = review_tier
     if errors:
         report_data["errors"] = errors
 
     logger.info(
-        "scenario=%s verdict=%s blockers=%d concerns=%d",
+        "scenario=%s verdict=%s blockers=%d concerns=%d tier=%s",
         scenario["id"], report_data["overall_verdict"],
         report_data["blocker_count"], report_data["concern_count"],
+        review_tier,
     )
     return report_data
 
 
-async def _invoke_extraction(provider, role_config, topic_text, playbook_text, scenario, document_layer):
+def _resolve_doc_type(extraction_result: dict, user_doc_type: str, scenario: dict) -> str:
+    """Determine final doc_type: user override > LLM detection > scenario default."""
+    if user_doc_type and user_doc_type in DOC_TYPES:
+        return user_doc_type
+    detected = extraction_result.get("detected_doc_type", "")
+    if detected in DOC_TYPES:
+        return detected
+    if detected == "feature":
+        return "full_spec"
+    target = scenario.get("target", "feature")
+    return "version" if target == "version" else "full_spec"
+
+
+def _resolve_review_tier(doc_type: str, pipeline_weight: str) -> str:
+    """Resolve review tier from doc_type + pipeline_weight lookup table."""
+    return TIER_RESOLUTION.get((doc_type, pipeline_weight),
+           TIER_RESOLUTION.get((doc_type, ""), "full"))
+
+
+async def _invoke_extraction(provider, role_config, topic_text, playbook_text, scenario, document_layer,
+                              user_doc_type=""):
     knowledge = get_knowledge_for_role(role_config, playbook_text)
     system_prompt = _build_extraction_prompt(role_config, knowledge, scenario)
-    user_prompt = _build_extraction_user_prompt(topic_text, document_layer, scenario)
+    user_prompt = _build_extraction_user_prompt(topic_text, document_layer, scenario,
+                                                user_doc_type=user_doc_type)
 
     start = time.monotonic()
     result = await provider.complete(system_prompt, user_prompt, EXTRACTION_SCHEMA)
@@ -194,22 +230,42 @@ _SENSITIVITY_RULE = (
     '  GOOD: 「核心Feature建议配置backup Owner，降低人力单点风险」\n'
 )
 
+_DOC_TYPE_GUIDE = (
+    "## 文档类型分类（必须输出）\n\n"
+    "在开始结构化提取之前，先判断文档类型。输出到 detected_doc_type 字段：\n\n"
+    "| 类型 | 识别线索 |\n"
+    "|------|----------|\n"
+    "| full_spec | 全新系统/玩法，从零设计，需要完整 WHAT/HOW/BUILD |\n"
+    "| delta | 存量系统的变体/配置变更，文档标注了复用/基于某系统 |\n"
+    "| campaign | 运营活动（限时、周期性），侧重玩法完整性和数值 |\n"
+    "| hotfix | 紧急修复，篇幅短，聚焦影响范围和回滚方案 |\n"
+    "| version | 版本规划文档，包含多 Feature 排布和版本级维度 |\n\n"
+    "同时输出 review_tier 字段（根据 doc_type 决定）：\n"
+    "- full_spec → full\n"
+    "- delta → incremental\n"
+    "- campaign → campaign\n"
+    "- hotfix → minimal\n"
+    "- version → version\n"
+)
+
 _DEFAULT_EXTRACTION_OUTPUT_SPEC = (
-    "以 JSON 格式输出，包含三个字段：\n\n"
-    "1. layer_overview: 数组，每层一项 {layer, ratio, completeness(complete/incomplete/fragment/absent), key_gaps}\n"
+    "以 JSON 格式输出，包含以下字段：\n\n"
+    "0. detected_doc_type: 文档类型（full_spec/delta/campaign/hotfix/version）\n"
+    "1. review_tier: 审查档位（full/incremental/campaign/minimal/version）\n"
+    "2. layer_overview: 数组，每层一项 {layer, ratio, completeness(complete/incomplete/fragment/absent), key_gaps}\n"
     "   completeness 判定标准：\n"
     "   - complete：该层核心交付物全部存在且内容充分，可直接流转下游\n"
     "   - incomplete：多数核心交付物已有框架/内容，但存在明确缺项或细节不足（如有体验意图但缺优先级，有指标但缺目标值）\n"
     "   - fragment：仅有少量碎片式内容，不构成完整的层级交付（如只有零散描述无结构化产出）\n"
     "   - absent：该层内容完全不存在\n"
     "   注意：一个层级只要搭建了结构框架且核心交付物过半有内容，就应判为 incomplete 而非 fragment\n"
-    "2. checklist: 数组，每个核心交付物一项 {item_id, title, layer, status(present/incomplete/missing), extracted_text, gap_description, acceptance_criteria, group_id}\n"
+    "3. checklist: 数组，每个核心交付物一项 {item_id, title, layer, status(present/incomplete/missing), extracted_text, gap_description, acceptance_criteria, group_id}\n"
     "   - item_id 用英文短横线格式如 what-intent, what-success-metrics, how-interaction\n"
     "   - group_id（可选）：语义相关的检查项共享同一 group_id（如术语表和信息架构共享 'terminology'），合成时会合并为一条\n"
     "   - extracted_text 填写从文档中找到的相关原文（至少 2-3 段完整上下文，避免断章取义）\n"
     "   - gap_description 说明缺了什么或哪里不完整\n"
     "   - acceptance_criteria 描述'什么算完成'的验收标准（具体、可检验的交付物描述）\n"
-    "3. cross_layer_observations: 数组 {category(intent/readiness/annotate), description, suggestion}\n"
+    "4. cross_layer_observations: 数组 {category(intent/readiness/annotate), description, suggestion}\n"
     "   - intent: 体验意图在跨层传递中的一致性风险\n"
     "   - readiness: 下游团队启动工作所需的前置条件缺口\n"
     "   - annotate: 跨层引用的标注建议（参考 vs 决策）"
@@ -228,27 +284,41 @@ def _build_extraction_prompt(role_config, knowledge, scenario):
         parts.append(f"\n## 检查维度\n\n{dim_text}")
 
     parts.append(_SENSITIVITY_RULE)
+    parts.append(f"\n{_DOC_TYPE_GUIDE}")
 
     output_spec = role_config.get("extraction_output_spec", _DEFAULT_EXTRACTION_OUTPUT_SPEC)
     parts.append(f"\n## 输出要求\n\n{output_spec.strip()}")
     return "\n".join(parts)
 
 
-def _build_extraction_user_prompt(topic_text, document_layer, scenario=None):
+def _build_extraction_user_prompt(topic_text, document_layer, scenario=None,
+                                   user_doc_type=""):
     target = (scenario or {}).get("target", "feature")
+    doc_type_hint = ""
+    if user_doc_type and user_doc_type in DOC_TYPES:
+        _TYPE_LABELS = {
+            "full_spec": "全新系统/玩法（full_spec），审查档位 full",
+            "delta": "存量系统变体（delta），审查档位 incremental",
+            "campaign": "运营活动（campaign），审查档位 campaign",
+            "hotfix": "紧急修复（hotfix），审查档位 minimal",
+            "version": "版本规划（version），审查档位 version",
+        }
+        label = _TYPE_LABELS.get(user_doc_type, user_doc_type)
+        doc_type_hint = f"\n\n文档类型已由用户指定：{label}。请直接使用此分类，不需要重新判断。"
+
     if target == "version":
-        return f"\u8bf7\u5bf9\u4ee5\u4e0b\u7248\u672c\u89c4\u5212\u6587\u6863\u8fdb\u884c\u7ed3\u6784\u5316\u63d0\u53d6\uff1a\n\n{topic_text}"
+        return f"请对以下版本规划文档进行结构化提取：\n\n{topic_text}{doc_type_hint}"
     layer_hint = ""
     if document_layer:
         layer_labels = {
-            "WHAT": "WHAT\uff08\u4f53\u9a8c\u8bbe\u8ba1\uff09\u5c42\u6587\u6863",
-            "HOW": "HOW\uff08\u4ea4\u4e92\u65b9\u6848\uff09\u5c42\u6587\u6863",
-            "BUILD": "BUILD\uff08\u7cfb\u7edf\u65b9\u6848\uff09\u5c42\u6587\u6863",
-            "mixed": "\u6df7\u5408\u5c42\u7ea7\u6587\u6863",
+            "WHAT": "WHAT（体验设计）层文档",
+            "HOW": "HOW（交互方案）层文档",
+            "BUILD": "BUILD（系统方案）层文档",
+            "mixed": "混合层级文档",
         }
-        label = layer_labels.get(document_layer.upper(), f"{document_layer} \u5c42\u6587\u6863")
-        layer_hint = f"\n\n\u6587\u6863\u5c42\u7ea7\u58f0\u660e: {label}"
-    return f"\u8bf7\u5bf9\u4ee5\u4e0b Feature \u6587\u6863\u8fdb\u884c\u7ed3\u6784\u5316\u63d0\u53d6\uff1a\n\n{topic_text}{layer_hint}"
+        label = layer_labels.get(document_layer.upper(), f"{document_layer} 层文档")
+        layer_hint = f"\n\n文档层级声明: {label}"
+    return f"请对以下 Feature 文档进行结构化提取：\n\n{topic_text}{layer_hint}{doc_type_hint}"
 
 
 def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
@@ -335,22 +405,83 @@ def _build_assessment_prompt(role_config, knowledge, authority, scenario=None):
     return "\n".join(parts)
 
 
+_TIER_ASSESSMENT_HINTS = {
+    "full": "",
+    "incremental": (
+        "\n\n**审查档位：增量（incremental）。**"
+        "这是一份存量系统的变体/配置文档。审查重点：\n"
+        "- 差异描述是否完整、与基础系统的衔接风险\n"
+        "- 参数/配置完整性（这才是增量文档的核心）\n"
+        "- 体验意图声明缺失不应视为阻断，降级为建议即可\n"
+        "- 系统架构、接口定义等已有模块无需重审，跳过\n"
+    ),
+    "campaign": (
+        "\n\n**审查档位：活动（campaign）。**"
+        "这是一份运营活动文档。审查重点：\n"
+        "- 玩法闭环和数值合理性（核心审查项）\n"
+        "- 体验节奏和情绪设计\n"
+        "- 系统架构方案优先级较低（通常复用已有系统）\n"
+    ),
+    "minimal": (
+        "\n\n**审查档位：最小（minimal）。**"
+        "这是一份紧急修复文档。仅关注：\n"
+        "- 影响范围是否明确\n"
+        "- 回滚方案是否存在\n"
+        "- 其他维度一律跳过\n"
+    ),
+    "version": (
+        "\n\n**文档类型检测：版本规划文档。**"
+        "请聚焦版本级维度（快慢轨配比、排期合理性、Owner负荷等）进行评审。"
+    ),
+}
+
+
 def _build_assessment_user_prompt(topic_text, extraction_result, document_layer):
-    checklist_json = json.dumps(extraction_result, ensure_ascii=False, indent=2)
+    review_tier = extraction_result.get("review_tier", "full")
+    doc_type = extraction_result.get("detected_doc_type", "")
+
+    filtered_extraction = _filter_skip_items(extraction_result, review_tier)
+    checklist_json = json.dumps(filtered_extraction, ensure_ascii=False, indent=2)
+
     layer_hint = f"\n文档层级: {document_layer}" if document_layer else ""
-    doc_type_hint = ""
-    detected = extraction_result.get("detected_doc_type", "")
-    if detected == "feature":
-        doc_type_hint = (
-            "\n\n**文档类型检测：单 Feature 文档（非版本规划）。**"
+    tier_hint = _TIER_ASSESSMENT_HINTS.get(review_tier, "")
+    if not tier_hint and doc_type not in ("version", ""):
+        tier_hint = (
+            f"\n\n**文档类型：{doc_type}。**"
             "请聚焦 Feature 内部有意义的维度进行评审，"
             "跳过纯版本级维度（如版本体验主线、快慢轨配比、多Feature互补性等）。"
             "不要因版本级信息缺失而扣分。"
         )
     return (
         f"## 文档结构提取结果\n\n```json\n{checklist_json}\n```\n\n"
-        f"## 原始文档{layer_hint}\n\n{topic_text}{doc_type_hint}"
+        f"## 原始文档{layer_hint}\n\n{topic_text}{tier_hint}"
     )
+
+
+def _filter_skip_items(extraction_result: dict, review_tier: str) -> dict:
+    """Remove checklist items that are SKIP in the current review tier.
+
+    Returns a shallow copy with filtered checklist so the LLM never sees
+    irrelevant items — saving tokens and preventing noise.
+    """
+    tier_map = TIER_SEVERITY_MAP.get(review_tier)
+    if not tier_map:
+        return extraction_result
+
+    skip_ids = {k for k, v in tier_map.items() if v == "SKIP" and not k.startswith("_")}
+    if not skip_ids:
+        return extraction_result
+
+    original = extraction_result.get("checklist", [])
+    filtered = [item for item in original if item.get("item_id") not in skip_ids]
+    skipped_count = len(original) - len(filtered)
+
+    if skipped_count == 0:
+        return extraction_result
+
+    result = {**extraction_result, "checklist": filtered}
+    logger.info("tier=%s filtered %d SKIP items from assessment prompt", review_tier, skipped_count)
+    return result
 
 
 # ============================================================
@@ -459,7 +590,8 @@ def _classify_reminder(item: dict, scenario: dict) -> str:
     return ""
 
 
-def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> dict:
+def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict,
+                  review_tier: str = "") -> dict:
     checklist = extraction.get("checklist", [])
     layer_overview = extraction.get("layer_overview", [])
     cross_layer = extraction.get("cross_layer_observations", [])
@@ -517,7 +649,7 @@ def synthesize_v2(extraction: dict, assessments: list[dict], scenario: dict) -> 
     rhythm_reminders = _dedup_reminders(rhythm_reminders)
     reminders = pipeline_reminders + rhythm_reminders
 
-    _assign_severity(quality_issues, scenario)
+    _assign_severity(quality_issues, scenario, review_tier=review_tier)
     for r in reminders:
         r["severity"] = "INFO"
 
@@ -745,30 +877,50 @@ def _build_issue_from_supplementary(sf: dict, asmt: dict,
     }
 
 
-def _assign_severity(issues: list[dict], scenario: dict):
+def _assign_severity(issues: list[dict], scenario: dict, review_tier: str = ""):
     pipeline_stage = scenario.get("pipeline_stage", "")
     target = scenario.get("target", "feature")
     is_planning_version = (target == "version" and pipeline_stage == "planning")
+    tier_map = TIER_SEVERITY_MAP.get(review_tier, {})
 
+    skipped = []
+    kept = []
     for issue in issues:
+        item_id = issue.get("item_id", "")
+        tier_sev = tier_map.get(item_id, "")
+        if tier_sev == "SKIP":
+            skipped.append(issue)
+            continue
+
         impacts = [rc["impact"] for rc in issue.get("role_comments", [])]
         hint = issue.get("_severity_hint", "")
 
-        if "block" in impacts:
-            issue["severity"] = "P0"
+        if tier_sev and "block" not in impacts:
+            issue["severity"] = tier_sev
+        elif "block" in impacts:
+            issue["severity"] = tier_map.get("_default_block", "P0")
         elif hint and hint in ("P0", "P1", "WARN", "P2", "P3"):
             issue["severity"] = hint
         elif "concern" in impacts:
             if is_planning_version:
                 issue["severity"] = "P2"
             else:
-                issue["severity"] = "P1"
+                issue["severity"] = tier_map.get("_default_concern", "P1")
         else:
             status = issue.get("extraction_status", "")
             if status == "missing":
-                issue["severity"] = "P2" if is_planning_version else "P1"
+                default = tier_map.get("_default_missing", "P2" if is_planning_version else "P1")
+                issue["severity"] = default
             else:
-                issue["severity"] = "P3" if is_planning_version else "P2"
+                default = tier_map.get("_default_other", "P3" if is_planning_version else "P2")
+                issue["severity"] = default
+        kept.append(issue)
+
+    if skipped:
+        logger.info("tier=%s skipped %d items: %s", review_tier,
+                    len(skipped), [i.get("item_id") for i in skipped])
+
+    issues[:] = kept
 
 
 # ============================================================

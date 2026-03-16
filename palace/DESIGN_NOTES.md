@@ -51,13 +51,27 @@ v0.4 方案：
 
 ---
 
-## 后续迭代方向
+## 已实现（v0.5）
 
-### 方向 1：文档分类感知 + 审查档位（v0.5 核心）
+### 方向 1：文档分类感知 + 审查档位 ✅
 
 **问题**：当前引擎对所有文档使用同一套 checklist，不区分文档类型和管线权重。
 快轨增量文档（如在现有礼包系统上做配置变体）被审出 25 个问题、3 个阻断——大量假阳性。
 策划线下已确认但文档中标了"待确认"的内容被误判为"未决策"——无法区分"决策缺口"和"记录缺口"。
+
+**已实现（2026-03-16）：**
+- `schemas.py`: `detected_doc_type` 扩展为 full_spec/delta/campaign/hotfix/version，新增 `review_tier` 字段
+- `schemas.py`: `TIER_RESOLUTION` 查表（doc_type × pipeline_weight → review_tier）
+- `schemas.py`: `TIER_SEVERITY_MAP` 各档位的 item_id → severity 映射，支持 SKIP
+- `engine.py`: `_resolve_doc_type()` 优先级链——用户指定 > LLM 检测 > 场景默认
+- `engine.py`: `_resolve_review_tier()` 查表解析
+- `engine.py`: extraction prompt 注入 `_DOC_TYPE_GUIDE`，LLM 输出分类结果
+- `engine.py`: assessment prompt 注入 `_TIER_ASSESSMENT_HINTS`，告知角色审查重点
+- `engine.py`: `_assign_severity()` 支持 tier-aware 映射，SKIP 项从报告中移除
+- `report.py`: 报告头部新增「文档类型」「审查档位」行
+- `run.py`: 新增 `--doc-type` CLI 参数
+
+**验证结果：**「神君随心购礼包」文档自动分类为 delta/incremental，体验意图从 P0→P2，接口定义从 P1→P2，整体裁决从 block→concern。
 
 #### 1.1 文档类型分类
 
@@ -91,12 +105,12 @@ v0.4 方案：
 | 术语表 | P1 必改 | P2 建议 |
 | 业务目标/成功指标 | P0 阻断 | P0 阻断（保持不变） |
 
-#### 1.3 实现方案
+#### 1.3 实现方案 ✅
 
-- `what_precheck.yaml` 拆分或参数化：根据 `doc_type + pipeline_weight` 选择 checklist 子集
-- boundary.yaml 的 extraction prompt 注入档位信息，让 LLM 在提取时就知道哪些项可以跳过
-- `_assign_severity` 根据档位查表映射，而非统一规则
-- 报告头部明确标注档位："本次审查档位：增量（快轨），基于 delta 文档审查标准"
+- ~~`what_precheck.yaml` 拆分或参数化~~ → 改为 `schemas.py` 中 `TIER_SEVERITY_MAP` 查表，无需拆分 YAML
+- ✅ boundary.yaml 的 extraction prompt 注入 `_DOC_TYPE_GUIDE`，LLM 在提取时分类
+- ✅ `_assign_severity` 根据档位查表映射（`TIER_SEVERITY_MAP`），支持 SKIP
+- ✅ 报告头部明确标注档位（`report.py _meta()` 新增 doc_type + review_tier）
 
 #### 1.4 增量文档的审查模型
 

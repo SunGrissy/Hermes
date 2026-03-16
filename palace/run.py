@@ -2,7 +2,8 @@
 
 Usage:
     py palace/run.py --scenario what_precheck --input-file doc.md --doc-layer WHAT -v
-    py palace/run.py --scenario what_precheck --input-file doc.md --doc-layer mixed --format markdown --output report.md
+    py palace/run.py --scenario what_precheck --input-file doc.md --doc-type full_spec --format markdown --output report.md
+    py palace/run.py --scenario what_precheck --input-file doc.md --doc-type delta --format markdown --output report.md
     py palace/run.py --scenario what_precheck --input-file doc.md --title "Feature" --owner "Owner" --weight slow --stage scoping --doc-layer WHAT
 """
 
@@ -52,6 +53,12 @@ def main():
         help="Document layer declaration (WHAT/HOW/BUILD/mixed)",
     )
     parser.add_argument(
+        "--doc-type",
+        choices=["full_spec", "delta", "campaign", "hotfix", "version"],
+        help="Document type (auto-detected if not specified): "
+             "full_spec=new system, delta=variant, campaign=ops activity, hotfix, version=release plan",
+    )
+    parser.add_argument(
         "--from-json", help="Skip LLM call, generate report from existing JSON result",
     )
     parser.add_argument(
@@ -83,7 +90,9 @@ def main():
             parser.error("--input or --input-file is required (unless --from-json)")
 
         result = asyncio.run(run_scenario(
-            args.scenario, topic_text, document_layer=args.doc_layer or "",
+            args.scenario, topic_text,
+            document_layer=args.doc_layer or "",
+            doc_type=args.doc_type or "",
         ))
 
     scenario_cfg = load_scenario(args.scenario)
