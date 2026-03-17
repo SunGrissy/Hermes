@@ -17,11 +17,14 @@ alwaysApply: true
 | **TaskReminderApp** | 任务提醒 + 钉钉推送 | FastAPI + Uvicorn, HTML | `server.py` / `TaskReminder.html`（端口 8000） |
 | **FileCleanerTool** | 文件扫描清理桌面工具 | Python + customtkinter | `gui.py` |
 | **TeamScore** | 团队评分数据处理 | Python 脚本集（M12、雷达图） | 各子目录下的 `.py` 脚本 |
+| **dingtalk-desktop** | 钉钉桌面端消息通道（基础设施） | Python + Frida + msgpack | `daemon.py`（端口 19200） |
 | **workspace-docs** | 管理规范文档库 | Markdown | `README.md` |
 
 ## 关键约定
 - 各项目相互独立，无跨项目 API 调用（PerformEval 预留了 PmSystemApp 成员同步接口，尚未对接）
+- dingtalk-desktop 是所有子系统的**对外消息通道**，其他系统通过 HTTP 调用 daemon API 发送钉钉消息
 - 根目录的 `WORK_LOG.md` 记录跨项目级别的工作日志
 - 各项目内部也可维护自己的 WORK_LOG
 - `start_army.bat` 是全局服务启动脚本
 - PmSystemApp 和 PerformEval 各自有 `AgentReadMe.md`（详细 Agent 工作手册）
+- **Agent Skills 体系**：`.cursor/skills/` 为唯一 skill 来源，详见 [.cursor/skills/README.md](../skills/README.md)，换设备克隆仓库即可恢复
