@@ -72,5 +72,11 @@
       "name": "🐱涛哥日报直通车"
     }
   ],
-  "discover_marker": "#日报收集"
+  "discover_marker": "#日报收集",
+  "recruit_cids": [
+    {
+      "cid": "73216314617",
+      "name": "🐱助理通知（测试用，正式招聘群替换此项）"
+    }
+  ]
 }

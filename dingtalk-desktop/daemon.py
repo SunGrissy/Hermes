@@ -157,6 +157,7 @@ if (!libcef) {
 # ── Monitor Frida 脚本 ──
 
 from lib.monitor import _MONITOR_JS, _process_push, _process_send
+from skill_router import start_router as _start_skill_router
 
 # ── Beacon 回调服务器（接收 CEF JS 回调）──
 
@@ -737,6 +738,27 @@ class FridaDaemon:
         url = reports.get('url', '')
         has_api = reports.get('api', False)
         return isinstance(url, str) and 'advancedSearch' in url and has_api
+
+    def exec_custom_js(self, js, label='exec_result', timeout=10):
+        """在 JSAPI browser 中执行任意 JS，通过 beacon 收结果。
+        JS 内可用: dingtalk 对象, fetch 到 http://127.0.0.1:{BEACON_PORT}/b?l={label}
+        """
+        bid = self._find_jsapi_browser()
+        if not bid:
+            return {'success': False, 'error': 'No JSAPI browser found'}
+        self._beacon.clear()
+        try:
+            self._cef_script.exports_sync.exec_js(bid, js)
+        except Exception as e:
+            return {'success': False, 'error': f'exec_js failed: {e}'}
+        for _ in range(timeout * 4):
+            time.sleep(0.25)
+            reports = self._beacon.get_reports()
+            if label in reports or any(k.startswith(label) for k in reports):
+                break
+        reports = self._beacon.get_reports()
+        matched = {k: v for k, v in reports.items() if k == label or k.startswith(label)}
+        return {'success': True, 'results': matched}
 
     def probe_jsapi(self, timeout=10):
         """探测 JSAPI dingtalk 对象的结构"""
@@ -1800,6 +1822,16 @@ class DaemonHandler(BaseHTTPRequestHandler):
             result = _daemon.probe_jsapi(timeout=10)
             self._json_response(result)
 
+        elif parsed.path == '/exec_js':
+            js = body.get('js', '')
+            label = body.get('label', 'exec_result')
+            timeout = int(body.get('timeout', 10))
+            if not js:
+                self._json_response({'error': 'js required'}, 400)
+                return
+            result = _daemon.exec_custom_js(js, label=label, timeout=timeout)
+            self._json_response(result)
+
         elif parsed.path == '/probe_listmsg':
             cid = body.get('cid', '')
             if not cid:
@@ -1887,6 +1919,9 @@ def main():
     _daemon.start_watchdog()
     _daemon.start_name_resolver()
     log('Watchdog + NameResolver 已启动')
+
+    _start_skill_router()
+    log('SkillRouter 已启动')
 
     _http_server = HTTPServer(('127.0.0.1', DAEMON_PORT), DaemonHandler)
     log(f'HTTP API 就绪: http://127.0.0.1:{DAEMON_PORT}')

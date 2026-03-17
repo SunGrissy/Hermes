@@ -45,3 +45,37 @@
 | `digest_config.json` | 成员列表、群 CID、webhook URL |
 | `run_daily_digest.ps1` | 新增定时任务脚本 |
 | `WORK_LOG.md` | 本文件 |
+
+---
+
+## [2026-03-18] 简历 AI 初筛 + DB 持久化
+
+**状态**：验收通过
+
+### 新增功能
+
+1. **DB 持久化层**（`db/store.py`）：SQLite 封装，三张表（reports / digest_runs / resume_screen_log）
+2. **简历 AI 初筛技能**（`skills/resume_screen.py`）：监听招聘群 ct=502 PDF 消息，pdfplumber 读文本，调 LLM（relay.tuyoo.com / claude-opus-4.6），仅「通过」时发群消息并入库
+3. **技能路由器**（`skill_router.py`）：后台轮询线程（60s），内存去重防重复调 LLM
+4. **daemon.py 扩展**：新增 `/exec_js` 自定义 JS 执行端点，启动时启动 SkillRouter
+5. **digest_config.json**：新增 `recruit_cids` 字段（当前为测试群，待替换为正式招聘群 CID）
+
+### 关键技术结论
+
+| 结论 | 说明 |
+|---|---|
+| ct=502 文件已在本地磁盘 | DingTalk 收文件时自动缓存到 `D:/DownLoads/`，无需单独下载 |
+| quoteMessage 需群窗口打开 | 后台 browser 调用报 -50，降级为普通 sendTextMsg |
+| 待定/不通过不写 DB | 用内存 set 去重，防止重启后反复调 LLM |
+
+### 文件变更清单
+
+| 文件 | 变更类型 |
+|---|---|
+| `db/__init__.py` | 新增 |
+| `db/store.py` | 新增 |
+| `skills/__init__.py` | 新增 |
+| `skills/resume_screen.py` | 新增 |
+| `skill_router.py` | 新增 |
+| `daemon.py` | 新增 `/exec_js` 端点 + 启动 SkillRouter |
+| `digest_config.json` | 新增 `recruit_cids` 字段 |
