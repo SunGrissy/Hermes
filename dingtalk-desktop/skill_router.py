@@ -35,16 +35,18 @@ def _log(msg: str):
     print(f'[skill_router][{ts}] {msg}', flush=True)
 
 
-def _load_recruit_cids() -> list:
-    """从 digest_config.json 读取 recruit_cids 列表"""
+def _load_config() -> dict:
+    """从 digest_config.json 读取 recruit_cids 和 notify_target"""
     try:
         with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
-        cids = cfg.get('recruit_cids', [])
-        return [c if isinstance(c, str) else c.get('cid', '') for c in cids if c]
+        recruit_cids = cfg.get('recruit_cids', [])
+        cids = [c if isinstance(c, str) else c.get('cid', '') for c in recruit_cids if c]
+        notify_cid = cfg.get('notify_target', '')
+        return {'recruit_cids': cids, 'notify_cid': notify_cid}
     except Exception as e:
         _log(f'加载配置失败: {e}')
-        return []
+        return {'recruit_cids': [], 'notify_cid': ''}
 
 
 def _fetch_recent_messages(cid: str, count: int = 20) -> list:
@@ -97,8 +99,10 @@ def _extract_file_info(msg: dict) -> tuple:
     return msg_id, file_name, file_path
 
 
-def _poll_once(cid: str, seen_ids: set):
-    """轮询一个招聘群，处理所有新的 ct=502 消息"""
+def _poll_once(cid: str, notify_cid: str, seen_ids: set):
+    """轮询一个招聘群，处理所有新的 ct=502 消息。
+    结果发到 notify_cid（助理通知群），而非原招聘群。
+    """
     messages = _fetch_recent_messages(cid, count=20)
     processed_count = 0
 
@@ -118,12 +122,13 @@ def _poll_once(cid: str, seen_ids: set):
         seen_ids.add(msg_id)
 
         sender_uid = str(msg.get('uid', ''))
-        _log(f'发现新简历: {file_name} (uid={sender_uid})')
+        reply_cid = notify_cid or cid
+        _log(f'发现新简历: {file_name} (uid={sender_uid}) → 结果发到 {reply_cid}')
 
         try:
             ok = process_resume_message(
                 msg_id=msg_id,
-                group_cid=cid,
+                group_cid=reply_cid,
                 sender_uid=sender_uid,
                 file_name=file_name,
                 file_path=file_path,
@@ -148,25 +153,27 @@ class SkillRouter:
         init_db()
         _log('DB 已初始化')
 
-        recruit_cids = _load_recruit_cids()
+        cfg = _load_config()
+        recruit_cids = cfg['recruit_cids']
+        notify_cid   = cfg['notify_cid']
         if not recruit_cids:
             _log('digest_config.json 中无 recruit_cids，简历监听未启动')
             return
 
-        _log(f'简历监听启动，目标群: {recruit_cids}，轮询间隔: {POLL_INTERVAL}s')
+        _log(f'简历监听启动，监听群: {recruit_cids}，结果发到: {notify_cid or "原群"}，轮询间隔: {POLL_INTERVAL}s')
         self._running = True
         self._thread = threading.Thread(
-            target=self._loop, args=(recruit_cids,), daemon=True)
+            target=self._loop, args=(recruit_cids, notify_cid), daemon=True)
         self._thread.start()
 
     def stop(self):
         self._running = False
 
-    def _loop(self, recruit_cids: list):
+    def _loop(self, recruit_cids: list, notify_cid: str):
         while self._running:
             for cid in recruit_cids:
                 try:
-                    n = _poll_once(cid, self._seen_ids)
+                    n = _poll_once(cid, notify_cid, self._seen_ids)
                     if n:
                         _log(f'群 {cid} 本轮处理 {n} 份简历')
                 except Exception as e:
@@ -189,6 +196,7 @@ if __name__ == '__main__':
     recruit_cids = _load_recruit_cids()
     print('招聘群:', recruit_cids)
     seen: set = set()
+    notify_cid = _load_config().get('notify_cid', '')
     for cid in recruit_cids:
-        n = _poll_once(cid, seen)
+        n = _poll_once(cid, notify_cid, seen)
         print(f'群 {cid} 处理 {n} 份')
