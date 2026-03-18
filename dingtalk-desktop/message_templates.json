@@ -104,6 +104,8 @@
       { "key": "reason",    "show": true, "tpl": "📋 **理由：** {reason}" }
     ],
 
+    "source_line": "📥 **来源：** {source}",
+
     "footer": "###### 📌小秘书提醒"
   }
 }

@@ -301,8 +301,8 @@ _DEFAULT_TEMPLATE = {
 
 
 def _format_reply(file_name: str, role: str, parsed: dict,
-                  is_fresh: bool = False) -> tuple:
-    """从 version_digest_template.json 读模板，返回 (title, markdown_text)。"""
+                  is_fresh: bool = False, source_name: str = '') -> tuple:
+    """从 message_templates.json 读模板，返回 (title, markdown_text)。"""
     tpl = _load_resume_template() or _DEFAULT_TEMPLATE
     candidate = file_name.replace('.pdf', '').replace('.PDF', '')
 
@@ -315,6 +315,7 @@ def _format_reply(file_name: str, role: str, parsed: dict,
     ctx = {
         'candidate':  candidate,
         'role':       role,
+        'source':     source_name,
         'core':       parsed.get('core', ''),
         'highlights': parsed.get('highlights', ''),
         'potential':  parsed.get('potential', ''),
@@ -326,6 +327,12 @@ def _format_reply(file_name: str, role: str, parsed: dict,
     line_defs = tpl.get(lines_key, _DEFAULT_TEMPLATE['lines'])
 
     body_lines = [f'### {title}', '---']
+
+    # 来源行（有值才显示）
+    if source_name:
+        source_tpl = tpl.get('source_line', '📥 **来源：** {source}')
+        body_lines.append('\n' + source_tpl.format(**ctx))
+
     for item in line_defs:
         if not item.get('show', True):
             continue
@@ -410,7 +417,7 @@ def _find_local_pdf(file_name: str) -> str:
 # ── 主入口 ────────────────────────────────────────────────────
 
 def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
-                            file_name: str, file_path: str):
+                            file_name: str, file_path: str, source_name: str = ''):
     """
     处理一条 ct=502 简历消息。
     返回值：
@@ -471,14 +478,14 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
     # 5. 发消息 + 入库
     #    通过 → 详细格式；待定/不通过 → ❓/❌ 通知（含核心判定）
     if parsed['verdict'] != '通过':
-        title, notify_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh)
+        title, notify_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh, source_name=source_name)
         sent = _send_via_webhook(title, notify_text)
         print(f'[resume_screen] 结论={parsed["verdict"]}，通知已发: {"成功" if sent else "失败"}')
         save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
                            role, parsed['verdict'], summary, reply_sent=sent)
         return False
 
-    title, reply_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh)
+    title, reply_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh, source_name=source_name)
     sent = _send_via_webhook(title, reply_text)
     print(f'[resume_screen] 消息发送: {"成功" if sent else "失败"}')
 
