@@ -1,0 +1,109 @@
+{
+  "_comment": "所有消息推送模板统一维护于此文件。改此文件即可调整文案/格式/显隐，无需改 Python 代码。",
+
+  "version_digest": {
+    "title": "## 版本状态 [{timestamp}]",
+
+    "version": {
+      "header": "### **{name}** | {phase}",
+
+      "countdown": {
+        "overdue":  "🔴**[超期]** 已到/超过发版日",
+        "urgent":   "⚠️**[紧]** {days}天后发版",
+        "normal":   "🟡{days}天后发版",
+        "urgent_threshold_days": 7
+      },
+
+      "feature_line":   "**Feature**: {summary}",
+      "capacity_line":  "**容量**: {pct}%",
+      "milestone_line": "**里程碑**: {ms_name} ({ms_date})",
+      "pipeline_line":  "**管线节点**: {node_name} ({node_date})",
+      "overdue_line":   "🔴**[超期节点]** {nodes}",
+      "risk_line":      "⚠️**[风险]** {text}"
+    },
+
+    "show": {
+      "capacity":         true,
+      "milestone":        true,
+      "pipeline_current": true,
+      "overdue_nodes":    true,
+      "risks":            true
+    },
+
+    "limits": {
+      "risks": 3
+    },
+
+    "separator": "---",
+    "footer":    "###### 🤖小秘书提醒</font>"
+  },
+
+  "report_digest": {
+    "title": "### {date} 日报摘要 {window}",
+
+    "submission": {
+      "submitted_line": "✅ 已提交 {count}/{total} 人",
+      "missing_line":   "❌ 未交：{names}",
+      "missing_sep":    " / "
+    },
+
+    "sections": {
+      "summary": {
+        "header": "【总览】",
+        "show": true
+      },
+      "tech_updates": {
+        "header": "【技术动态】",
+        "item_format": "· {name}：{doing}",
+        "show": true
+      },
+      "quality_flags": {
+        "header": "⚠️ 质量标记",
+        "item_format": "• {name}：{issue}",
+        "show": true,
+        "max_items": 8
+      },
+      "attention_items": {
+        "header": "【关注】",
+        "item_format": "→ [{source}] {content}",
+        "show": true,
+        "max_items": 8
+      }
+    },
+
+    "llm": {
+      "_note": "每人日报发给 LLM 的最大字符数，写长日报的人（如崔正钦）建议 2500+",
+      "text_limit_per_person": 2500
+    }
+  },
+
+  "resume_screen": {
+    "title": {
+      "pass":    "✅ 简历初筛通过 | {candidate} · {role}",
+      "pending": "❓ 简历初筛待定 | {candidate} · {role}",
+      "fail":    "❌ 简历初筛不通过 | {candidate} · {role}"
+    },
+
+    "title_fresh": {
+      "pass":    "✅ 应届初筛通过 | {candidate} · {role}",
+      "pending": "❓ 应届初筛待定 | {candidate} · {role}",
+      "fail":    "❌ 应届初筛不通过 | {candidate} · {role}"
+    },
+
+    "lines": [
+      { "key": "core",       "show": true, "tpl": "🔍 **核心判定：** {core}" },
+      { "key": "highlights", "show": true, "tpl": "💡 **亮点：** {highlights}" },
+      { "key": "redlines",   "show": true, "tpl": "🚫 **红线：** {redlines}" },
+      { "key": "reason",     "show": true, "tpl": "📋 **详细理由：** {reason}" }
+    ],
+
+    "fresh_lines": [
+      { "key": "core",      "show": true, "tpl": "🔍 **核心判定：** {core}" },
+      { "key": "potential", "show": true, "tpl": "🌱 **潜力信号：** {potential}" },
+      { "key": "redlines",  "show": true, "tpl": "🚫 **红线：** {redlines}" },
+      { "key": "reason",    "show": true, "tpl": "📋 **理由：** {reason}" }
+    ],
+
+    "footer": "###### 🤖小秘书提醒</font>"
+  }
+}

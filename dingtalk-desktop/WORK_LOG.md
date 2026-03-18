@@ -127,3 +127,21 @@
 | `skill_router.py` | 新增 |
 | `daemon.py` | 新增 `/exec_js` 端点 + 启动 SkillRouter |
 | `digest_config.json` | 新增 `recruit_cids` 字段 |
+
+---
+
+## [2026-03-18] 消息模板统一 + P2P监控扩展（验收通过）
+
+### 变更说明
+- 另一个 Agent 将 `version_digest_template.json` 合并入统一模板 `message_templates.json`
+- `resume_screen.py` 改为优先读 `message_templates.json`，兼容旧文件名
+- `digest_config.json` 新增笛笛（杨柳笛）私信 CID（`46459012:300405507`）
+- 待补：李军等其余联系人 CID 未被 daemon 捕获，待下次会话追加
+
+### 文件变更清单
+| 文件 | 变更类型 |
+|---|---|
+| `message_templates.json` | 新增（统一模板入口）|
+| `version_digest_template.json` | 删除（内容已迁移）|
+| `skills/resume_screen.py` | 修改（模板文件优先级）|
+| `digest_config.json` | 修改（添加笛笛 P2P CID）|

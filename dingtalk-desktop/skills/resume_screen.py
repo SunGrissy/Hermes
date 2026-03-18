@@ -273,13 +273,17 @@ def _send_via_webhook(title: str, text: str) -> bool:
 
 
 def _load_resume_template() -> dict:
-    tpl_path = os.path.join(_ROOT, 'version_digest_template.json')
-    try:
-        with open(tpl_path, 'r', encoding='utf-8') as f:
-            return json.load(f).get('resume_screen', {})
-    except Exception as e:
-        print(f'[resume_screen] 模板加载失败，使用内置默认值: {e}')
-        return {}
+    # 优先读统一模板文件，兼容旧的 version_digest_template.json
+    for fname in ('message_templates.json', 'version_digest_template.json'):
+        tpl_path = os.path.join(_ROOT, fname)
+        if not os.path.exists(tpl_path):
+            continue
+        try:
+            with open(tpl_path, 'r', encoding='utf-8') as f:
+                return json.load(f).get('resume_screen', {})
+        except Exception as e:
+            print(f'[resume_screen] 模板加载失败({fname}): {e}')
+    return {}
 
 _DEFAULT_TEMPLATE = {
     'title': {
@@ -336,15 +340,18 @@ def _format_reply(file_name: str, role: str, parsed: dict,
 
 
 def _load_footer() -> str:
-    tpl_path = os.path.join(_ROOT, 'version_digest_template.json')
-    try:
-        with open(tpl_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        # 优先取 resume_screen 段的 footer，没有再回退到全局
-        return (data.get('resume_screen', {}).get('footer')
-                or data.get('footer', '*小秘书提醒*'))
-    except Exception:
-        return '*小秘书提醒*'
+    for fname in ('message_templates.json', 'version_digest_template.json'):
+        tpl_path = os.path.join(_ROOT, fname)
+        if not os.path.exists(tpl_path):
+            continue
+        try:
+            with open(tpl_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            return (data.get('resume_screen', {}).get('footer')
+                    or data.get('footer', '*小秘书提醒*'))
+        except Exception:
+            pass
+    return '*小秘书提醒*'
 
 
 # ── 本地文件查找 ───────────────────────────────────────────────
