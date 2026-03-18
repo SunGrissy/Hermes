@@ -137,7 +137,8 @@
 - `resume_screen.py` 改为优先读 `message_templates.json`，兼容旧文件名
 - `digest_config.json` 新增笛笛（杨柳笛）私信 CID（`46459012:300405507`）
 - 追加：李军私信 CID（`46459012:153460168`）已加入 recruit_cids
-- 待补：李晓明、王姣莉、朱慧敏、Jojo 吴娇娇 CID 待后续会话追加
+- 追加：李晓明、Jojo吴娇娇、朱慧敏、王姣莉私信 CID 全部加入 recruit_cids（验收通过）
+- 新增 source_name 功能：推送消息包含简历来源，已实测
 
 ### 文件变更清单
 | 文件 | 变更类型 |

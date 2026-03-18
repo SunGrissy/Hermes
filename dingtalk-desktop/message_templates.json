@@ -35,7 +35,7 @@
     },
 
     "separator": "---",
-    "footer":    "###### 📌小秘书提醒"
+    "footer":    "###### ※ 小秘书提醒"
   },
 
   "report_digest": {
@@ -91,21 +91,21 @@
     },
 
     "lines": [
-      { "key": "core",       "show": true, "tpl": "🔍 **核心判定：** {core}" },
-      { "key": "highlights", "show": true, "tpl": "💡 **亮点：** {highlights}" },
-      { "key": "redlines",   "show": true, "tpl": "🚫 **红线：** {redlines}" },
-      { "key": "reason",     "show": true, "tpl": "📋 **详细理由：** {reason}" }
+      { "key": "core",       "show": true, "tpl": "❗ **核心判定：** {core}" },
+      { "key": "highlights", "show": true, "tpl": "✅ **亮点：** {highlights}" },
+      { "key": "redlines",   "show": true, "tpl": "❌ **红线：** {redlines}" },
+      { "key": "reason",     "show": true, "tpl": "▶ **理由：** {reason}" }
     ],
 
     "fresh_lines": [
-      { "key": "core",      "show": true, "tpl": "🔍 **核心判定：** {core}" },
-      { "key": "potential", "show": true, "tpl": "🌱 **潜力信号：** {potential}" },
-      { "key": "redlines",  "show": true, "tpl": "🚫 **红线：** {redlines}" },
-      { "key": "reason",    "show": true, "tpl": "📋 **理由：** {reason}" }
+      { "key": "core",      "show": true, "tpl": "❗ **核心判定：** {core}" },
+      { "key": "potential", "show": true, "tpl": "✅ **潜力信号：** {potential}" },
+      { "key": "redlines",  "show": true, "tpl": "❌ **红线：** {redlines}" },
+      { "key": "reason",    "show": true, "tpl": "▶ **理由：** {reason}" }
     ],
 
-    "source_line": "📥 **来源：** {source}",
+    "source_line": "► **来源：** {source}",
 
-    "footer": "###### 📌小秘书提醒"
+    "footer": "###### ※ 小秘书提醒"
   }
 }
