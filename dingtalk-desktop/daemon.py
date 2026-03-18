@@ -25,6 +25,11 @@ import signal
 import threading
 import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """每个请求在独立线程处理，避免 skill_router 调 /fetch 时死锁。"""
+    daemon_threads = True
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -524,10 +529,10 @@ class FridaDaemon:
             bf_raw = m.get('bf', '')
             sender_name = m.get('sn', '')
 
-            if ct == 300 and not text:
+            if ct == 300:
                 if bf_raw:
-                    text = self._extract_report_from_bform(bf_raw)
-                elif raw:
+                    text = self._extract_report_from_bform(bf_raw) or text
+                elif not text and raw:
                     text = self._extract_report_from_raw(raw)
 
             is_self = uid == MY_UID
@@ -541,6 +546,8 @@ class FridaDaemon:
                 'content_type_name': ct_name,
                 'text': text or '',
             }
+            if bf_raw:
+                entry['bf'] = bf_raw
             if raw:
                 entry['raw'] = raw
 
@@ -573,25 +580,38 @@ class FridaDaemon:
         """
         import re
         text = m.get('text', '') or ''
+
+        # 先把标题和内容分开（有些消息已经是 "title || content" 格式）
+        if '||' in text:
+            title_part, content_part = text.split('||', 1)
+            content_part = content_part.strip()
+        elif '|' in text:
+            parts_tmp = text.split('|')
+            title_part = parts_tmp[0]
+            content_part = parts_tmp[-1].strip()
+        else:
+            title_part = text
+            content_part = ''
+
         author = None
-        # Pattern 1: [日志] ...张三的日报/周报/月报
-        m1 = re.search(r'\[日志\]\s*(.+?)的[日周月]报', text)
+        # Pattern 1: [日志] ...张三的日报/周报/月报（从标题部分提取）
+        m1 = re.search(r'\[日志\]\s*(.+?)的[日周月]报', title_part)
         if m1:
             author = m1.group(1).strip()
         if not author:
             # Pattern 2: [日志] 个人日报/周报/月报 · [张三] or · 张三
             m2 = re.search(
-                r'\[日志\]\s*个人[日周月]报\s*[··]\s*\[?([^\]·\s][^\]·]*?)\]?'
+                r'\[日志\]\s*个人[日周月]报\s*[··]\s*\[?([^\]·\s][^\]·|]*?)\]?'
                 r'(?:\s*[··]|$)',
-                text,
+                title_part,
             )
             if m2:
                 author = m2.group(1).strip()
         if not author:
             # Pattern 3: [日志] 个人日报 · 张三  (no trailing separator)
             m3 = re.search(
-                r'\[日志\]\s*个人[日周月]报\s*[··]\s*([^\]·\n]+)',
-                text,
+                r'\[日志\]\s*个人[日周月]报\s*[··]\s*([^\]·\n|]+)',
+                title_part,
             )
             if m3:
                 candidate = m3.group(1).strip().lstrip('[').rstrip(']').strip()
@@ -600,12 +620,17 @@ class FridaDaemon:
                     author = candidate
         if author:
             m['sender'] = author
-        parts = text.split('||', 1)
-        if len(parts) == 2:
-            m['text'] = parts[1].strip()
-        elif '|' in text:
-            parts2 = text.split('|')
-            m['text'] = parts2[-1].strip()
+
+        # 优先用 card_ext.biz_custom_desc 作为正文（钉钉日报卡片的内容预览）
+        # 其次用消息里已有的 content_part（|| 之后的部分）
+        card_ext = m.get('card_ext') or {}
+        desc = card_ext.get('biz_custom_desc', '')
+        if desc:
+            m['text'] = f"{title_part.strip()}\n{desc}"
+        elif content_part:
+            m['text'] = f"{title_part.strip()}\n{content_part}"
+        else:
+            m['text'] = title_part.strip()
         m['content_type'] = 300
         return m
 
@@ -738,6 +763,109 @@ class FridaDaemon:
         url = reports.get('url', '')
         has_api = reports.get('api', False)
         return isinstance(url, str) and 'advancedSearch' in url and has_api
+
+    def find_browser_with_cid(self, target_cid: str, timeout: int = 5) -> int | None:
+        """扫描所有 CEF browser，返回当前显示 target_cid 会话的 browser ID（没找到返回 None）。"""
+        try:
+            bids = self._cef_script.exports_sync.scan_browsers()
+        except Exception as e:
+            log(f'scan_browsers 失败: {e}')
+            return None
+        if not bids:
+            return None
+
+        self._beacon.clear()
+        prefix = f'cid_scan_{target_cid}_'
+        for bid in bids:
+            probe_js = (
+                "(function(){"
+                f"var P={BEACON_PORT},BID={bid},TCID='{target_cid}';"
+                "function post(l,d){fetch('http://127.0.0.1:'+P+'/b?l='+encodeURIComponent(l),"
+                "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
+                "if(!dingtalk||!dingtalk.conversation||!dingtalk.conversation.getActiveCid)return;"
+                "try{"
+                "dingtalk.conversation.getActiveCid(function(err,cid){"
+                "if(!err&&cid===TCID){post('cid_scan_'+TCID+'_'+BID,{cid:cid,bid:BID});}"
+                "});"
+                "}catch(e){}"
+                "})()"
+            )
+            try:
+                self._cef_script.exports_sync.exec_js(bid, probe_js)
+            except Exception:
+                pass
+
+        # 等待 beacon 回报
+        for _ in range(timeout * 4):
+            time.sleep(0.25)
+            reports = self._beacon.get_reports()
+            for k, v in reports.items():
+                if k.startswith(prefix):
+                    bid_found = int(k.split('_')[-1])
+                    log(f'找到招聘群 browser: ID={bid_found}')
+                    return bid_found
+        return None
+
+    def trigger_file_download(self, cid: str, msg_id: str, file_name: str,
+                              wait_seconds: int = 12) -> str:
+        """
+        在持有 cid 会话的 browser 里调用 openMessageFile 触发下载，
+        轮询文件系统等待文件落盘，返回本地路径（超时返回空字符串）。
+        """
+        bid = self.find_browser_with_cid(cid)
+        if not bid:
+            log(f'trigger_file_download: 未找到持有会话 {cid} 的 browser（群窗口可能未打开）')
+            return ''
+
+        self._beacon.clear()
+        open_js = (
+            "(function(){"
+            f"var P={BEACON_PORT},CID='{cid}',MID='{msg_id}';"
+            "function post(l,d){fetch('http://127.0.0.1:'+P+'/b?l='+encodeURIComponent(l),"
+            "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
+            "if(!dingtalk||!dingtalk.message||!dingtalk.message.openMessageFile){"
+            "post('omf_err',{e:'no openMessageFile'});return;}"
+            "try{"
+            "dingtalk.message.openMessageFile(CID,MID,function(err,res){"
+            "post('omf_done',{err:err?JSON.stringify(err):null,res:res?JSON.stringify(res):null});"
+            "});"
+            "}catch(e){post('omf_catch',{e:String(e)});}"
+            "})()"
+        )
+        try:
+            self._cef_script.exports_sync.exec_js(bid, open_js)
+        except Exception as e:
+            log(f'trigger_file_download exec_js 失败: {e}')
+            return ''
+
+        # 轮询文件系统，按 file_name 匹配
+        search_dirs = [
+            'D:/DownLoads',
+            'D:/DownLoads/DingDingDownLoads',
+            'D:/Downloads',
+        ]
+        deadline = time.time() + wait_seconds
+        while time.time() < deadline:
+            time.sleep(1)
+            for base in search_dirs:
+                if not os.path.isdir(base):
+                    continue
+                candidate = os.path.join(base, file_name)
+                if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                    log(f'文件已落盘: {candidate}')
+                    return candidate
+                # 搜索一层子目录
+                try:
+                    for entry in os.scandir(base):
+                        if entry.is_dir():
+                            c2 = os.path.join(entry.path, file_name)
+                            if os.path.exists(c2) and os.path.getsize(c2) > 0:
+                                log(f'文件已落盘: {c2}')
+                                return c2
+                except OSError:
+                    pass
+        log(f'trigger_file_download 超时，文件未落盘: {file_name}')
+        return ''
 
     def exec_custom_js(self, js, label='exec_result', timeout=10):
         """在 JSAPI browser 中执行任意 JS，通过 beacon 收结果。
@@ -932,7 +1060,31 @@ class FridaDaemon:
             if result != 'ok':
                 return {'success': False, 'error': f'loadUrl failed: {result}'}
 
-            time.sleep(20)
+            # 等页面渲染完成（轮询 readyState），最多等 30 秒后再执行 JS
+            # 避免固定 sleep 20s 在慢速页面上依然超时
+            ready_js = (
+                "(function(){"
+                "var P=" + str(BEACON_PORT) + ";"
+                "function post(l,d){fetch('http://127.0.0.1:'+P"
+                "+'/r?l='+encodeURIComponent(l),"
+                "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
+                "var check=function(){"
+                "if(document.readyState==='complete'){"
+                "post('page_ready',{ok:1});"
+                "}else{setTimeout(check,500);}"
+                "};"
+                "check();"
+                "})()"
+            )
+            self._beacon.clear()
+            self._cef_script.exports_sync.exec_js(content_bid, ready_js)
+            # 等待 page_ready 信号，最多 30 秒
+            for _ in range(60):
+                time.sleep(0.5)
+                if 'page_ready' in self._beacon.get_reports():
+                    break
+            # 额外等 2 秒让 SPA 框架渲染完
+            time.sleep(2)
 
             self._beacon.clear()
             extract_js = (
@@ -978,7 +1130,7 @@ class FridaDaemon:
                         break
 
             reports = self._beacon.get_reports()
-            # 恢复 browser 1 到 about:blank，不触发搜索栏 UI 弹出
+            # 恢复 browser 1 到中性状态，不导航回 advancedSearch 以免触发搜索框 UI
             try:
                 self._cef_script.exports_sync.load_url(1, 'about:blank')
             except Exception:
@@ -1276,6 +1428,72 @@ class FridaDaemon:
             result['timed_out'] = True
             result['note'] = f'时间预算 {max_seconds}s 内获取了 {len(msgs)} 条部分结果'
         return result
+
+    def fetch_reports_from_log(self, after=None, before=None, cid=None,
+                               author=None, report_type=None, count=500):
+        """从本地监控日志读取报告（JSAPI 不可用时的回退方案）。
+        支持按 CID、时间范围、作者、报告类型过滤。
+        """
+        if not os.path.exists(LOG_FILE):
+            return {'success': False, 'error': '日志文件不存在'}
+
+        after_ts = _parse_date_param(after, end_of_day=False) if after else None
+        before_ts = _parse_date_param(before, end_of_day=True) if before else None
+
+        msgs = []
+        seen_keys = set()
+        with open(LOG_FILE, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    m = json.loads(line)
+                except Exception:
+                    continue
+
+                ct = m.get('content_type')
+                if ct not in (2950, 300):
+                    continue
+
+                if cid and m.get('cid') != cid:
+                    continue
+
+                ts = m.get('ts', 0)
+                if after_ts and ts < after_ts:
+                    continue
+                if before_ts and ts > before_ts:
+                    continue
+
+                if ct == 2950:
+                    txt = m.get('text', '') or ''
+                    if '[日志]' not in txt and '日报' not in txt \
+                            and '周报' not in txt and '月报' not in txt:
+                        continue
+                    m = self._normalize_report_card(m)
+
+                if report_type:
+                    if report_type not in (m.get('text', '') or ''):
+                        continue
+                if author:
+                    a_lo = author.lower()
+                    if a_lo not in (m.get('sender', '').lower()) \
+                            and a_lo not in (m.get('text', '').lower()):
+                        continue
+
+                key = f"{m.get('ts')}_{m.get('sender')}_{m.get('cid')}"
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                msgs.append(m)
+
+        msgs = msgs[:count]
+        return {
+            'success': True,
+            'count': len(msgs),
+            'source': 'log',
+            'messages': msgs,
+        }
 
     def _build_fetch_js(self, cid_safe, cursor_val, count, is_first):
         """构建 listMessage JS 调用代码"""
@@ -1615,7 +1833,7 @@ class FridaDaemon:
             if not self._running:
                 break
             try:
-                pid = get_main_pid()
+                pid = get_main_pid() or get_main_pid_by_mem()
                 if not pid:
                     log('[watchdog] DingTalk 未运行，尝试启动...')
                     self._start_dingtalk()
@@ -1627,8 +1845,7 @@ class FridaDaemon:
                 if pid and not self.is_attached:
                     log('[watchdog] Frida session 断开，重新附加...')
                     self.attach()
-                    if self._monitor_ready or self._monitor_script:
-                        self.start_monitor()
+                    self.start_monitor()
                     self.start_name_resolver()
 
                 if self.is_attached:
@@ -1640,6 +1857,7 @@ class FridaDaemon:
                         log('[watchdog] CEF ping 失败，重新附加...')
                         self._cleanup()
                         self.attach()
+                        self.start_monitor()
             except Exception as e:
                 log(f'[watchdog] 错误: {e}')
 
@@ -1735,6 +1953,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json_response({'error': str(e)}, 500)
 
+
         else:
             self._json_response({'error': 'Not found'}, 404)
 
@@ -1793,10 +2012,19 @@ class DaemonHandler(BaseHTTPRequestHandler):
             report_type = body.get('report_type')
             max_pages = int(body.get('max_pages', 20))
             cid = body.get('cid')
-            result = _daemon.fetch_reports_paginated(
-                count=count, before=before, after=after,
-                author=author, report_type=report_type, max_pages=max_pages,
-                cid=cid)
+            force_log = body.get('source') == 'log'
+            if force_log or not _daemon._find_jsapi_browser():
+                # JSAPI 不可用时，自动回退到本地监控日志
+                result = _daemon.fetch_reports_from_log(
+                    after=after, before=before, cid=cid,
+                    author=author, report_type=report_type, count=max(count, 500))
+                if not force_log:
+                    result['note'] = 'JSAPI 不可用，使用本地监控日志（只含已监控到的消息）'
+            else:
+                result = _daemon.fetch_reports_paginated(
+                    count=count, before=before, after=after,
+                    author=author, report_type=report_type, max_pages=max_pages,
+                    cid=cid)
             self._json_response(result)
 
         elif parsed.path == '/fetch_my_reports':
@@ -1821,6 +2049,17 @@ class DaemonHandler(BaseHTTPRequestHandler):
         elif parsed.path == '/probe_jsapi':
             result = _daemon.probe_jsapi(timeout=10)
             self._json_response(result)
+
+        elif parsed.path == '/trigger_download':
+            cid       = body.get('cid', '')
+            msg_id    = body.get('msg_id', '')
+            file_name = body.get('file_name', '')
+            wait      = int(body.get('wait', 12))
+            if not (cid and msg_id and file_name):
+                self._json_response({'error': 'cid, msg_id, file_name required'}, 400)
+                return
+            file_path = _daemon.trigger_file_download(cid, msg_id, file_name, wait_seconds=wait)
+            self._json_response({'ok': bool(file_path), 'file_path': file_path})
 
         elif parsed.path == '/exec_js':
             js = body.get('js', '')
@@ -1923,7 +2162,7 @@ def main():
     _start_skill_router()
     log('SkillRouter 已启动')
 
-    _http_server = HTTPServer(('127.0.0.1', DAEMON_PORT), DaemonHandler)
+    _http_server = ThreadedHTTPServer(('127.0.0.1', DAEMON_PORT), DaemonHandler)
     log(f'HTTP API 就绪: http://127.0.0.1:{DAEMON_PORT}')
     log('端点: GET /health | POST /send | POST /fetch | GET /search | GET /contacts | POST /shutdown')
 

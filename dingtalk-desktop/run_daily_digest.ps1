@@ -64,9 +64,26 @@ if (-not $daemonOk) {
     }
 }
 
-# 运行日报摘要
+# 运行日报摘要（带 --full-content 获取完整日报内容）
+# full-content 会临时占用 browser 1，完成后通过重启钉钉恢复 UI 状态
 Write-Log "[digest] running report_digest.py --full-content ..."
 $output = py report_digest.py --date $TargetDate --full-content 2>&1
 $output | ForEach-Object { Write-Log $_ }
+
+# 重启钉钉以恢复 UI 状态（搜索框等）
+Write-Log "[digest] restarting DingTalk to restore UI ..."
+$dtProc = Get-Process -Name "DingTalk" -ErrorAction SilentlyContinue
+if ($dtProc) {
+    $dtProc | Stop-Process -Force
+    Write-Log "[digest] DingTalk stopped, waiting 5s ..."
+    Start-Sleep -Seconds 5
+}
+$dtPath = Join-Path ${env:ProgramFiles(x86)} "DingDing\main\current\DingTalk.exe"
+if (Test-Path $dtPath) {
+    Start-Process -FilePath $dtPath -WindowStyle Normal
+    Write-Log "[digest] DingTalk restarted, watchdog will re-attach in ~30s"
+} else {
+    Write-Log "[digest] WARNING: DingTalk.exe not found at $dtPath"
+}
 
 Write-Log "[digest] ===== 完成 ====="

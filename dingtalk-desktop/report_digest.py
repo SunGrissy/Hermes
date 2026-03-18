@@ -64,6 +64,43 @@ def _resolve_llm_config():
 LLM_API_KEY, LLM_API_BASE, LLM_MODEL = _resolve_llm_config()
 
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'digest_config.json')
+_REPORT_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'message_templates.json')
+
+_DEFAULT_REPORT_TEMPLATE = {
+    'title': '{date} 日报摘要 {window}',
+    'submission': {
+        'submitted_line': '✅ 已提交 {count}/{total} 人',
+        'missing_line': '❌ 未交：{names}',
+        'missing_sep': ' / ',
+    },
+    'sections': {
+        'summary':        {'header': '【总览】',    'show': True},
+        'tech_updates':   {'header': '【技术动态】', 'item_format': '· {name}：{doing}',         'show': True},
+        'quality_flags':  {'header': '⚠️ 质量标记', 'item_format': '• {name}：{issue}',          'show': True, 'max_items': 8},
+        'attention_items':{'header': '【关注】',    'item_format': '→ [{source}] {content}',     'show': True, 'max_items': 8},
+    },
+    'llm': {'text_limit_per_person': 2500},
+}
+
+
+def _load_report_template():
+    if os.path.exists(_REPORT_TEMPLATE_PATH):
+        try:
+            with open(_REPORT_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            # Support unified file (report_digest key) and legacy flat file
+            tmpl = data.get('report_digest', data)
+            tmpl.pop('_comment', None)
+            # strip inner _note/_comment keys
+            for v in tmpl.values():
+                if isinstance(v, dict):
+                    v.pop('_comment', None)
+                    v.pop('_note', None)
+            return tmpl
+        except Exception as e:
+            print(f'[warn] failed to load report template: {e}', flush=True)
+    return _DEFAULT_REPORT_TEMPLATE
+
 
 def _load_config():
     defaults = {
@@ -141,28 +178,165 @@ def fetch_reports(target_date, report_cids):
         print(f'[fetch] {_safe(name)}: {len(fetched)} reports', flush=True)
 
     all_msgs.sort(key=lambda m: m.get('ts', 0))
-    return all_msgs
+
+    # 内容去重：同一发件人文本前80字相同视为重复（多群转发场景）
+    # 保留有 report_url 的那条，否则保留先出现的
+    dedup_result = []
+    seen_content_keys = {}  # (sender, text_prefix) -> index in dedup_result
+    for m in all_msgs:
+        sender = m.get('sender', '')
+        text = (m.get('text') or '').strip()[:80]
+        ck = (sender, text)
+        if ck in seen_content_keys and text:
+            existing_idx = seen_content_keys[ck]
+            existing = dedup_result[existing_idx]
+            # 如果新条目有 report_url 而旧的没有，替换
+            if m.get('report_url') and not existing.get('report_url'):
+                dedup_result[existing_idx] = m
+        else:
+            seen_content_keys[ck] = len(dedup_result)
+            dedup_result.append(m)
+
+    removed = len(all_msgs) - len(dedup_result)
+    if removed:
+        print(f'[fetch] dedup removed {removed} duplicate(s)', flush=True)
+    return dedup_result
 
 
-def analyze_reports(messages, team_members, target_date):
+def _enrich_from_monitor_log(messages, target_date, report_cids):
+    """Supplement JSAPI results with Monitor native hook log.
+
+    Monitor captures all messages in real-time including those JSAPI misses
+    after DingTalk restart. For each report in the log that JSAPI didn't return,
+    add it with report_url extracted from card_ext so --full-content can fetch it.
+    """
+    if not os.path.exists(_MSG_LOG):
+        return messages
+
+    dt = datetime.strptime(target_date, '%Y-%m-%d')
+    after_ts = dt.replace(hour=18, minute=30).timestamp() * 1000
+    before_ts = (dt + timedelta(days=1)).replace(hour=12, minute=0).timestamp() * 1000
+
+    tracked_cids = set()
+    for entry in report_cids:
+        cid = entry['cid'] if isinstance(entry, dict) else entry
+        tracked_cids.add(cid)
+
+    existing_keys = set()
+    for m in messages:
+        existing_keys.add(f'{m.get("ts", 0)}_{m.get("sender", "")}')
+
+    added = 0
+    try:
+        with open(_MSG_LOG, 'r', encoding='utf-8') as f:
+            for line in f:
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+                ts = obj.get('ts', 0)
+                if ts < after_ts or ts > before_ts:
+                    continue
+                cid = obj.get('cid', '')
+                if cid not in tracked_cids:
+                    continue
+                text = obj.get('text', '') or ''
+                if '[日志]' not in text or '日报' not in text:
+                    continue
+
+                card_ext = obj.get('card_ext') or {}
+                action_url = card_ext.get('biz_custom_action_url', '') or ''
+                report_url = ''
+                if 'url=' in action_url:
+                    try:
+                        from urllib.parse import unquote
+                        report_url = unquote(action_url.split('url=', 1)[1])
+                    except Exception:
+                        pass
+
+                title = card_ext.get('biz_custom_title', '') or text
+                sender_name = ''
+                for pat in ('[日志] ', ):
+                    if pat in title:
+                        rest = title.split(pat, 1)[1]
+                        sender_name = rest.replace('的日报', '').replace('的周报', '').strip()
+                        break
+                if not sender_name:
+                    sender_name = obj.get('sender', '')
+
+                key = f'{ts}_{sender_name}'
+                if key in existing_keys:
+                    continue
+                existing_keys.add(key)
+
+                messages.append({
+                    'ts': ts,
+                    'sender': sender_name,
+                    'text': card_ext.get('biz_custom_desc', '') or text,
+                    'report_url': report_url,
+                    '_source': 'monitor_log',
+                    '_source_group': cid,
+                })
+                added += 1
+    except Exception as e:
+        print(f'[monitor-enrich] error reading log: {e}', flush=True)
+
+    if added:
+        messages.sort(key=lambda m: m.get('ts', 0))
+        print(f'[monitor-enrich] added {added} reports from monitor log',
+              flush=True)
+    return messages
+
+
+def _extract_report_text(m):
+    """从消息中提取日报全文。优先解析 bf (b_form JSON)，回退到 text。"""
+    bf_raw = m.get('bf') or m.get('b_form') or ''
+    if bf_raw:
+        try:
+            if isinstance(bf_raw, str):
+                bf = json.loads(bf_raw)
+            else:
+                bf = bf_raw
+            if isinstance(bf, list) and bf:
+                parts = []
+                for item in bf:
+                    if isinstance(item, dict):
+                        k = item.get('k', '')
+                        v = item.get('v', '')
+                        if v and v.strip() and v.strip() != '-':
+                            parts.append(f'{k}:\n{v}')
+                if parts:
+                    return '\n\n'.join(parts)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return m.get('text', '') or ''
+
+
+def analyze_reports(messages, team_members, target_date, member_roles=None):
     if not LLM_API_KEY:
         print('[warn] LLM_API_KEY not set, skipping analysis', flush=True)
         return _fallback_analysis(messages, team_members, target_date)
+
+    if member_roles is None:
+        member_roles = _load_config().get('member_roles', {})
+
+    tmpl = _load_report_template()
+    text_limit = tmpl.get('llm', {}).get('text_limit_per_person', 2500)
 
     submitters = set()
     report_texts = []
     for m in messages:
         sender = m.get('sender', '')
-        text = m.get('text', '')
+        text = _extract_report_text(m)
         if not text or not sender:
             continue
         submitters.add(sender)
-        report_texts.append(f'[{sender}]\n{text[:800]}')
+        report_texts.append(f'[{sender}]\n{text[:text_limit]}')
 
     missing = [n for n in team_members if n not in submitters] if team_members else []
 
     prompt = _build_analysis_prompt(
-        report_texts, list(submitters), missing, target_date)
+        report_texts, list(submitters), missing, target_date, member_roles)
 
     try:
         result = _call_llm(prompt)
@@ -190,9 +364,33 @@ def analyze_reports(messages, team_members, target_date):
         return analysis
 
 
-def _build_analysis_prompt(report_texts, submitters, missing, target_date):
+def _build_analysis_prompt(report_texts, submitters, missing, target_date,
+                           member_roles=None):
     reports_block = '\n---\n'.join(report_texts[:40])
     missing_str = ', '.join(missing) if missing else '(none)'
+
+    roles_block = ''
+    if member_roles:
+        lines = []
+        for role_info in member_roles.values():
+            members = role_info.get('members', [])
+            focus = role_info.get('focus', '')
+            if members and focus:
+                lines.append(f'- {", ".join(members)}：{focus}')
+        if lines:
+            roles_block = (
+                '\n## 角色差异化评判\n'
+                '不同角色的日报评判标准不同，不要用统一模板项检查所有人：\n'
+                + '\n'.join(lines)
+                + '\n未在上面列出的成员按通用标准评判。\n'
+            )
+
+    # 提取 tech_leader 成员名单用于 prompt
+    tech_leaders = []
+    if member_roles:
+        tl = member_roles.get('tech_leader', {})
+        tech_leaders = tl.get('members', [])
+    tech_str = '、'.join(tech_leaders) if tech_leaders else '技术leader'
 
     return f"""你是一位游戏研发团队的管理助手。以下是 {target_date} 收到的团队日报。
 请从制作人视角分析这些日报，输出 JSON 格式结果。
@@ -202,15 +400,19 @@ def _build_analysis_prompt(report_texts, submitters, missing, target_date):
 1. **summary**: 一句话总结今日团队整体状态（30字内）
 2. **quality_flags**: 日报质量问题标记，每项含 name(人名) 和 issue(问题描述)
    - 内容过于笼统，无具体产出或数据（如"推进中""对齐中"无实质内容）
-   - 日报格式不完整，缺少关键章节
    - 明显敷衍（极短、复制昨天内容等）
+   - 按角色标准判断（见下方角色差异化评判），不要用通用模板项去标记不适用的角色
 3. **attention_items**: 值得制作人关注的事项，每项含 source(来源人名) 和 content(具体内容)
    - 提到阻塞、卡点、等待审批
    - 提到延期风险、排期冲突、资源不足
    - 跨团队/跨职能依赖或协调需求
    - 技术风险、线上问题、数据异常
    - 重要决策待定或方向分歧
-
+4. **tech_updates**: 技术方向今日动态，每项含 name(人名) 和 doing(在做什么，15字内精炼描述)
+   - 仅针对 {tech_str}
+   - 用最精炼的语言陈述他们在做什么，不评价质量，不添加建议
+   - 若日报内容截断无法判断，如实填"日报内容不全，无法提炼"
+{roles_block}
 ## 已提交: {', '.join(submitters)}
 ## 未提交: {missing_str}
 
@@ -227,6 +429,9 @@ def _build_analysis_prompt(report_texts, submitters, missing, target_date):
   ],
   "attention_items": [
     {{"source": "李四", "content": "客户端 A 模块性能问题阻塞 QA 测试"}}
+  ],
+  "tech_updates": [
+    {{"name": "杨玉涛", "doing": "调试回归energy，补充单元测试"}}
   ]
 }}
 
@@ -234,6 +439,7 @@ def _build_analysis_prompt(report_texts, submitters, missing, target_date):
 - quality_flags 只标记确实有问题的，正常日报不标记
 - 同一人在多个群提交日报属正常行为，不要标记为重复提交
 - attention_items 只提取真正值得制作人关注的信号，不要罗列日常工作
+- tech_updates 必须有内容，即使只是简短陈述"在做XX"
 - 如果所有日报质量都正常且无特殊事项，对应数组留空
 - 输出纯 JSON，不要包含 markdown 代码块标记"""
 
@@ -278,51 +484,73 @@ def _fallback_analysis(messages, team_members, target_date):
 
 
 def format_digest(analysis, target_date):
-    # 显示实际采集窗口，让收件人知道覆盖范围
+    tmpl = _load_report_template()
+    secs = tmpl.get('sections', {})
+    sub_tmpl = tmpl.get('submission', {})
+
     try:
         dt = datetime.strptime(target_date, '%Y-%m-%d')
         dt_next = dt + timedelta(days=1)
         window_str = f'（{dt.month}/{dt.day} 18:30 - {dt_next.month}/{dt_next.day} 12:00）'
     except Exception:
         window_str = ''
-    lines = [f'{target_date} 日报摘要 {window_str}']
+
+    title_fmt = tmpl.get('title', '{date} 日报摘要 {window}')
+    lines = [title_fmt.format(date=target_date, window=window_str)]
 
     sub = analysis.get('submission', {})
     total = sub.get('total', 0)
     count = sub.get('submitted_count', 0)
     missing = sub.get('missing', [])
+    sep = sub_tmpl.get('missing_sep', ' / ')
 
     lines.append('')
-    lines.append(f'✅ 已提交 {count}/{total} 人')
+    lines.append(sub_tmpl.get('submitted_line', '✅ 已提交 {count}/{total} 人').format(
+        count=count, total=total))
     if missing:
-        missing_str = ' / '.join(missing[:15])
+        names = sep.join(missing[:15])
         if len(missing) > 15:
-            missing_str += f' ...等{len(missing)}人'
-        lines.append(f'❌ 未交：{missing_str}')
+            names += f' ...等{len(missing)}人'
+        lines.append(sub_tmpl.get('missing_line', '❌ 未交：{names}').format(names=names))
 
+    # 【总览】
+    sec = secs.get('summary', {})
     summary = analysis.get('summary', '')
-    if summary:
+    if summary and sec.get('show', True):
         lines.append('')
-        lines.append('【总览】')
+        lines.append(sec.get('header', '【总览】'))
         lines.append(summary)
 
-    flags = analysis.get('quality_flags', [])
-    if flags:
+    # 【技术动态】
+    sec = secs.get('tech_updates', {})
+    tech = analysis.get('tech_updates', [])
+    if tech and sec.get('show', True):
         lines.append('')
-        lines.append('⚠️ 质量标记')
-        for f in flags[:8]:
-            name = f.get('name', '?')
-            issue = f.get('issue', '')
-            lines.append(f'• {name}：{issue}')
+        lines.append(sec.get('header', '【技术动态】'))
+        fmt = sec.get('item_format', '· {name}：{doing}')
+        for t in tech:
+            lines.append(fmt.format(name=t.get('name', '?'), doing=t.get('doing', '')))
 
-    items = analysis.get('attention_items', [])
-    if items:
+    # 质量标记
+    sec = secs.get('quality_flags', {})
+    flags = analysis.get('quality_flags', [])
+    if flags and sec.get('show', True):
         lines.append('')
-        lines.append('【关注】')
-        for item in items[:6]:
-            source = item.get('source', '?')
-            content = item.get('content', '')
-            lines.append(f'→ [{source}] {content}')
+        lines.append(sec.get('header', '⚠️ 质量标记'))
+        fmt = sec.get('item_format', '• {name}：{issue}')
+        for f in flags[:sec.get('max_items', 8)]:
+            lines.append(fmt.format(name=f.get('name', '?'), issue=f.get('issue', '')))
+
+    # 【关注】
+    sec = secs.get('attention_items', {})
+    items = analysis.get('attention_items', [])
+    if items and sec.get('show', True):
+        lines.append('')
+        lines.append(sec.get('header', '【关注】'))
+        fmt = sec.get('item_format', '→ [{source}] {content}')
+        for item in items[:sec.get('max_items', 8)]:
+            lines.append(fmt.format(
+                source=item.get('source', '?'), content=item.get('content', '')))
 
     return '\n'.join(lines)
 
@@ -677,7 +905,10 @@ def main():
           f'groups={len(report_cids)}', flush=True)
 
     messages = fetch_reports(target_date, report_cids)
-    print(f'[report-digest] fetched {len(messages)} reports total', flush=True)
+    jsapi_count = len(messages)
+    messages = _enrich_from_monitor_log(messages, target_date, report_cids)
+    print(f'[report-digest] fetched {jsapi_count} via JSAPI, '
+          f'{len(messages)} total (after monitor enrichment)', flush=True)
 
     if not messages:
         print('[report-digest] no reports found, exiting', flush=True)

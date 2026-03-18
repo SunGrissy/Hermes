@@ -332,6 +332,24 @@
 - 同会话还更新了 palace/PLAN.md（9 角色图谱），已在前一个 commit 提交
 
 
+## [2026-03-18] - [dingtalk-desktop 日报摘要+版本巡检推送]
+
+**状态**: 验收通过
+
+**内容**:
+- daemon.py: ThreadedHTTPServer 避免死锁、bf 结构化数据优先解析、fetch_report_content 改用 readyState 轮询替代固定 sleep、card_ext 正文提取、文件下载触发
+- lib/utils.py: psutil 优先获取钉钉主进程 PID，fallback 到 wmic
+- report_digest.py: Monitor 日志补充 JSAPI 遗漏消息、角色差异化 LLM prompt、技术动态提取、同人去重、消息模板外部化
+- version_digest.py (新): PmSystem 版本状态巡检推送，支持定时+手动触发
+- message_templates.json: 三套消息模板(版本巡检/日报摘要/简历筛选)统一到一个文件，emoji 安全处理
+- run_daily_digest.ps1: --full-content 模式 + 完成后自动重启钉钉恢复 UI
+- 定时任务: 日报 09:00、版本巡检 15:00
+
+**备注**:
+- digest_config.json 含 webhook token 和 api_key，已 track（历史遗留，后续考虑迁入 .env）
+- 钉钉 markdown 对 surrogate pair emoji (🔴🟡🟢🤖) 渲染有 bug，已替换为 BMP 安全 emoji
+
+
 ## [2026-03-01] - [规则体系/验收流程统一 + 会议体系对齐]
 
 **状态**: 验收通过

@@ -53,7 +53,29 @@ CT_NAMES = {
 _NO_WINDOW = 0x08000000  # subprocess.CREATE_NO_WINDOW
 
 def get_main_pid():
-    """通过 wmic 找到钉钉主进程 PID（排除 --type= 子进程）"""
+    """找到钉钉主进程 PID（排除 --type= 子进程）。
+    优先用 psutil（可靠），fallback 到 wmic（Win11 可能不可用）。
+    """
+    # 方案1：psutil（最可靠，过滤掉 --type= 子进程）
+    try:
+        import psutil
+        candidates = []
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['name'] and 'dingtalk' in proc.info['name'].lower():
+                    cmdline = proc.info['cmdline'] or []
+                    cmdline_str = ' '.join(cmdline)
+                    if '--type=' not in cmdline_str:
+                        candidates.append((proc.info['pid'], proc.memory_info().rss))
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            return candidates[0][0]
+    except Exception:
+        pass
+
+    # 方案2：wmic（Win10 可用，Win11 可能已废弃）
     try:
         r = subprocess.run(
             ['wmic', 'process', 'where', "name='DingTalk.exe'", 'get',
@@ -61,16 +83,17 @@ def get_main_pid():
             capture_output=True, text=True, encoding='gbk', errors='replace',
             timeout=10, creationflags=_NO_WINDOW,
         )
+        for block in r.stdout.split('CommandLine='):
+            if 'DingTalk.exe' in block and '--type=' not in block:
+                for line in block.split('\n'):
+                    if line.strip().startswith('ProcessId='):
+                        try:
+                            return int(line.strip().split('=')[1])
+                        except ValueError:
+                            pass
     except Exception:
-        return None
-    for block in r.stdout.split('CommandLine='):
-        if 'DingTalk.exe' in block and '--type=' not in block:
-            for line in block.split('\n'):
-                if line.strip().startswith('ProcessId='):
-                    try:
-                        return int(line.strip().split('=')[1])
-                    except ValueError:
-                        pass
+        pass
+
     return None
 
 

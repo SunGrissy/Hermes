@@ -8,9 +8,9 @@
       "header": "### **{name}** | {phase}",
 
       "countdown": {
-        "overdue":  "🔴**[超期]** 已到/超过发版日",
-        "urgent":   "⚠️**[紧]** {days}天后发版",
-        "normal":   "🟡{days}天后发版",
+      "overdue":  "❗**[超期]** 已到/超过发版日",
+      "urgent":   "⚠️**[紧]** {days}天后发版",
+      "normal":   "✅ {days}天后发版",
         "urgent_threshold_days": 7
       },
 
@@ -18,7 +18,7 @@
       "capacity_line":  "**容量**: {pct}%",
       "milestone_line": "**里程碑**: {ms_name} ({ms_date})",
       "pipeline_line":  "**管线节点**: {node_name} ({node_date})",
-      "overdue_line":   "🔴**[超期节点]** {nodes}",
+      "overdue_line":   "⛔**[超期节点]** {nodes}",
       "risk_line":      "⚠️**[风险]** {text}"
     },
 
@@ -35,7 +35,7 @@
     },
 
     "separator": "---",
-    "footer":    "###### 🤖小秘书提醒</font>"
+    "footer":    "###### 📌小秘书提醒"
   },
 
   "report_digest": {
@@ -104,6 +104,6 @@
       { "key": "reason",    "show": true, "tpl": "📋 **理由：** {reason}" }
     ],
 
-    "footer": "###### 🤖小秘书提醒</font>"
+    "footer": "###### 📌小秘书提醒"
   }
 }
