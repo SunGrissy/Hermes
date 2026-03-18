@@ -119,23 +119,30 @@ def _poll_once(cid: str, notify_cid: str, seen_ids: set):
 
         if msg_id in seen_ids or is_resume_processed(msg_id):
             continue
-        seen_ids.add(msg_id)
 
         sender_uid = str(msg.get('uid', ''))
         reply_cid = notify_cid or cid
         _log(f'发现新简历: {file_name} (uid={sender_uid}) → 结果发到 {reply_cid}')
 
         try:
-            ok = process_resume_message(
+            result = process_resume_message(
                 msg_id=msg_id,
                 group_cid=reply_cid,
                 sender_uid=sender_uid,
                 file_name=file_name,
                 file_path=file_path,
             )
-            if ok:
+            if result is None:
+                # 文件未下载，不加 seen_ids，下次 poll 继续重试
+                _log(f'等待下载: {file_name}')
+            elif result is True:
                 processed_count += 1
+                seen_ids.add(msg_id)
                 _log(f'处理完成: {file_name}')
+            else:
+                # False: 结论为待定/不通过，已发通知，加 seen_ids 避免重复调 LLM
+                seen_ids.add(msg_id)
+                _log(f'已通知（非通过）: {file_name}')
         except Exception as e:
             _log(f'处理失败 {file_name}: {e}')
 

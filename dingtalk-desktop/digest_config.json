@@ -72,7 +72,46 @@
       "name": "🐱涛哥日报直通车"
     }
   ],
+  "member_roles": {
+    "tech_leader": {
+      "members": ["杨玉涛", "车君怡"],
+      "focus": "技术leader，重点关注在做什么，不要求卡点/明日计划/AI使用/产品体验等管线模板项"
+    },
+    "art_director": {
+      "members": ["崔正钦"],
+      "focus": "主美，重点关注美术团队在做什么、关心什么、需要什么协助，不要求管线模板项"
+    },
+    "qa_lead": {
+      "members": ["任鹏锐"],
+      "focus": "QA主管，重点关注测试进度、线上质量、回归风险，评估日报有效信息含量"
+    },
+    "pipeline_pm": {
+      "members": ["张梦君"],
+      "focus": "管线PM，重点关注管线推进和人力资源管理，评估日报有效信息含量（具体数据/进度/决策 vs 泛泛描述）"
+    },
+    "apm": {
+      "members": ["屈丽茹"],
+      "focus": "APM，重点关注管线推进和人力资源协调，评估日报有效信息含量"
+    },
+    "pld_candidate": {
+      "members": ["刘泊霆", "崔忠仁", "郑杉"],
+      "focus": "可能担任PLD（策划管线负责人），除策划本职外还需关注管线推进方面的信息"
+    },
+    "ue_designer": {
+      "members": ["龚锦", "孙悦", "穆建博"],
+      "focus": "UE设计，额外关注设计目的和预期体验的理解深度；若涉及PLE职责还需关注管线顺畅情况"
+    },
+    "combat": {
+      "members": ["张旭哲", "张颖", "王翕然", "胡亚飞", "赵宇驰"],
+      "focus": "战斗方向，可能成为APM和主美的卡点，关注工作内容与管线PM/主美日报的关联度"
+    }
+  },
+  "pm_system_url": "http://192.168.20.160:8112",
+  "pm_system_api_key": "jluAsEdnr40fHjg7E88t",
+  "version_digest_limit": 3,
+  "version_digest_webhook": "https://oapi.dingtalk.com/robot/send?access_token=bbfd047b27aa532ffb63efd05c9db6a7dd38d646a6c07f2009e78c93bc7f8057",
   "discover_marker": "#日报收集",
+  "resume_notify_webhook": "https://oapi.dingtalk.com/robot/send?access_token=2816ab39197d77e816fa943c358fea510752bb27d5041725b87b345288b76bae",
   "recruit_cids": [
     {
       "cid": "73137527367",

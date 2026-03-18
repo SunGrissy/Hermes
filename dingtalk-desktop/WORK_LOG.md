@@ -1,5 +1,28 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-18] 简历初筛推送优化
+
+### 状态：验收通过
+
+### 本次工作内容
+
+#### 1. 推送通道改为机器人 webhook
+- `digest_config.json` 新增 `resume_notify_webhook` 字段，存放机器人 webhook URL
+- `resume_screen.py` 新增 `_send_via_webhook(title, text)` 函数，发送 markdown 类型消息
+- 不再依赖 JSAPI `sendTextMsg`，消息更稳定
+
+#### 2. 消息格式升级（markdown）
+- 消息类型从 `text` 改为 `markdown`，支持加粗、分割线、标题级别
+- "通过/待定/不通过"统一走 `_format_reply`，返回 `(title, text)` 元组
+- 待定标记从 ❌ 改为 ❓，"小秘书提醒"作为 `<font>` 角标置于底部
+
+#### 3. 消息模板提取到 version_digest_template.json
+- `version_digest_template.json` 新增 `resume_screen` 段，含 `title`（三种结论）和 `lines`（字段顺序/显隐/文案）
+- `_format_reply` 实时读取模板文件，热更新无需重启 daemon
+- LLM prompt 新增"核心判定"字段（≤20字一句话），替代原来过长的"原因"字段
+
+---
+
 ## [2026-03-17] 日报摘要管线全面打通
 
 ### 状态：已验收

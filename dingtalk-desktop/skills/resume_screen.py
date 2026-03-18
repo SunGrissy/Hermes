@@ -138,6 +138,7 @@ def _build_prompt(resume_text: str, role: str, checklist: str) -> tuple:
         '\n\n'
         '请严格按如下格式输出（不要多余文字）：\n'
         '结论：[通过 / 待定 / 不通过]\n'
+        '核心判定：[一句话≤20字，说明该结论的决定性原因，如"核心产出类项目少，系统能力待核实"]\n'
         '理由：[1-2句话，聚焦最关键的依据]\n'
         '亮点：[命中的优先信号，逗号分隔，没有则写"无"]\n'
         '红线：[触发的红线，逗号分隔，没有则写"无"]\n'
@@ -149,6 +150,7 @@ def _parse_llm_output(text: str) -> dict:
     """从 LLM 输出中解析结构化字段"""
     result = {
         'verdict': '待定',
+        'core': '',
         'reason': '',
         'highlights': '',
         'redlines': '',
@@ -156,6 +158,7 @@ def _parse_llm_output(text: str) -> dict:
     }
     patterns = {
         'verdict':    r'结论[：:]\s*(.+)',
+        'core':       r'核心判定[：:]\s*(.+)',
         'reason':     r'理由[：:]\s*(.+)',
         'highlights': r'亮点[：:]\s*(.+)',
         'redlines':   r'红线[：:]\s*(.+)',
@@ -168,12 +171,32 @@ def _parse_llm_output(text: str) -> dict:
     return result
 
 
-# ── 发消息 ────────────────────────────────────────────────────
+# ── 加载 webhook 配置 ────────────────────────────────────────
 
-def _send_to_group(cid: str, text: str) -> bool:
-    payload = json.dumps({'cid': cid, 'message': text}, ensure_ascii=False).encode('utf-8')
+def _load_resume_webhook() -> str:
+    cfg_path = os.path.join(_ROOT, 'digest_config.json')
+    try:
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        return cfg.get('resume_notify_webhook', '')
+    except Exception:
+        return ''
+
+
+# ── 发消息（机器人 webhook） ──────────────────────────────────
+
+def _send_via_webhook(title: str, text: str) -> bool:
+    """通过钉钉机器人 webhook 发送 markdown 消息（关键字：小秘书提醒）。"""
+    webhook_url = _load_resume_webhook()
+    if not webhook_url:
+        print('[resume_screen] 未配置 resume_notify_webhook，跳过发送')
+        return False
+    payload = json.dumps(
+        {'msgtype': 'markdown', 'markdown': {'title': title, 'text': text}},
+        ensure_ascii=False,
+    ).encode('utf-8')
     req = urllib.request.Request(
-        DAEMON_URL.rstrip('/') + '/send',
+        webhook_url,
         data=payload,
         headers={'Content-Type': 'application/json'},
         method='POST',
@@ -181,48 +204,159 @@ def _send_to_group(cid: str, text: str) -> bool:
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             result = json.loads(resp.read())
-        return result.get('success', False)
+        ok = result.get('errcode', -1) == 0
+        if not ok:
+            print(f'[resume_screen] webhook 返回: {result}')
+        return ok
     except Exception as e:
-        print(f'[resume_screen] 发消息失败: {e}')
+        print(f'[resume_screen] webhook 发送失败: {e}')
         return False
 
 
-def _format_reply(file_name: str, role: str, parsed: dict) -> str:
-    verdict_mark = {'通过': '[通过]', '待定': '[待定]', '不通过': '[不通过]'}.get(
-        parsed['verdict'], '[待定]')
-    lines = [
-        f'简历初筛 | {file_name}',
-        f'岗位推断：{role}',
-        f'结论：{verdict_mark}',
-    ]
-    if parsed['reason']:
-        lines.append(f'理由：{parsed["reason"]}')
-    if parsed['highlights'] and parsed['highlights'] != '无':
-        lines.append(f'亮点：{parsed["highlights"]}')
-    if parsed['redlines'] and parsed['redlines'] != '无':
-        lines.append(f'红线：{parsed["redlines"]}')
-    return '\n'.join(lines)
+def _load_resume_template() -> dict:
+    tpl_path = os.path.join(_ROOT, 'version_digest_template.json')
+    try:
+        with open(tpl_path, 'r', encoding='utf-8') as f:
+            return json.load(f).get('resume_screen', {})
+    except Exception as e:
+        print(f'[resume_screen] 模板加载失败，使用内置默认值: {e}')
+        return {}
+
+_DEFAULT_TEMPLATE = {
+    'title': {
+        'pass':    '✅ 简历初筛通过 | {candidate} · {role}',
+        'pending': '❓ 简历初筛待定 | {candidate} · {role}',
+        'fail':    '❌ 简历初筛不通过 | {candidate} · {role}',
+    },
+    'lines': [
+        {'key': 'core',       'show': True,  'tpl': '🔍 **核心判定：** {core}'},
+        {'key': 'highlights', 'show': True,  'tpl': '💡 **亮点：** {highlights}'},
+        {'key': 'redlines',   'show': True,  'tpl': '🚫 **红线：** {redlines}'},
+        {'key': 'reason',     'show': True,  'tpl': '📋 **详细理由：** {reason}'},
+    ],
+}
+
+
+def _format_reply(file_name: str, role: str, parsed: dict) -> tuple:
+    """从 version_digest_template.json 读模板，返回 (title, markdown_text)。"""
+    tpl = _load_resume_template() or _DEFAULT_TEMPLATE
+    candidate = file_name.replace('.pdf', '').replace('.PDF', '')
+
+    verdict_key = {'通过': 'pass', '待定': 'pending', '不通过': 'fail'}.get(parsed['verdict'], 'pending')
+    title_tpl = tpl.get('title', _DEFAULT_TEMPLATE['title']).get(verdict_key, '{candidate} · {role}')
+    title = title_tpl.format(candidate=candidate, role=role)
+
+    ctx = {
+        'candidate':  candidate,
+        'role':       role,
+        'core':       parsed.get('core', ''),
+        'highlights': parsed.get('highlights', ''),
+        'redlines':   parsed.get('redlines', ''),
+        'reason':     parsed.get('reason', ''),
+    }
+
+    body_lines = [f'### {title}', '---']
+    for item in tpl.get('lines', _DEFAULT_TEMPLATE['lines']):
+        if not item.get('show', True):
+            continue
+        val = ctx.get(item['key'], '')
+        if not val or val == '无':
+            continue
+        body_lines.append('\n' + item['tpl'].format(**ctx))
+
+    body_lines.append('\n---')
+    body_lines.append(_load_footer())
+    return title, '\n'.join(body_lines)
+
+
+def _load_footer() -> str:
+    tpl_path = os.path.join(_ROOT, 'version_digest_template.json')
+    try:
+        with open(tpl_path, 'r', encoding='utf-8') as f:
+            return json.load(f).get('footer', '*小秘书提醒*')
+    except Exception:
+        return '*小秘书提醒*'
+
+
+# ── 本地文件查找 ───────────────────────────────────────────────
+
+_SEARCH_DIRS = [
+    'D:/DownLoads',
+    'D:/DownLoads/DingDingDownLoads',
+    'D:/Downloads',
+    os.path.expanduser('~/Downloads'),
+]
+
+def _trigger_download(cid: str, msg_id: str, file_name: str) -> str:
+    """调用 daemon /trigger_download，让 DingTalk 自动下载文件，返回本地路径。"""
+    import urllib.request
+    daemon_url = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
+    payload = json.dumps({'cid': cid, 'msg_id': msg_id, 'file_name': file_name, 'wait': 15}).encode('utf-8')
+    req = urllib.request.Request(
+        daemon_url.rstrip('/') + '/trigger_download',
+        data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read())
+        path = data.get('file_path', '')
+        if path:
+            print(f'[resume_screen] trigger_download 成功: {path}')
+        return path
+    except Exception as e:
+        print(f'[resume_screen] trigger_download 失败: {e}')
+        return ''
+
+
+def _find_local_pdf(file_name: str) -> str:
+    """在常见下载目录里按文件名搜索 PDF，找到返回路径，否则返回空字符串。"""
+    for base in _SEARCH_DIRS:
+        if not os.path.isdir(base):
+            continue
+        # 精确匹配
+        exact = os.path.join(base, file_name)
+        if os.path.exists(exact):
+            return exact
+        # 遍历一层子目录
+        try:
+            for entry in os.scandir(base):
+                if entry.is_dir():
+                    candidate = os.path.join(entry.path, file_name)
+                    if os.path.exists(candidate):
+                        return candidate
+        except OSError:
+            pass
+    return ''
 
 
 # ── 主入口 ────────────────────────────────────────────────────
 
 def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
-                            file_name: str, file_path: str) -> bool:
+                            file_name: str, file_path: str):
     """
     处理一条 ct=502 简历消息。
-    返回 True 表示成功处理并回复，False 表示跳过（已处理或失败）。
+    返回值：
+      True  — 处理完成，结论=通过，已回复并写 DB
+      False — 结论为待定/不通过，已完成 LLM 判断，不回复（不重试）
+      None  — 文件未在本地找到，下次 poll 重试
     """
     if is_resume_processed(msg_id):
         return False
 
     print(f'[resume_screen] 开始处理: {file_name}')
 
-    # 1. 读 PDF
-    if not os.path.exists(file_path):
-        print(f'[resume_screen] 文件不存在: {file_path}')
-        save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
-                           '未知', '跳过', '文件不存在', reply_sent=False)
-        return False
+    # 1. 读 PDF — file_path 可能为空（文件未被打开过）或路径不存在（未下载）
+    #    fallback：按文件名在常见下载目录里搜索
+    if not file_path or not os.path.exists(file_path):
+        file_path = _find_local_pdf(file_name)
+    if not file_path:
+        # 尝试通过 daemon 触发 DingTalk 下载（需要群窗口在 DingTalk 中保持打开）
+        file_path = _trigger_download(group_cid, msg_id, file_name)
+    if not file_path:
+        print(f'[resume_screen] 文件未在本地找到（待下载）: {file_name}')
+        return None   # 不写 DB，下次 poll 继续重试
 
     try:
         import pdfplumber
@@ -256,16 +390,21 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
     parsed = _parse_llm_output(llm_output)
     summary = f"结论:{parsed['verdict']} | 理由:{parsed['reason']} | 亮点:{parsed['highlights']}"
 
-    # 5. 仅「通过」时发消息并入库，其余丢弃
+    # 5. 发消息 + 入库
+    #    通过 → 详细格式；待定/不通过 → ❓/❌ 通知（含核心判定）
     if parsed['verdict'] != '通过':
-        print(f'[resume_screen] 结论={parsed["verdict"]}，丢弃')
+        title, notify_text = _format_reply(file_name, role, parsed)
+        sent = _send_via_webhook(title, notify_text)
+        print(f'[resume_screen] 结论={parsed["verdict"]}，通知已发: {"成功" if sent else "失败"}')
+        save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
+                           role, parsed['verdict'], summary, reply_sent=sent)
         return False
 
-    reply_text = _format_reply(file_name, role, parsed)
-    sent = _send_to_group(group_cid, reply_text)
+    title, reply_text = _format_reply(file_name, role, parsed)
+    sent = _send_via_webhook(title, reply_text)
     print(f'[resume_screen] 消息发送: {"成功" if sent else "失败"}')
 
-    # 6. 写 DB（仅通过）
+    # 6. 写 DB
     save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
                        role, parsed['verdict'], summary, reply_sent=sent)
 
