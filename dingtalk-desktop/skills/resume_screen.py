@@ -292,10 +292,10 @@ _DEFAULT_TEMPLATE = {
         'fail':    '❌ 简历初筛不通过 | {candidate} · {role}',
     },
     'lines': [
-        {'key': 'core',       'show': True,  'tpl': '🔍 **核心判定：** {core}'},
-        {'key': 'highlights', 'show': True,  'tpl': '💡 **亮点：** {highlights}'},
-        {'key': 'redlines',   'show': True,  'tpl': '🚫 **红线：** {redlines}'},
-        {'key': 'reason',     'show': True,  'tpl': '📋 **详细理由：** {reason}'},
+        {'key': 'core',       'show': True,  'tpl': '◆ **核心判定：** {core}'},
+        {'key': 'highlights', 'show': True,  'tpl': '★ **亮点：** {highlights}'},
+        {'key': 'redlines',   'show': True,  'tpl': '✖ **红线：** {redlines}'},
+        {'key': 'reason',     'show': True,  'tpl': '▶ **详细理由：** {reason}'},
     ],
 }
 
@@ -330,7 +330,7 @@ def _format_reply(file_name: str, role: str, parsed: dict,
 
     # 来源行（有值才显示）
     if source_name:
-        source_tpl = tpl.get('source_line', '📥 **来源：** {source}')
+        source_tpl = tpl.get('source_line', '► **来源：** {source}')
         body_lines.append('\n' + source_tpl.format(**ctx))
 
     for item in line_defs:
