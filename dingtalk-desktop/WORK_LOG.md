@@ -136,7 +136,8 @@
 - 另一个 Agent 将 `version_digest_template.json` 合并入统一模板 `message_templates.json`
 - `resume_screen.py` 改为优先读 `message_templates.json`，兼容旧文件名
 - `digest_config.json` 新增笛笛（杨柳笛）私信 CID（`46459012:300405507`）
-- 待补：李军等其余联系人 CID 未被 daemon 捕获，待下次会话追加
+- 追加：李军私信 CID（`46459012:153460168`）已加入 recruit_cids
+- 待补：李晓明、王姣莉、朱慧敏、Jojo 吴娇娇 CID 待后续会话追加
 
 ### 文件变更清单
 | 文件 | 变更类型 |
