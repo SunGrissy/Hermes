@@ -1,5 +1,30 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-18] 应届生初筛分支
+
+### 状态：验收通过
+
+### 本次工作内容
+
+#### 1. 应届生识别
+- `_is_fresh_graduate(file_name, text)` — 启发式判断：匹配「应届/在读/预计毕业」关键词 + 近2年/未来1年毕业年份
+- 主流程传入 `is_fresh`，影响 checklist 加载、prompt 生成、消息格式
+
+#### 2. 应届专用 checklist
+- 新建 `performeval/面试/简历初筛/简历初筛清单_应届生.md`：思维/潜力/热情导向
+- 红线宽松化，待定标准宽松化；岗位清单作为非硬性补充附后
+
+#### 3. 应届专用 LLM prompt
+- 专用 system prompt：不卡经验年限，关注思维逻辑/游戏热情/学习速度
+- 输出格式新增「潜力信号」字段，替换社招的「亮点」
+
+#### 4. 消息模板扩展
+- `version_digest_template.json` 新增 `title_fresh`、`fresh_lines`、`footer` 字段
+- 应届消息标题含"应届"标识，内容行展示「潜力信号」而非「亮点」
+- `_load_footer()` 优先读 `resume_screen.footer`，隔离全局 footer
+
+---
+
 ## [2026-03-18] 简历初筛推送优化
 
 ### 状态：验收通过

@@ -47,7 +47,7 @@ def _resolve_llm():
     return key, base or 'https://api.openai.com/v1', model or 'gpt-4o-mini'
 
 
-# ── 岗位猜测 ────────────────────────────────────────────────
+# ── 岗位猜测 + 应届识别 ───────────────────────────────────────
 
 _ROLE_KEYWORDS = {
     '运营策划': ['运营', '活动运营', '游戏运营', 'ops'],
@@ -55,6 +55,24 @@ _ROLE_KEYWORDS = {
     '战斗策划': ['战斗', '关卡', 'pvp', 'pve', 'combat'],
     'PM':       ['pm', 'pmo', '项目管理', '项目经理', '管线'],
 }
+
+# 应届判断：毕业年份在当前年份 ±1 范围内，或含应届关键词
+import datetime as _dt
+_CURRENT_YEAR = _dt.datetime.now().year
+_FRESH_YEAR_RANGE = {str(y) for y in range(_CURRENT_YEAR - 1, _CURRENT_YEAR + 3)}
+_FRESH_KEYWORDS = ['应届', '在读', '预计毕业', '即将毕业', 'fresh graduate', '届毕业生']
+
+def _is_fresh_graduate(file_name: str, text: str) -> bool:
+    """简单启发式判断是否为应届/准应届候选人。"""
+    combined = (file_name + ' ' + text[:1000]).lower()
+    for kw in _FRESH_KEYWORDS:
+        if kw in combined:
+            return True
+    # 检测毕业年份：近两年或未来一年
+    for yr in _FRESH_YEAR_RANGE:
+        if yr in combined and ('届' in combined or '毕业' in combined or 'graduate' in combined):
+            return True
+    return False
 
 def _guess_role(file_name: str, text: str) -> str:
     name_lower = file_name.lower()
@@ -68,20 +86,33 @@ def _guess_role(file_name: str, text: str) -> str:
 
 # ── 加载初筛清单 ──────────────────────────────────────────────
 
-def _load_checklist(role: str) -> str:
-    mapping = {
+def _load_checklist(role: str, is_fresh: bool = False) -> str:
+    # 应届生：优先加载应届清单，岗位清单作为补充附后
+    fresh_path = os.path.join(_CHECKLIST_DIR, '简历初筛清单_应届生.md')
+    role_mapping = {
         '运营策划': '简历初筛清单_运营策划.md',
         '系统策划': '简历初筛清单_系统策划.md',
         '战斗策划': '简历初筛清单_战斗策划.md',
     }
-    fname = mapping.get(role)
+
+    def _read(path):
+        if os.path.exists(path):
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+        return ''
+
+    if is_fresh:
+        fresh_content = _read(fresh_path)
+        role_fname = role_mapping.get(role)
+        role_content = _read(os.path.join(_CHECKLIST_DIR, role_fname)) if role_fname else ''
+        if role_content:
+            return fresh_content + '\n\n---\n\n【岗位补充参考（非硬性要求）】\n' + role_content
+        return fresh_content
+
+    fname = role_mapping.get(role)
     if not fname:
         return ''
-    path = os.path.join(_CHECKLIST_DIR, fname)
-    if not os.path.exists(path):
-        return ''
-    with open(path, 'r', encoding='utf-8') as f:
-        return f.read()
+    return _read(os.path.join(_CHECKLIST_DIR, fname))
 
 
 # ── LLM 调用 ─────────────────────────────────────────────────
@@ -121,27 +152,53 @@ def _call_llm(prompt: str, system: str = '') -> str:
         return f'[LLM调用失败: {e}]'
 
 
-def _build_prompt(resume_text: str, role: str, checklist: str) -> tuple:
-    system = (
-        '你是一位游戏公司的人力资源专家，擅长简历初筛。'
-        '请根据提供的初筛清单和简历内容，给出客观、简洁的初筛结论。'
-        '输出格式严格遵守要求，不要添加额外说明。'
-    )
-    checklist_section = (
-        f'\n\n【初筛清单 · {role}】\n{checklist}\n' if checklist
-        else f'\n\n【岗位】{role}（无专项清单，请综合判断）\n'
-    )
+def _build_prompt(resume_text: str, role: str, checklist: str,
+                  is_fresh: bool = False) -> tuple:
+    if is_fresh:
+        system = (
+            '你是一位游戏公司的人力资源专家，正在筛选应届/准应届候选人。'
+            '应届生缺乏生产经验是正常的，不要以社招标准卡年限或产出项目数量。'
+            '核心判断维度：思维逻辑、游戏热情、学习速度、协作意识。'
+            '若有亮点但信息不足，结论给"待定"而非"不通过"，建议初试核实。'
+            '输出格式严格遵守要求，不要添加额外说明。'
+        )
+        checklist_section = (
+            f'\n\n【应届生初筛清单】\n{checklist}\n' if checklist
+            else f'\n\n【候选人类型】应届/准应届（无专项清单，请按思维/潜力综合判断）\n'
+        )
+        output_hint = (
+            '请严格按如下格式输出（不要多余文字）：\n'
+            '结论：[通过 / 待定 / 不通过]\n'
+            '核心判定：[一句话≤20字，说明该结论的决定性依据，聚焦思维/潜力/热情]\n'
+            '理由：[1-2句话，说明亮点或不足]\n'
+            '潜力信号：[能体现思维/学习力/游戏热情的具体表现，逗号分隔，没有则写"无"]\n'
+            '红线：[触发的红线，逗号分隔，没有则写"无"]\n'
+        )
+    else:
+        system = (
+            '你是一位游戏公司的人力资源专家，擅长简历初筛。'
+            '请根据提供的初筛清单和简历内容，给出客观、简洁的初筛结论。'
+            '输出格式严格遵守要求，不要添加额外说明。'
+        )
+        checklist_section = (
+            f'\n\n【初筛清单 · {role}】\n{checklist}\n' if checklist
+            else f'\n\n【岗位】{role}（无专项清单，请综合判断）\n'
+        )
+        output_hint = (
+            '请严格按如下格式输出（不要多余文字）：\n'
+            '结论：[通过 / 待定 / 不通过]\n'
+            '核心判定：[一句话≤20字，说明该结论的决定性原因，如"核心产出类项目少，系统能力待核实"]\n'
+            '理由：[1-2句话，聚焦最关键的依据]\n'
+            '亮点：[命中的优先信号，逗号分隔，没有则写"无"]\n'
+            '红线：[触发的红线，逗号分隔，没有则写"无"]\n'
+        )
+
+    label = f'应届生（目标岗位：{role}）' if is_fresh else role
     user = (
-        f'请对以下简历进行初筛，岗位：{role}。'
+        f'请对以下简历进行初筛，候选人类型：{label}。'
         f'{checklist_section}'
         '\n\n【简历内容】\n' + resume_text[:4000] +
-        '\n\n'
-        '请严格按如下格式输出（不要多余文字）：\n'
-        '结论：[通过 / 待定 / 不通过]\n'
-        '核心判定：[一句话≤20字，说明该结论的决定性原因，如"核心产出类项目少，系统能力待核实"]\n'
-        '理由：[1-2句话，聚焦最关键的依据]\n'
-        '亮点：[命中的优先信号，逗号分隔，没有则写"无"]\n'
-        '红线：[触发的红线，逗号分隔，没有则写"无"]\n'
+        '\n\n' + output_hint
     )
     return system, user
 
@@ -155,6 +212,7 @@ def _parse_llm_output(text: str) -> dict:
         'highlights': '',
         'redlines': '',
         'focus': '',
+        'potential': '',   # 应届生专用：潜力信号
     }
     patterns = {
         'verdict':    r'结论[：:]\s*(.+)',
@@ -163,6 +221,7 @@ def _parse_llm_output(text: str) -> dict:
         'highlights': r'亮点[：:]\s*(.+)',
         'redlines':   r'红线[：:]\s*(.+)',
         'focus':      r'建议考察[：:]\s*(.+)',
+        'potential':  r'潜力信号[：:]\s*(.+)',
     }
     for key, pat in patterns.items():
         m = re.search(pat, text)
@@ -237,13 +296,16 @@ _DEFAULT_TEMPLATE = {
 }
 
 
-def _format_reply(file_name: str, role: str, parsed: dict) -> tuple:
+def _format_reply(file_name: str, role: str, parsed: dict,
+                  is_fresh: bool = False) -> tuple:
     """从 version_digest_template.json 读模板，返回 (title, markdown_text)。"""
     tpl = _load_resume_template() or _DEFAULT_TEMPLATE
     candidate = file_name.replace('.pdf', '').replace('.PDF', '')
 
     verdict_key = {'通过': 'pass', '待定': 'pending', '不通过': 'fail'}.get(parsed['verdict'], 'pending')
-    title_tpl = tpl.get('title', _DEFAULT_TEMPLATE['title']).get(verdict_key, '{candidate} · {role}')
+    title_section = 'title_fresh' if is_fresh else 'title'
+    title_tpl = tpl.get(title_section, tpl.get('title', _DEFAULT_TEMPLATE['title'])).get(
+        verdict_key, '{candidate} · {role}')
     title = title_tpl.format(candidate=candidate, role=role)
 
     ctx = {
@@ -251,12 +313,16 @@ def _format_reply(file_name: str, role: str, parsed: dict) -> tuple:
         'role':       role,
         'core':       parsed.get('core', ''),
         'highlights': parsed.get('highlights', ''),
+        'potential':  parsed.get('potential', ''),
         'redlines':   parsed.get('redlines', ''),
         'reason':     parsed.get('reason', ''),
     }
 
+    lines_key = 'fresh_lines' if is_fresh else 'lines'
+    line_defs = tpl.get(lines_key, _DEFAULT_TEMPLATE['lines'])
+
     body_lines = [f'### {title}', '---']
-    for item in tpl.get('lines', _DEFAULT_TEMPLATE['lines']):
+    for item in line_defs:
         if not item.get('show', True):
             continue
         val = ctx.get(item['key'], '')
@@ -273,7 +339,10 @@ def _load_footer() -> str:
     tpl_path = os.path.join(_ROOT, 'version_digest_template.json')
     try:
         with open(tpl_path, 'r', encoding='utf-8') as f:
-            return json.load(f).get('footer', '*小秘书提醒*')
+            data = json.load(f)
+        # 优先取 resume_screen 段的 footer，没有再回退到全局
+        return (data.get('resume_screen', {}).get('footer')
+                or data.get('footer', '*小秘书提醒*'))
     except Exception:
         return '*小秘书提醒*'
 
@@ -376,13 +445,15 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
                            '未知', '跳过', 'PDF内容过短/扫描件', reply_sent=False)
         return False
 
-    # 2. 猜岗位 + 加载清单
+    # 2. 猜岗位 + 应届识别 + 加载清单
     role = _guess_role(file_name, resume_text)
-    checklist = _load_checklist(role)
-    print(f'[resume_screen] 猜测岗位: {role}, 清单: {"有" if checklist else "无"}')
+    is_fresh = _is_fresh_graduate(file_name, resume_text)
+    checklist = _load_checklist(role, is_fresh=is_fresh)
+    tag = '应届' if is_fresh else '社招'
+    print(f'[resume_screen] 猜测岗位: {role}, 候选人类型: {tag}, 清单: {"有" if checklist else "无"}')
 
     # 3. LLM 初筛
-    system_prompt, user_prompt = _build_prompt(resume_text, role, checklist)
+    system_prompt, user_prompt = _build_prompt(resume_text, role, checklist, is_fresh=is_fresh)
     llm_output = _call_llm(user_prompt, system=system_prompt)
     print(f'[resume_screen] LLM输出:\n{llm_output}')
 
@@ -393,14 +464,14 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
     # 5. 发消息 + 入库
     #    通过 → 详细格式；待定/不通过 → ❓/❌ 通知（含核心判定）
     if parsed['verdict'] != '通过':
-        title, notify_text = _format_reply(file_name, role, parsed)
+        title, notify_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh)
         sent = _send_via_webhook(title, notify_text)
         print(f'[resume_screen] 结论={parsed["verdict"]}，通知已发: {"成功" if sent else "失败"}')
         save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
                            role, parsed['verdict'], summary, reply_sent=sent)
         return False
 
-    title, reply_text = _format_reply(file_name, role, parsed)
+    title, reply_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh)
     sent = _send_via_webhook(title, reply_text)
     print(f'[resume_screen] 消息发送: {"成功" if sent else "失败"}')
 
