@@ -1,4 +1,4 @@
-"""Palace Web — 报告批注系统 v0.1
+"""Palace Web — 报告批注系统 v0.2
 
 FastAPI 服务：报告展示 + 批注持久化 + 钉钉通知。
 """
@@ -22,7 +22,7 @@ from pydantic import BaseModel
 # Paths & constants
 # ---------------------------------------------------------------------------
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 _server_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -40,6 +40,7 @@ _KEY_FILES = [
     "palace_web/static/report.html",
     "palace_web/static/styles.css",
     "palace_web/static/app.js",
+    "palace_web/import_report.py",
 ]
 
 PALACE_ROOT = PROJECT_ROOT.parent
@@ -249,7 +250,6 @@ async def submit_annotations(report_id: str, body: SubmitRequest):
     }
     _save_annotations(report_id, ann)
 
-    # Build stats
     marks = {}
     for item in ann.get("items", {}).values():
         m = item.get("mark", "")
@@ -260,13 +260,14 @@ async def submit_annotations(report_id: str, body: SubmitRequest):
     if unmarked < 0:
         unmarked = 0
 
-    stats_text = (
-        f"adopt {marks.get('adopt', 0)} / "
-        f"discuss {marks.get('discuss', 0)} / "
-        f"known {marks.get('known', 0)} / "
-        f"na {marks.get('na', 0)} / "
-        f"unmarked {unmarked}"
-    )
+    _MARK_EMOJI = {"adopt": "\U0001f534", "discuss": "\U0001f7e1", "known": "\U0001f7e2", "na": "\u26aa"}
+    _MARK_LABEL = {"adopt": "\u91c7\u7eb3", "discuss": "\u5f85\u8bae", "known": "\u5df2\u77e5", "na": "\u4e0d\u9002\u7528"}
+    stats_parts = []
+    for mk in ("adopt", "discuss", "known", "na"):
+        cnt = marks.get(mk, 0)
+        stats_parts.append(f"{_MARK_EMOJI[mk]}{_MARK_LABEL[mk]} {cnt}")
+    stats_parts.append(f"\u672a\u6279 {unmarked}")
+    stats_text = " \u00b7 ".join(stats_parts)
 
     # DingTalk notification (if webhook provided)
     dingtalk_sent = False
@@ -297,16 +298,22 @@ async def _send_dingtalk(
         print("[palace-web] httpx not installed, skipping dingtalk notification")
         return False
 
+    _ROLE_LABELS = {
+        "producer": "\u5236\u4f5c\u4eba", "pld": "\u7ba1\u7ebf\u4e3b\u7b56",
+        "pmo": "\u7ba1\u7ebf\u603b\u7ba1", "ple": "\u7ba1\u7ebf\u4f53\u9a8c", "plt": "\u7ba1\u7ebf\u6280\u672f",
+    }
+    role_label = _ROLE_LABELS.get(annotator_name.split("|")[0] if "|" in annotator_name else "", annotator_name)
+
     md_text = (
-        f"### Palace Report Annotation Complete\n\n"
-        f"**Report**: {title}\n\n"
-        f"**Annotator**: {annotator_name}\n\n"
-        f"**Stats**: {stats_text}\n\n"
+        f"### \U0001f4cb \u5ba1\u67e5\u62a5\u544a\u6279\u6ce8\u5b8c\u6210\n\n"
+        f"**\u62a5\u544a**\uff1a{title}\n\n"
+        f"**\u6279\u6ce8\u4eba**\uff1a{annotator_name}\n\n"
+        f"**\u6279\u6ce8\u7ed3\u679c**\uff1a{stats_text}\n\n"
     )
 
     payload = {
         "msgtype": "markdown",
-        "markdown": {"title": f"Annotation: {title}", "text": md_text},
+        "markdown": {"title": f"\u6279\u6ce8\u5b8c\u6210\uff1a{title}", "text": md_text},
         "at": {"isAtAll": False},
     }
 

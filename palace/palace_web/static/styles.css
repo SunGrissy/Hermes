@@ -1,4 +1,4 @@
-/* Palace Annotation System — styles v0.1 */
+/* Palace Annotation System — styles v0.2 */
 
 :root {
   --bg: #0f1117;
@@ -96,8 +96,10 @@ a:hover { color: var(--accent-hover); }
 }
 .report-card:hover { background: var(--bg-card-hover); }
 
-.report-card .title { flex: 1; font-weight: 500; }
-.report-card .meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; }
+.report-card .rc-left { flex: 1; }
+.report-card .rc-right { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+.report-card .title { font-weight: 500; margin-bottom: 4px; }
+.report-card .meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; align-items: center; }
 
 /* Verdict badges */
 .badge {
@@ -342,6 +344,18 @@ a:hover { color: var(--accent-hover); }
 }
 .issue-card:hover { border-color: var(--accent); }
 .issue-card.highlighted { border-color: var(--accent); background: var(--bg-card-hover); }
+
+/* Mark state on issue cards (left panel) */
+.issue-card.mark-adopt   { border-left: 3px solid var(--red); }
+.issue-card.mark-discuss { border-left: 3px solid var(--yellow); }
+.issue-card.mark-known   { border-left: 3px solid var(--green); }
+.issue-card.mark-na      { border-left: 3px solid var(--gray); }
+
+.issue-mark-icon {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
 
 .issue-header {
   display: flex;
