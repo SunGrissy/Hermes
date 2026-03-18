@@ -1,0 +1,346 @@
+================================================================================
+RAW PROBE: 项目助手(互动卡片2950) (cid=316550726:659392009)
+================================================================================
+  contentType=2950
+  content keys: ['atCustomRoleIds', 'atOpenIds', 'attachments', 'contentType']
+  extension keys: ['IMReserveOTOMemberOrgIds', 'LastMessageI18n', 'bizReadExport', 'interactiveCardLastMessage', 'miniAppId', 'msgNotifyCategory', 'msgSrcBizId', 'push_msg_task_id', 'sendMsgUUID', 'supportForward', 'widgetName']
+
+  FULL EXPANDED JSON:
+{
+  "baseMessage": {
+    "content": {
+      "atCustomRoleIds": {},
+      "atOpenIds": {},
+      "attachments": [
+        {
+          "extension": {
+            "LastMessageI18n": {
+              "en_US": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+              "zh_TW": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+              "zh_HK": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+              "zh_CN": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖"
+            },
+            "cardInstanceId": "433910504906",
+            "interactiveCardLastMessage": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+            "messageCreateTime": "1773237947209",
+            "miniAppId": "5000000004926193",
+            "widgetName": "34b300b4-84dd-4e5f-9572-9ba44b74fff0"
+          },
+          "filePath": "",
+          "isPreload": false,
+          "size": "0",
+          "thumbPath": "",
+          "type": 2950,
+          "url": ""
+        }
+      ],
+      "contentType": 2950
+    },
+    "contentVersion": "0",
+    "conversationId": "316550726:659392009",
+    "createdAt": "1773237947218",
+    "creatorType": 1,
+    "decryptStatus": 1,
+    "downloadProgress": "-1",
+    "downloadStatus": 0,
+    "downloadTaskId": "-1",
+    "extension": {
+      "IMReserveOTOMemberOrgIds": "",
+      "LastMessageI18n": {
+        "en_US": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+        "zh_TW": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+        "zh_HK": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+        "zh_CN": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖"
+      },
+      "bizReadExport": {
+        "bizKey": "card",
+        "msgRelatedBizId": "433910504906"
+      },
+      "interactiveCardLastMessage": "赵圃瑞 将执行者从 刘兆蕊 变更为 张颖",
+      "miniAppId": "5000000004926193",
+      "msgNotifyCategory": "work",
+      "msgSrcBizId": "teambition.notification.task.updates",
+      "push_msg_task_id": "he4o31ATQZ2msfru/UDEiw",
+      "sendMsgUUID": "aed93abe7439e65b2d26c0c6926842f3",
+      "supportForward": "0",
+      "widgetName": "34b300b4-84dd-4e5f-9572-9ba44b74fff0"
+    },
+    "isEncrypted": false,
+    "localExtension": {},
+    "memberExtension": {},
+    "memberTag": "-1",
+    "messageId": "25450705781792",
+    "recallStatus": 0,
+    "senderOpenId": "659392009",
+    "shieldStatus": 0,
+    "tag": "0",
+    "tmpMessageId": "25450705781792",
+    "type": 1,
+    "uploadProgress": "-1",
+    "uploadStatus": 0,
+    "uuid": "VDZFoqi"
+  },
+  "receiverMessageStatus": {
+    "readStatus": 0
+  },
+  "sendStatus": 1,
+  "senderMessageStatus": {
+    "totalCount": -1,
+    "unReadCount": -1
+  }
+}
+
+================================================================================
+RAW PROBE: 工作通知(日报300) (cid=36320517564)
+================================================================================
+  contentType=300
+  content keys: ['atCustomRoleIds', 'atOpenIds', 'attachments', 'contentType']
+  extension keys: ['agg_entrance_id', 'openConversationId', 'push_msg_task_id', 'sendMsgUUID', 'systemMsgNPSTag']
+
+  FULL EXPANDED JSON:
+{
+  "baseMessage": {
+    "content": {
+      "atCustomRoleIds": {},
+      "atOpenIds": {},
+      "attachments": [
+        {
+          "extension": {
+            "b_content": "打卡地点: 1层东侧出188",
+            "b_tl": "19:51打卡成功",
+            "date": "1773229875038",
+            "h_bg": "0xFFBBBBBB",
+            "h_tl": "我的HR助手",
+            "pc_msg_url": "https://core.mokahr.com/punch/punch?corpId=ding37c967956637d20d&msgId=1481378994323791872"
+          },
+          "filePath": "",
+          "isPreload": false,
+          "size": "0",
+          "thumbPath": "",
+          "type": 300,
+          "url": "https://core.mokahr.com/punch/punch?corpId=ding37c967956637d20d&msgId=1481378994323791872"
+        }
+      ],
+      "contentType": 300
+    },
+    "contentVersion": "0",
+    "conversationId": "36320517564",
+    "createdAt": "1773229875047",
+    "creatorType": 1,
+    "decryptStatus": 1,
+    "downloadProgress": "-1",
+    "downloadStatus": 0,
+    "downloadTaskId": "-1",
+    "extension": {
+      "agg_entrance_id": "2694164666",
+      "openConversationId": "cidVH6cfj7GQY1dq1izQ67gVA==",
+      "push_msg_task_id": "3386133618025",
+      "sendMsgUUID": "53350a3119af1e5fcbdbfe30ef89ece8",
+      "systemMsgNPSTag": "1"
+    },
+    "isEncrypted": false,
+    "localExtension": {},
+    "memberExtension": {},
+    "memberTag": "-1",
+    "messageId": "25426112345406",
+    "recallStatus": 0,
+    "senderOpenId": "62817734086",
+    "shieldStatus": 0,
+    "tag": "0",
+    "tmpMessageId": "25426112345406",
+    "type": 1,
+    "uploadProgress": "-1",
+    "uploadStatus": 0,
+    "uuid": "VDYhvav"
+  },
+  "receiverMessageStatus": {
+    "readStatus": 2
+  },
+  "sendStatus": 1,
+  "senderMessageStatus": {
+    "totalCount": -1,
+    "unReadCount": -1
+  }
+}
+
+================================================================================
+RAW PROBE: 群聊(富文本3100) (cid=69104164425)
+================================================================================
+  contentType=1
+  content keys: ['atCustomRoleIds', 'atMsgStatusList', 'atOpenIds', 'contentType', 'textContent']
+  extension keys: ['oid', 'openConversationId', 'origin_text', 'realmFlag', 'realmOrgid', 'safety_app_id', 'safety_priority', 'sameContentIdentifier', 'sendMsgUUID']
+
+  FULL EXPANDED JSON:
+{
+  "baseMessage": {
+    "content": {
+      "atCustomRoleIds": {},
+      "atMsgStatusList": [
+        {
+          "openId": "303215458",
+          "status": 1
+        },
+        {
+          "openId": "1614610953",
+          "status": 1
+        }
+      ],
+      "atOpenIds": {
+        "303215458": "崔正钦",
+        "1614610953": "王翕然"
+      },
+      "contentType": 1,
+      "textContent": {
+        "templateData": [],
+        "templateId": "",
+        "text": "@303215458 @1614610953 辛苦看下重要目标提示调整[感谢]3种"
+      }
+    },
+    "contentVersion": "0",
+    "conversationId": "69104164425",
+    "createdAt": "1773238310352",
+    "creatorType": 1,
+    "decryptStatus": 0,
+    "downloadProgress": "-1",
+    "downloadStatus": 0,
+    "downloadTaskId": "-1",
+    "extension": {
+      "oid": "4872056",
+      "openConversationId": "cidRWImcTfQvM3TVPUHrjxxRA==",
+      "origin_text": "@303215458 @1614610953 辛苦看下重要目标提示调整[感谢]3种",
+      "realmFlag": "1",
+      "realmOrgid": "4872056",
+      "safety_app_id": "1289",
+      "safety_priority": "0",
+      "sameContentIdentifier": "257ce964a99f8e448dbfebd3da7b4515",
+      "sendMsgUUID": "VDZHH2x@"
+    },
+    "isEncrypted": true,
+    "localExtension": {},
+    "memberExtension": {},
+    "memberTag": "-1",
+    "messageId": "25450801696255",
+    "recallStatus": 0,
+    "senderOpenId": "343957758",
+    "shieldStatus": 0,
+    "tag": "1",
+    "tmpMessageId": "25450801696255",
+    "type": 5,
+    "uploadProgress": "-1",
+    "uploadStatus": 0,
+    "uuid": "VDZHKK9"
+  },
+  "receiverMessageStatus": {
+    "readStatus": 0
+  },
+  "sendStatus": 1,
+  "senderMessageStatus": {
+    "totalCount": -1,
+    "unReadCount": -1
+  }
+}
+
+================================================================================
+RAW PROBE: P2P(Markdown1200) (cid=316550726:6369934435)
+================================================================================
+  contentType=1 already seen, skipping
+================================================================================
+RAW PROBE: 群聊(图片203) (cid=47856547551)
+================================================================================
+  contentType=1 already seen, skipping
+================================================================================
+RAW PROBE: 笛笛(2900) (cid=300405507:316550726)
+================================================================================
+  contentType=1202
+  content keys: ['atCustomRoleIds', 'atOpenIds', 'attachments', 'contentType']
+  extension keys: ['BIType', 'IMReserveOTOMemberOrgIds', 'msgNotifyCategory', 'msgSrcBizId', 'openConversationId', 'push_msg_task_id', 'realmFlag', 'realmOrgid', 'sameContentIdentifier', 'sendMsgUUID', 'senderSilent']
+
+  FULL EXPANDED JSON:
+{
+  "baseMessage": {
+    "content": {
+      "atCustomRoleIds": {},
+      "atOpenIds": {},
+      "attachments": [
+        {
+          "extension": {
+            "markdown": "你接受了笛笛的[日程](dingtalk://dingtalkclient/page/calendar_detail?uniqueId=MXpXMDBUYVE5NlhkVXQ4blFHbzFKdz09&folderId=316550726&corpId=ding37c967956637d20d&uuid==ca347a01-f5d8-4f08-aba9-75e94c1777db&redirect_url=https%3A%2F%2Fn.dingtalk.com%2Fdingding%2Fcalendar%2Fdetail%2Findex.html%3Fdd_full_screen%3Dtrue%26dd_progress%3Dfalse%26dd_darkmode%3Dtrue%26%26dd_android_full%3Dtrue%26uniqueId%3DMXpXMDBUYVE5NlhkVXQ4blFHbzFKdz09%26folderId%3D316550726%26corpId%3Dding37c967956637d20d%26uuid%3D%3Dca347a01-f5d8-4f08-aba9-75e94c1777db)",
+            "new_markdown": "你接受了笛笛的[日程](dingtalk://dingtalkclient/page/calendar_detail?uniqueId=MXpXMDBUYVE5NlhkVXQ4blFHbzFKdz09&folderId=316550726&corpId=ding37c967956637d20d&uuid==ca347a01-f5d8-4f08-aba9-75e94c1777db&redirect_url=https%3A%2F%2Fn.dingtalk.com%2Fdingding%2Fcalendar%2Fdetail%2Findex.html%3Fdd_full_screen%3Dtrue%26dd_progress%3Dfalse%26dd_darkmode%3Dtrue%26%26dd_android_full%3Dtrue%26uniqueId%3DMXpXMDBUYVE5NlhkVXQ4blFHbzFKdz09%26folderId%3D316550726%26corpId%3Dding37c967956637d20d%26uuid%3D%3Dca347a01-f5d8-4f08-aba9-75e94c1777db)"
+          }
+        }
+      ],
+      "contentType": 1202
+    },
+    "contentVersion": "0",
+    "conversationId": "300405507:316550726",
+    "createdAt": "1773236783616",
+    "creatorType": 2,
+    "decryptStatus": 1,
+    "downloadProgress": "-1",
+    "downloadStatus": 0,
+    "downloadTaskId": "-1",
+    "extension": {
+      "BIType": "calendar_single_chat_notice",
+      "IMReserveOTOMemberOrgIds": [
+        {
+          "orgId": 4872056,
+          "switchOrg": 1,
+          "uid": 316550726
+        },
+        {
+          "orgId": 0,
+          "switchOrg": 1,
+          "uid": 300405507
+        }
+      ],
+      "msgNotifyCategory": "work",
+      "msgSrcBizId": "calendar.send.system",
+      "openConversationId": "cid+DAdrBI9DZTyYfERxMFhEnzCigXUvpdS/pc/03MUwNM=",
+      "push_msg_task_id": "lvg5YQVeSkaZV8uZHkODBQ",
+      "realmFlag": "1",
+      "realmOrgid": "4872056",
+      "sameContentIdentifier": "afff0ac073c54a7b31dcf7db89562ea8",
+      "sendMsgUUID": "c77791815e478fd5641885de8454d434",
+      "senderSilent": "1"
+    },
+    "isEncrypted": false,
+    "localExtension": {},
+    "memberExtension": {},
+    "memberTag": "-1",
+    "messageId": "25450113930881",
+    "recallStatus": 0,
+    "senderOpenId": "316550726",
+    "shieldStatus": 0,
+    "tag": "0",
+    "tmpMessageId": "25450113930881",
+    "type": 1,
+    "uploadProgress": "-1",
+    "uploadStatus": 0,
+    "uuid": "VDZAv3o"
+  },
+  "receiverMessageStatus": {
+    "readStatus": 2
+  },
+  "sendStatus": 1,
+  "senderMessageStatus": {
+    "totalCount": 1,
+    "unReadCount": 0
+  }
+}
+
+================================================================================
+RAW PROBE: 群聊(1202) (cid=68240494115)
+================================================================================
+  contentType=1202 already seen, skipping
+================================================================================
+RAW PROBE: 群聊(type2) (cid=74656715046)
+================================================================================
+  contentType=1 already seen, skipping
+================================================================================
+RAW PROBE: 面试通知群(文本1) (cid=324215852)
+================================================================================
+  contentType=1 already seen, skipping
+
+================================================================================
+TYPES PROBED: ['1', '1202', '2950', '300']
+================================================================================
