@@ -4,14 +4,17 @@
 
 当前支持：
   - 监听招聘群内 ct=502（PDF 文件消息）→ 触发简历 AI 初筛
+  - 监听助理通知群文本消息 → 备忘录入 / 关闭
 
 架构：
   - 启动时由 daemon.py 调用 SkillRouter.start()
-  - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各招聘群的新消息
-  - ct=502 且未处理过 → 交给 skills/resume_screen.process_resume_message()
-  - 通过 DB 的 is_resume_processed() 实现幂等，重启不重复处理
+  - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各群的新消息
+  - ct=502 且未处理过 → 交给 skills/resume_screen
+  - 文本含"备忘"/"完成" → 交给 skills/memo_tracker
+  - 通过 DB + 内存 seen_ids 实现幂等
 """
 import os
+import re
 import sys
 import json
 import time
@@ -22,8 +25,9 @@ from datetime import datetime
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _THIS_DIR)
 
-from db.store import init_db, is_resume_processed
+from db.store import init_db, is_resume_processed, is_memo_processed
 from skills.resume_screen import process_resume_message
+from skills.memo_tracker import process_memo, process_close
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 POLL_INTERVAL = int(os.environ.get('SKILL_ROUTER_INTERVAL', '60'))   # 秒
@@ -36,13 +40,13 @@ def _log(msg: str):
 
 
 def _load_config() -> dict:
-    """从 digest_config.json 读取 recruit_cids 和 notify_target"""
+    """从 digest_config.json 读取所有路由配置"""
     try:
         with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
         recruit_cids = cfg.get('recruit_cids', [])
         cids = []
-        cid_names = {}  # cid → 显示名
+        cid_names = {}
         for c in recruit_cids:
             if not c:
                 continue
@@ -56,10 +60,21 @@ def _load_config() -> dict:
                     if name:
                         cid_names[cid] = name
         notify_cid = cfg.get('notify_target', '')
-        return {'recruit_cids': cids, 'cid_names': cid_names, 'notify_cid': notify_cid}
+
+        memo_cfg = cfg.get('memo_tracker', {})
+        if not memo_cfg.get('group_cid'):
+            memo_cfg['group_cid'] = notify_cid
+
+        return {
+            'recruit_cids': cids,
+            'cid_names': cid_names,
+            'notify_cid': notify_cid,
+            'memo_tracker': memo_cfg,
+        }
     except Exception as e:
-        _log(f'加载配置失败: {e}')
-        return {'recruit_cids': [], 'cid_names': {}, 'notify_cid': ''}
+        _log(f'load config failed: {e}')
+        return {'recruit_cids': [], 'cid_names': {}, 'notify_cid': '',
+                'memo_tracker': {}}
 
 
 def _fetch_recent_messages(cid: str, count: int = 20) -> list:
@@ -112,16 +127,29 @@ def _extract_file_info(msg: dict) -> tuple:
     return msg_id, file_name, file_path
 
 
-def _poll_once(cid: str, notify_cid: str, seen_ids: set, source_name: str = ''):
+_RESUME_WINDOW_MS = 48 * 3600 * 1000   # 只处理 48 小时内的简历消息
+
+
+def _poll_once(cid: str, notify_cid: str, seen_ids: set,
+               source_name: str = '', start_ts: int = 0):
     """轮询一个招聘群/私信，处理所有新的 ct=502 消息。
     结果发到 notify_cid（助理通知群），而非原来源。
     source_name: 来源的显示名（用于推送消息中告知来源）
+    start_ts: daemon 本次启动时刻（毫秒），早于此时刻的消息跳过
     """
     messages = _fetch_recent_messages(cid, count=20)
     processed_count = 0
+    now_ms = int(time.time() * 1000)
+    # 截止时间 = max(启动时刻, 48小时前)，两个条件都满足才处理
+    cutoff_ms = max(start_ts, now_ms - _RESUME_WINDOW_MS)
 
     for msg in messages:
         if msg.get('content_type') != 502:
+            continue
+
+        # ── 时间门禁：消息发送时间必须晚于截止时间 ──────────────
+        msg_ts = int(msg.get('ts') or 0)
+        if msg_ts and msg_ts < cutoff_ms:
             continue
 
         msg_id, file_name, file_path = _extract_file_info(msg)
@@ -164,44 +192,130 @@ def _poll_once(cid: str, notify_cid: str, seen_ids: set, source_name: str = ''):
     return processed_count
 
 
+def _make_msg_id(msg: dict) -> str | None:
+    ts = str(msg.get('ts', ''))
+    uid = str(msg.get('uid', ''))
+    return f'{ts}_{uid}' if (ts and uid) else None
+
+
+_RE_MEMO = re.compile(r'^[【\[]*(?:备忘|提醒我)')
+_RE_CLOSE = re.compile(r'(?:完成|关闭)\s*#?\d+')
+
+
+_MEMO_MAX_AGE_MS = 5 * 60 * 1000   # only process messages from last 5 minutes
+
+
+def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
+    """轮询助理通知群, 处理备忘/完成指令"""
+    messages = _fetch_recent_messages(group_cid, count=20)
+    now_ms = int(time.time() * 1000)
+
+    for msg in messages:
+        if msg.get('content_type') != 1:
+            continue
+        text = (msg.get('text') or '').strip()
+        if not text:
+            continue
+
+        msg_ts = msg.get('ts', 0)
+        if msg_ts and (now_ms - msg_ts) > _MEMO_MAX_AGE_MS:
+            continue
+
+        msg_id = _make_msg_id(msg)
+        if not msg_id or msg_id in seen_ids:
+            continue
+
+        if _RE_CLOSE.search(text):
+            try:
+                process_close(msg_id=msg_id, text=text,
+                              group_cid=group_cid, config=memo_cfg)
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'close error: {e}')
+            continue
+
+        if _RE_MEMO.search(text):
+            if is_memo_processed(msg_id):
+                seen_ids.add(msg_id)
+                continue
+            try:
+                memo_ts = int(msg.get('ts', 0))
+                result = process_memo(
+                    msg_id=msg_id, text=text,
+                    context_msgs=messages, memo_ts=memo_ts,
+                    group_cid=group_cid, config=memo_cfg,
+                )
+                if result is not None:
+                    seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'memo error: {e}')
+            continue
+
+
 class SkillRouter:
     def __init__(self):
         self._thread = None
         self._running = False
-        self._seen_ids: set = set()   # 内存去重，防止非通过简历被反复调 LLM
+        self._seen_ids: set = set()
+        self._memo_seen_ids: set = set()
+        # 本次启动时刻（毫秒），用于过滤"daemon 启动前已存在的消息"
+        self._start_ts: int = int(time.time() * 1000)
 
     def start(self):
         """启动后台轮询线程（由 daemon.py 调用）"""
         init_db()
-        _log('DB 已初始化')
+        _log('DB initialized')
 
         cfg = _load_config()
         recruit_cids = cfg['recruit_cids']
         cid_names    = cfg.get('cid_names', {})
         notify_cid   = cfg['notify_cid']
-        if not recruit_cids:
-            _log('digest_config.json 中无 recruit_cids，简历监听未启动')
+        memo_cfg     = cfg.get('memo_tracker', {})
+
+        has_resume = bool(recruit_cids)
+        has_memo = bool(memo_cfg.get('group_cid'))
+
+        if has_resume:
+            _log(f'resume watch: {recruit_cids}, notify: {notify_cid or "source group"}')
+        if has_memo:
+            _log(f'memo watch: {memo_cfg["group_cid"]}')
+        if not has_resume and not has_memo:
+            _log('no skills configured, router idle')
             return
 
-        _log(f'简历监听启动，监听: {recruit_cids}，结果发到: {notify_cid or "原群"}，轮询间隔: {POLL_INTERVAL}s')
+        _log(f'poll interval: {POLL_INTERVAL}s')
         self._running = True
         self._thread = threading.Thread(
-            target=self._loop, args=(recruit_cids, cid_names, notify_cid), daemon=True)
+            target=self._loop,
+            args=(recruit_cids, cid_names, notify_cid, memo_cfg),
+            daemon=True,
+        )
         self._thread.start()
 
     def stop(self):
         self._running = False
 
-    def _loop(self, recruit_cids: list, cid_names: dict, notify_cid: str):
+    def _loop(self, recruit_cids: list, cid_names: dict,
+              notify_cid: str, memo_cfg: dict):
         while self._running:
             for cid in recruit_cids:
                 source_name = cid_names.get(cid, '')
                 try:
-                    n = _poll_once(cid, notify_cid, self._seen_ids, source_name=source_name)
+                    n = _poll_once(cid, notify_cid, self._seen_ids,
+                                   source_name=source_name,
+                                   start_ts=self._start_ts)
                     if n:
-                        _log(f'[{source_name or cid}] 本轮处理 {n} 份简历')
+                        _log(f'[{source_name or cid}] processed {n} resumes')
                 except Exception as e:
-                    _log(f'轮询 [{source_name or cid}] 异常: {e}')
+                    _log(f'resume poll [{source_name or cid}] error: {e}')
+
+            if memo_cfg.get('group_cid'):
+                try:
+                    _poll_memo_once(memo_cfg['group_cid'], memo_cfg,
+                                    self._memo_seen_ids)
+                except Exception as e:
+                    _log(f'memo poll error: {e}')
+
             time.sleep(POLL_INTERVAL)
 
 
