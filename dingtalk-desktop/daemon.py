@@ -32,6 +32,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 from datetime import datetime
 
+# [AgentMemo Task] 开始时间: 2026-03-18 19:00
+# [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
 sys.path.insert(0, os.path.dirname(__file__))
 from lib.utils import (
     get_main_pid, get_main_pid_by_mem, js_escape, normalize,
@@ -56,6 +58,25 @@ LOG_FILE = os.environ.get(
     os.path.join(DATA_DIR, '_msg_log.jsonl'),
 )
 WATCHDOG_INTERVAL = 30
+FRIDA_RPC_TIMEOUT = 3   # Frida exports_sync 调用最长允许等待秒数（短超时快速失败）
+
+
+def _frida_call(fn, *args, timeout=FRIDA_RPC_TIMEOUT):
+    """在独立线程里执行 Frida exports_sync 调用，超时则返回 None。
+    用法：result = _frida_call(script.exports_sync.exec_js, bid, js)
+    注意：不使用 context manager，而用 shutdown(wait=False)，避免
+    __exit__ 在卡住的工作线程上永久阻塞。
+    """
+    import concurrent.futures
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(fn, *args)
+    executor.shutdown(wait=False)   # 不等工作线程，让它自然结束
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        return None
+    except Exception as e:
+        raise
 
 
 def _parse_date_param(val, end_of_day=False):
@@ -390,7 +411,10 @@ class FridaDaemon:
             self._cached_jsapi_bid = None
 
         try:
-            bids = self._cef_script.exports_sync.scan_browsers()
+            bids = _frida_call(self._cef_script.exports_sync.scan_browsers)
+            if bids is None:
+                log('scanBrowsers 超时，JSAPI 不可用')
+                return None
         except Exception as e:
             log(f'scanBrowsers 失败: {e}')
             return None
@@ -441,7 +465,9 @@ class FridaDaemon:
             "})()"
         )
         try:
-            self._cef_script.exports_sync.exec_js(bid, check_js)
+            r = _frida_call(self._cef_script.exports_sync.exec_js, bid, check_js)
+            if r is None:
+                return False  # 超时视为不可用
         except Exception:
             return False
         time.sleep(1)
@@ -457,6 +483,14 @@ class FridaDaemon:
         before_ts = _parse_date_param(before, end_of_day=True)
         after_ts = _parse_date_param(after, end_of_day=False)
         cursor_val = str(before_ts) if before_ts else "Number.MAX_SAFE_INTEGER"
+
+        # 锁获取前先检查 JSAPI，避免因 exec_js_sync 卡死而永久持锁
+        if not self.is_attached or not self._cef_script:
+            if not self.attach():
+                return {'success': False, 'error': 'Cannot attach to DingTalk'}
+        bid = self._find_jsapi_browser()
+        if not bid:
+            return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
 
         with self._fetch_lock:
             if not self.is_attached:
@@ -474,13 +508,13 @@ class FridaDaemon:
             self._beacon.clear()
             fetch_js = self._build_fetch_js(cid_safe, cursor_val, count, is_first)
 
-            result = self._cef_script.exports_sync.exec_js(bid, fetch_js)
+            result = _frida_call(self._cef_script.exports_sync.exec_js, bid, fetch_js)
             if result != 'ok':
                 bid = self._find_jsapi_browser(force_rescan=True)
                 if not bid:
                     return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
                 self._beacon.clear()
-                result = self._cef_script.exports_sync.exec_js(bid, fetch_js)
+                result = _frida_call(self._cef_script.exports_sync.exec_js, bid, fetch_js)
                 if result != 'ok':
                     return {'success': False, 'error': f'execJS on browser {bid} failed: {result}'}
 
@@ -534,6 +568,24 @@ class FridaDaemon:
                     text = self._extract_report_from_bform(bf_raw) or text
                 elif not text and raw:
                     text = self._extract_report_from_raw(raw)
+
+            if ct == 3100 and raw:
+                try:
+                    raw_data = json.loads(raw) if isinstance(raw, str) else raw
+                    descs = []
+                    attachments = raw_data.get('attachments', []) or []
+                    for att in attachments:
+                        ext = att.get('extension', {}) or {}
+                        desc = (ext.get('desc') or '').strip()
+                        if desc and desc not in descs:
+                            descs.append(desc)
+
+                    if descs:
+                        merged = '\n'.join(descs).strip()
+                        if not text or len(merged) > len(text):
+                            text = merged
+                except Exception:
+                    pass
 
             is_self = uid == MY_UID
             entry = {
@@ -1039,13 +1091,21 @@ class FridaDaemon:
 
     MY_REPORT_GROUP_CID = '74401645538'
 
-    def fetch_report_content(self, url, timeout=30):
+    def fetch_report_content(self, url, timeout=30, wait_extra=None):
         """通过 CEF loadUrl 打开报告页面并精准提取报告内容
 
         始终使用 browser 1（JSAPI browser），先保存当前 URL，抓取完毕后原样恢复，
         保证 DingTalk UI（搜索栏、文档面板等）不受影响。
         优先用 CSS 选择器定位报告正文容器，最终 fallback 到 body.innerText。
+
+        wait_extra: readyState complete 后额外等待秒数，让 SPA 渲染正文。
+                    None = 自动检测（alidocs.dingtalk.com → 15s，其他 → 2s）
         """
+        if wait_extra is None:
+            if 'alidocs.dingtalk.com' in url or '/doc/' in url:
+                wait_extra = 15
+            else:
+                wait_extra = 2
         with self._fetch_lock:
             if not self.is_attached:
                 if not self.attach():
@@ -1083,8 +1143,8 @@ class FridaDaemon:
                 time.sleep(0.5)
                 if 'page_ready' in self._beacon.get_reports():
                     break
-            # 额外等 2 秒让 SPA 框架渲染完
-            time.sleep(2)
+            # 额外等待让 SPA 框架渲染完（AliDocs 等需要更长时间）
+            time.sleep(wait_extra)
 
             self._beacon.clear()
             extract_js = (
@@ -1094,15 +1154,46 @@ class FridaDaemon:
                 "+'/r?l='+encodeURIComponent(l),"
                 "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
 
-                "var sels=['.report-detail','.report-content','.detail-content',"
+                # ── 选择器列表（按优先级排序） ──
+                "var sels=["
+                "'.ne-editor-input','.ne-paragraphs','.ne-doc-editor',"
+                "'.ne-content-editable','[class*=\"ne-editor\"]','[class*=\"ne-paragraphs\"]',"
+                "'.report-detail','.report-content','.detail-content',"
                 "'.log-detail','.form-detail','[class*=report]','[class*=detail]',"
                 "'article','main','.content','.page-content'];"
-                "var el=null,method='body';"
+
+                # ── 在指定 document 上尝试选择器 ──
+                "function tryDoc(doc,prefix){"
                 "for(var i=0;i<sels.length;i++){"
-                "var e=document.querySelector(sels[i]);"
-                "if(e&&e.innerText&&e.innerText.trim().length>20){"
-                "el=e;method=sels[i];break;}}"
-                "if(!el)el=document.body;"
+                "try{var e=doc.querySelector(sels[i]);"
+                "if(e&&e.innerText&&e.innerText.trim().length>20)"
+                "return{el:e,method:prefix+sels[i]};"
+                "}catch(x){}}"
+                "return null;}"
+
+                # ── 主 document 尝试 ──
+                "var found=tryDoc(document,'');"
+
+                # ── iframe 穿透：遍历所有 iframe，尝试读取 contentDocument ──
+                "if(!found||found.el.innerText.trim().length<200){"
+                "var iframes=document.querySelectorAll('iframe');"
+                "for(var f=0;f<iframes.length;f++){"
+                "try{var idoc=iframes[f].contentDocument||iframes[f].contentWindow.document;"
+                "if(!idoc)continue;"
+                "var ifound=tryDoc(idoc,'iframe>');"
+                "if(ifound&&ifound.el.innerText.trim().length>"
+                "(found?found.el.innerText.trim().length:0)){"
+                "found=ifound;}"
+                # ── iframe 的 body fallback ──
+                "if(idoc.body&&idoc.body.innerText&&idoc.body.innerText.trim().length>"
+                "(found?found.el.innerText.trim().length:0)){"
+                "found={el:idoc.body,method:'iframe>body'};}"
+                "}catch(x){}}"
+                "}"
+
+                # ── 最终 fallback ──
+                "var el=found?found.el:document.body;"
+                "var method=found?found.method:'body';"
 
                 "var text=(el.innerText||'').trim();"
                 "var title=document.title||'';"
@@ -1319,6 +1410,14 @@ class FridaDaemon:
         after_ts = _parse_date_param(after, end_of_day=False)
         t_start = time.time()
 
+        # 锁获取前先检查 JSAPI 可用性，避免因 exec_js_sync 卡死而永久持锁
+        if not self.is_attached or not self._cef_script:
+            if not self.attach():
+                return {'success': False, 'error': 'Cannot attach to DingTalk'}
+        bid = self._find_jsapi_browser()
+        if not bid:
+            return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
+
         with self._fetch_lock:
             if not self.is_attached:
                 if not self.attach():
@@ -1348,21 +1447,22 @@ class FridaDaemon:
                 fetch_js = self._build_fetch_js(cid_safe, cursor_val, PAGE_SIZE, is_first)
 
                 try:
-                    result = self._cef_script.exports_sync.exec_js(bid, fetch_js)
+                    result = _frida_call(self._cef_script.exports_sync.exec_js, bid, fetch_js)
                 except Exception as e:
                     bid = self._find_jsapi_browser(force_rescan=True)
                     if not bid:
                         break
                     try:
-                        result = self._cef_script.exports_sync.exec_js(bid, fetch_js)
+                        result = _frida_call(self._cef_script.exports_sync.exec_js, bid, fetch_js)
                     except Exception:
                         break
 
                 if result != 'ok':
                     break
 
-                raw_batch = self._wait_for_fetch_beacon(timeout=30)
+                raw_batch = self._wait_for_fetch_beacon(timeout=8)
                 if raw_batch is None:
+                    log('[fetch_reports] beacon 超时，JSAPI 响应丢失，终止分页')
                     break
 
                 messages = self._format_jsapi_messages(raw_batch)
@@ -2021,10 +2121,11 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 if not force_log:
                     result['note'] = 'JSAPI 不可用，使用本地监控日志（只含已监控到的消息）'
             else:
+                max_seconds = int(body.get('max_seconds', 90))
                 result = _daemon.fetch_reports_paginated(
                     count=count, before=before, after=after,
                     author=author, report_type=report_type, max_pages=max_pages,
-                    cid=cid)
+                    max_seconds=max_seconds, cid=cid)
             self._json_response(result)
 
         elif parsed.path == '/fetch_my_reports':
@@ -2043,7 +2144,10 @@ class DaemonHandler(BaseHTTPRequestHandler):
             if not url:
                 self._json_response({'error': 'url required'}, 400)
                 return
-            result = _daemon.fetch_report_content(url)
+            wait_extra = body.get('wait_extra', None)
+            if wait_extra is not None:
+                wait_extra = int(wait_extra)
+            result = _daemon.fetch_report_content(url, wait_extra=wait_extra)
             self._json_response(result)
 
         elif parsed.path == '/probe_jsapi':

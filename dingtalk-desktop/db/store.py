@@ -49,6 +49,23 @@ def init_db():
                 ts_saved    INTEGER
             );
 
+            CREATE TABLE IF NOT EXISTS memo_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                memo_seq    INTEGER NOT NULL,
+                msg_id      TEXT NOT NULL UNIQUE,
+                text        TEXT NOT NULL,
+                who         TEXT,
+                due         TEXT,
+                priority    TEXT DEFAULT 'medium',
+                context     TEXT,
+                task_reminder_id INTEGER,
+                status      TEXT DEFAULT 'active',
+                ts_created  INTEGER,
+                ts_closed   INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_memo_seq
+                ON memo_items(memo_seq);
+
             CREATE TABLE IF NOT EXISTS resume_screen_log (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 msg_id      TEXT NOT NULL UNIQUE,
@@ -64,6 +81,18 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_resume_msg_id
                 ON resume_screen_log(msg_id);
+
+            CREATE TABLE IF NOT EXISTS doc_review_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                msg_id      TEXT NOT NULL UNIQUE,
+                doc_url     TEXT,
+                doc_title   TEXT,
+                verdict     TEXT,
+                report_id   TEXT,
+                ts_saved    INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_doc_review_msg_id
+                ON doc_review_log(msg_id);
         """)
         c.commit()
         c.close()
@@ -139,6 +168,101 @@ def get_recent_resume_results(days=30):
         ).fetchall()
         c.close()
         return [dict(r) for r in rows]
+
+
+# ── memo_items ──────────────────────────────────────────────
+
+def get_next_memo_seq():
+    with _lock:
+        c = _conn()
+        row = c.execute("SELECT MAX(memo_seq) FROM memo_items").fetchone()
+        c.close()
+        return (row[0] or 0) + 1
+
+
+def is_memo_processed(msg_id):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT id FROM memo_items WHERE msg_id=?", (str(msg_id),)
+        ).fetchone()
+        c.close()
+        return row is not None
+
+
+def save_memo_item(memo_seq, msg_id, text, who='', due=None,
+                   priority='medium', context=None, task_reminder_id=None):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "INSERT OR IGNORE INTO memo_items "
+            "(memo_seq, msg_id, text, who, due, priority, context, "
+            " task_reminder_id, status, ts_created) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (memo_seq, str(msg_id), text, who, due, priority,
+             context, task_reminder_id, 'active',
+             int(datetime.now().timestamp())),
+        )
+        c.commit()
+        c.close()
+
+
+def close_memo_item(memo_seq):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "UPDATE memo_items SET status='done', ts_closed=? WHERE memo_seq=?",
+            (int(datetime.now().timestamp()), memo_seq),
+        )
+        c.commit()
+        c.close()
+
+
+def get_memo_by_seq(memo_seq):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT * FROM memo_items WHERE memo_seq=?", (memo_seq,)
+        ).fetchone()
+        c.close()
+        return dict(row) if row else None
+
+
+def get_pending_memos():
+    with _lock:
+        c = _conn()
+        rows = c.execute(
+            "SELECT * FROM memo_items WHERE status='active' ORDER BY memo_seq"
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+
+
+# ── doc_review_log ───────────────────────────────────────────
+
+def is_doc_review_processed(msg_id):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT id FROM doc_review_log WHERE msg_id=?", (str(msg_id),)
+        ).fetchone()
+        c.close()
+        return row is not None
+
+
+def save_doc_review_result(msg_id, doc_url, doc_title='',
+                            verdict='', report_id=''):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "INSERT OR IGNORE INTO doc_review_log "
+            "(msg_id, doc_url, doc_title, verdict, report_id, ts_saved) "
+            "VALUES (?,?,?,?,?,?)",
+            (str(msg_id), doc_url, doc_title, verdict, report_id,
+             int(datetime.now().timestamp())),
+        )
+        c.commit()
+        c.close()
 
 
 if __name__ == '__main__':

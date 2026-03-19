@@ -11,10 +11,18 @@ Usage:
 """
 import os
 import sys
+import io
 import json
 import argparse
 import urllib.request
 from datetime import datetime, timedelta
+
+# Windows 终端默认 GBK 编码无法输出 Unicode 字符，强制 stdout 使用 UTF-8
+if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 DAEMON_URL = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 NOTIFY_TARGET = os.environ.get('REPORT_NOTIFY_TARGET', '')
@@ -134,7 +142,7 @@ def _daemon_request(path, body=None):
         method='POST' if data else 'GET',
     )
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=75) as resp:
             return json.loads(resp.read().decode('utf-8'))
     except Exception as e:
         return {'success': False, 'error': str(e)}
@@ -167,6 +175,7 @@ def fetch_reports(target_date, report_cids):
         if not result.get('success'):
             print(f'[warn] fetch from {_safe(name)} failed: '
                   f'{result.get("error", "")}', flush=True)
+            time.sleep(3)   # 给 JSAPI browser 短暂恢复时间
             continue
         fetched = result.get('messages', [])
         for m in fetched:
@@ -718,6 +727,26 @@ def resolve_cid_names():
     return updated
 
 
+_ERROR_PATTERNS = ('400', '403', '404', '500', 'bad request', 'forbidden',
+                   'not found', 'error', 'unauthorized', 'token', 'expired',
+                   'invalid', '<!doctype', '<html')
+
+def _looks_like_error_page(content):
+    """判断 fetch_report_content 返回的内容是否是错误页而非真实日报。
+    条件：内容过短（<80字），或全是 HTTP/HTML 错误关键词。
+    """
+    if not content:
+        return True
+    c = content.strip()
+    if len(c) < 80:
+        return True
+    cl = c.lower()
+    error_hits = sum(1 for p in _ERROR_PATTERNS if p in cl)
+    if error_hits >= 2 and len(c) < 300:
+        return True
+    return False
+
+
 def fetch_full_contents(messages):
     """For messages with a report_url but short text, fetch full content via daemon.
 
@@ -726,6 +755,7 @@ def fetch_full_contents(messages):
     --full-content flag.
     """
     enriched = 0
+    skipped_error = 0
     for m in messages:
         url = m.get('report_url', '') or ''
         if not url:
@@ -737,14 +767,22 @@ def fetch_full_contents(messages):
         print(f'[full-content] {_safe(sender)} ...', flush=True)
         result = _daemon_request('/fetch_report_content', {'url': url})
         if result.get('success') and result.get('content'):
-            m['text'] = result['content']
-            enriched += 1
-            print(f'  -> {result.get("text_length", 0)} chars '
-                  f'({result.get("extraction_method", "")})', flush=True)
+            content = result['content']
+            if _looks_like_error_page(content):
+                # URL 可能已过期，保留原始截断文本，不覆盖
+                print(f'  -> skipped (error page, {len(content)} chars): '
+                      f'{_safe(content[:60])}', flush=True)
+                skipped_error += 1
+            else:
+                m['text'] = content
+                enriched += 1
+                print(f'  -> {result.get("text_length", 0)} chars '
+                      f'({result.get("extraction_method", "")})', flush=True)
         else:
             print(f'  -> failed: {_safe(str(result.get("error", "")))}',
                   flush=True)
-    print(f'[full-content] enriched {enriched}/{len(messages)} reports',
+    print(f'[full-content] enriched {enriched}/{len(messages)} reports'
+          f'{f", {skipped_error} skipped (expired URL)" if skipped_error else ""}',
           flush=True)
     return messages
 

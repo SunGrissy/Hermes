@@ -77,6 +77,18 @@
     }
   },
 
+  "memo_tracker": {
+    "confirm": "memo #{seq}: {summary}",
+    "close": "done: memo #{seq} {summary}",
+    "not_found": "not found: memo #{seq}",
+    "reminder_title": "### memo follow-up: {count} pending",
+    "reminder_urgent": "**urgent({count}):**",
+    "reminder_due_soon": "**due this week({count}):**",
+    "reminder_other": "**other({count}):**",
+    "reminder_item": "  #{seq} {who} {text} ({due_info})",
+    "footer": "###### bot reminder"
+  },
+
   "resume_screen": {
     "title": {
       "pass":    "✅ 简历初筛通过 | {candidate} · {role}",

@@ -22,16 +22,20 @@ import threading
 import urllib.request
 from datetime import datetime
 
+# [AgentMemo Task] 开始时间: 2026-03-18 19:00
+# [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _THIS_DIR)
 
-from db.store import init_db, is_resume_processed, is_memo_processed
+from db.store import init_db, is_resume_processed, is_memo_processed, is_doc_review_processed
 from skills.resume_screen import process_resume_message
 from skills.memo_tracker import process_memo, process_close
+from skills.doc_review import extract_doc_url, process_doc_review
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 POLL_INTERVAL = int(os.environ.get('SKILL_ROUTER_INTERVAL', '60'))   # 秒
 _CONFIG_PATH  = os.path.join(_THIS_DIR, 'digest_config.json')
+_LOG_FILE     = os.path.join(_THIS_DIR, 'data', 'dingtalk', '_msg_log.jsonl')
 
 
 def _log(msg: str):
@@ -65,11 +69,18 @@ def _load_config() -> dict:
         if not memo_cfg.get('group_cid'):
             memo_cfg['group_cid'] = notify_cid
 
+        doc_review_cfg = cfg.get('doc_review', {})
+        if not doc_review_cfg.get('group_cid'):
+            doc_review_cfg['group_cid'] = notify_cid
+        if not doc_review_cfg.get('webhook_url'):
+            doc_review_cfg['webhook_url'] = cfg.get('webhook_url', '')
+
         return {
             'recruit_cids': cids,
             'cid_names': cid_names,
             'notify_cid': notify_cid,
             'memo_tracker': memo_cfg,
+            'doc_review': doc_review_cfg,
         }
     except Exception as e:
         _log(f'load config failed: {e}')
@@ -77,7 +88,7 @@ def _load_config() -> dict:
                 'memo_tracker': {}}
 
 
-def _fetch_recent_messages(cid: str, count: int = 20) -> list:
+def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 30) -> list:
     """调 daemon /fetch 获取群内最近消息"""
     payload = json.dumps({'cid': cid, 'count': count}).encode('utf-8')
     req = urllib.request.Request(
@@ -87,12 +98,85 @@ def _fetch_recent_messages(cid: str, count: int = 20) -> list:
         method='POST',
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())
         return data.get('messages', [])
     except Exception as e:
         _log(f'fetch {cid} 失败: {e}')
         return []
+
+
+def _read_log_messages(cid: str, max_count: int = 50,
+                       max_age_ms: int = 86400 * 1000) -> list:
+    """从 beacon 监控日志读取指定 CID 的近期消息（JSAPI 不可用时的备选通道）。
+
+    日志按追加顺序写入（最新在末尾），倒序扫描以快速获取最近消息。
+    uid 字段可能为 null，从 md_extra.3.1 补全，确保 msg_id 能正确构造。
+    返回格式与 /fetch 消息兼容（chronological 顺序）。
+    """
+    if not os.path.exists(_LOG_FILE):
+        return []
+
+    now_ms = int(time.time() * 1000)
+    cutoff_ms = now_ms - max_age_ms
+    results = []
+
+    try:
+        with open(_LOG_FILE, 'r', encoding='utf-8', errors='replace') as f:
+            lines = f.readlines()
+    except Exception as e:
+        _log(f'read log failed: {e}')
+        return []
+
+    for line in reversed(lines):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            m = json.loads(line)
+        except Exception:
+            continue
+
+        ts = int(m.get('ts', 0))
+        if ts and ts < cutoff_ms:
+            break  # 日志按时序追加，遇到过期条目即可停止
+
+        if str(m.get('cid', '')) != str(cid):
+            continue
+
+        uid = m.get('uid') or ''
+        if not uid:
+            try:
+                uid = (m.get('md_extra') or {}).get('3', {}).get('1', '') or ''
+            except Exception:
+                uid = ''
+
+        results.append({
+            'cid': m.get('cid', ''),
+            'uid': uid,
+            'ts': ts,
+            'content_type': m.get('content_type', 0),
+            'text': m.get('text', '') or '',
+            'raw': m.get('raw', '') or '',
+            '_from_log': True,
+        })
+
+        if len(results) >= max_count:
+            break
+
+    results.reverse()
+    return results
+
+
+def _fetch_memo_messages(cid: str, max_age_ms: int) -> list:
+    """备忘/文档指令专用拉取：优先 JSAPI，不可用时自动降级到 beacon 日志。"""
+    messages = _fetch_recent_messages(cid, count=20, timeout=5)
+    if messages:
+        return messages
+    msgs = _read_log_messages(cid, max_count=50, max_age_ms=max_age_ms)
+    if msgs:
+        _log(f'memo fetch: JSAPI 不可用，已切换到 beacon 日志 ({len(msgs)} 条)')
+    return msgs
 
 
 def _extract_file_info(msg: dict) -> tuple:
@@ -198,22 +282,55 @@ def _make_msg_id(msg: dict) -> str | None:
     return f'{ts}_{uid}' if (ts and uid) else None
 
 
-_RE_MEMO = re.compile(r'^[【\[]*(?:备忘|提醒我)')
+def _extract_message_text(msg: dict) -> str:
+    """统一提取消息文本，兼容纯文本(ct=1)与富文本(ct=3100)。"""
+    ct = int(msg.get('content_type') or 0)
+    if ct == 1:
+        return (msg.get('text') or '').strip()
+    if ct != 3100:
+        return ''
+
+    # 优先使用 daemon 已解析好的 text 字段
+    text = (msg.get('text') or '').strip()
+
+    # 兜底：从 raw.attachments[].extension.desc 合并富文本内容
+    raw = msg.get('raw', '')
+    if raw:
+        try:
+            raw_data = json.loads(raw) if isinstance(raw, str) else raw
+            descs = []
+            for att in (raw_data.get('attachments') or []):
+                ext = att.get('extension') or {}
+                desc = (ext.get('desc') or '').strip()
+                if desc and desc not in descs:
+                    descs.append(desc)
+            if descs:
+                merged = '\n'.join(descs).strip()
+                if not text or len(merged) > len(text):
+                    text = merged
+        except Exception:
+            pass
+    return text
+
+
+_RE_MEMO = re.compile(r'[\uff3b【\[]*(?:备忘|提醒我)[\uff3d】\]]*')
 _RE_CLOSE = re.compile(r'(?:完成|关闭)\s*#?\d+')
+_RE_PRECHECK = re.compile(r'^\s*预审[!！。.\s]*$')
 
-
-_MEMO_MAX_AGE_MS = 5 * 60 * 1000   # only process messages from last 5 minutes
+_MEMO_MAX_AGE_MS       = 24 * 3600 * 1000   # 处理 24 小时内的备忘（beacon 日志兜底，seen_ids 保幂等）
+_DOC_REVIEW_MAX_AGE_MS = 30 * 60 * 1000    # 预审指令保持 30 分钟窗口（避免误触发历史链接）
 
 
 def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
-    """轮询助理通知群, 处理备忘/完成指令"""
-    messages = _fetch_recent_messages(group_cid, count=20)
+    """轮询助理通知群, 处理备忘/完成指令（JSAPI 不可用时自动降级到 beacon 日志）"""
+    messages = _fetch_memo_messages(group_cid, max_age_ms=_MEMO_MAX_AGE_MS)
     now_ms = int(time.time() * 1000)
 
     for msg in messages:
-        if msg.get('content_type') != 1:
+        ct = int(msg.get('content_type') or 0)
+        if ct not in (1, 3100):
             continue
-        text = (msg.get('text') or '').strip()
+        text = _extract_message_text(msg)
         if not text:
             continue
 
@@ -252,12 +369,111 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
             continue
 
 
+def _send_notify(text: str, webhook_url: str):
+    """轻量 webhook 通知（用于路由层的边界情况提示）"""
+    if not webhook_url:
+        return
+    payload = json.dumps({
+        'msgtype': 'text',
+        'text': {'content': text},
+    }).encode('utf-8')
+    req = urllib.request.Request(
+        webhook_url, data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15):
+            pass
+    except Exception as e:
+        _log(f'notify webhook failed: {e}')
+
+
+def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set):
+    """轮询助理通知群，检测'预审'指令，回溯找最近的文档链接后启动预审。
+
+    触发条件：用户先发文档链接（消息A），再发'预审'（消息B）。
+    以消息B的 msg_id 做去重 key。
+    """
+    messages = _fetch_memo_messages(group_cid, max_age_ms=_DOC_REVIEW_MAX_AGE_MS)
+    now_ms = int(time.time() * 1000)
+    webhook_url = doc_cfg.get('webhook_url', '')
+
+    msgs_by_ts = sorted(messages, key=lambda m: int(m.get('ts', 0)))
+
+    for i, msg in enumerate(msgs_by_ts):
+        ct = int(msg.get('content_type') or 0)
+        if ct not in (1, 3100):
+            continue
+        text = _extract_message_text(msg)
+        if not text:
+            continue
+
+        msg_ts = int(msg.get('ts', 0))
+        if msg_ts and (now_ms - msg_ts) > _DOC_REVIEW_MAX_AGE_MS:
+            continue
+
+        if not _RE_PRECHECK.match(text):
+            continue
+
+        msg_id = _make_msg_id(msg)
+        if not msg_id or msg_id in seen_ids:
+            continue
+        if is_doc_review_processed(msg_id):
+            seen_ids.add(msg_id)
+            continue
+
+        doc_url = None
+        for j in range(i - 1, -1, -1):
+            prev_msg = msgs_by_ts[j]
+            prev_ct = int(prev_msg.get('content_type') or 0)
+            if prev_ct not in (1, 3100):
+                continue
+            prev_text = _extract_message_text(prev_msg)
+            if prev_text:
+                url = extract_doc_url(prev_text)
+                if url:
+                    doc_url = url
+                    break
+
+        if not doc_url:
+            _log('收到预审指令，但未找到前序文档链接')
+            _send_notify(
+                '小秘书提醒 收到预审指令，但未找到最近的文档链接。'
+                '请先发送文档链接，再发送"预审"。',
+                webhook_url,
+            )
+            seen_ids.add(msg_id)
+            continue
+
+        sender_uid = str(msg.get('uid', ''))
+        _log(f'预审指令触发: {doc_url[:60]}... (uid={sender_uid})')
+
+        try:
+            result = process_doc_review(
+                msg_id=msg_id,
+                url=doc_url,
+                sender_uid=sender_uid,
+                msg_text=text,
+                config=doc_cfg,
+            )
+            seen_ids.add(msg_id)
+            if result:
+                _log(f'文档预审完成: {doc_url[:40]}...')
+            else:
+                _log(f'文档预审失败，已通知: {doc_url[:40]}...')
+        except Exception as e:
+            _log(f'doc_review error: {e}')
+            seen_ids.add(msg_id)
+
+
 class SkillRouter:
     def __init__(self):
         self._thread = None
         self._running = False
         self._seen_ids: set = set()
         self._memo_seen_ids: set = set()
+        self._doc_seen_ids: set = set()
         # 本次启动时刻（毫秒），用于过滤"daemon 启动前已存在的消息"
         self._start_ts: int = int(time.time() * 1000)
 
@@ -272,14 +488,19 @@ class SkillRouter:
         notify_cid   = cfg['notify_cid']
         memo_cfg     = cfg.get('memo_tracker', {})
 
-        has_resume = bool(recruit_cids)
-        has_memo = bool(memo_cfg.get('group_cid'))
+        doc_review_cfg = cfg.get('doc_review', {})
+
+        has_resume     = bool(recruit_cids)
+        has_memo       = bool(memo_cfg.get('group_cid'))
+        has_doc_review = bool(doc_review_cfg.get('group_cid'))
 
         if has_resume:
             _log(f'resume watch: {recruit_cids}, notify: {notify_cid or "source group"}')
         if has_memo:
             _log(f'memo watch: {memo_cfg["group_cid"]}')
-        if not has_resume and not has_memo:
+        if has_doc_review:
+            _log(f'doc_review watch: {doc_review_cfg["group_cid"]}')
+        if not has_resume and not has_memo and not has_doc_review:
             _log('no skills configured, router idle')
             return
 
@@ -287,7 +508,7 @@ class SkillRouter:
         self._running = True
         self._thread = threading.Thread(
             target=self._loop,
-            args=(recruit_cids, cid_names, notify_cid, memo_cfg),
+            args=(recruit_cids, cid_names, notify_cid, memo_cfg, doc_review_cfg),
             daemon=True,
         )
         self._thread.start()
@@ -296,7 +517,7 @@ class SkillRouter:
         self._running = False
 
     def _loop(self, recruit_cids: list, cid_names: dict,
-              notify_cid: str, memo_cfg: dict):
+              notify_cid: str, memo_cfg: dict, doc_review_cfg: dict = None):
         while self._running:
             for cid in recruit_cids:
                 source_name = cid_names.get(cid, '')
@@ -315,6 +536,13 @@ class SkillRouter:
                                     self._memo_seen_ids)
                 except Exception as e:
                     _log(f'memo poll error: {e}')
+
+            if doc_review_cfg and doc_review_cfg.get('group_cid'):
+                try:
+                    _poll_doc_review_once(doc_review_cfg['group_cid'],
+                                          doc_review_cfg, self._doc_seen_ids)
+                except Exception as e:
+                    _log(f'doc_review poll error: {e}')
 
             time.sleep(POLL_INTERVAL)
 

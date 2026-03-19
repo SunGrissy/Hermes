@@ -16,7 +16,8 @@ function Write-Log {
     param([string]$Msg)
     $line = "$(Get-Date -Format 'HH:mm:ss') $Msg"
     Write-Host $line
-    Add-Content -Path $LogFile -Value $line -Encoding UTF8
+    # Add-Content -Encoding UTF8 在计划任务环境中对中文字符不稳定，改用 .NET 方法
+    [System.IO.File]::AppendAllText($LogFile, "$line`n", [System.Text.Encoding]::UTF8)
 }
 
 Write-Log "[digest] ===== 日报摘要定时任务启动 ====="
@@ -67,8 +68,23 @@ if (-not $daemonOk) {
 # 运行日报摘要（带 --full-content 获取完整日报内容）
 # full-content 会临时占用 browser 1，完成后通过重启钉钉恢复 UI 状态
 Write-Log "[digest] running report_digest.py --full-content ..."
+$digestStart = Get-Date
 $output = py report_digest.py --date $TargetDate --full-content 2>&1
+$digestEnd = Get-Date
+$digestLines = @($output)
 $output | ForEach-Object { Write-Log $_ }
+
+# 如果输出极少（< 3 行），说明进程可能卡死后被外部杀掉，发告警
+$elapsed = ($digestEnd - $digestStart).TotalSeconds
+if ($digestLines.Count -lt 3) {
+    Write-Log "[digest] WARNING: 输出异常少（$($digestLines.Count) 行，耗时 $([int]$elapsed)s），可能 JSAPI 不可用"
+    $cfg = Get-Content -Path (Join-Path $ScriptDir "digest_config.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    $wh = $cfg.webhook_url
+    if ($wh) {
+        $body = @{msgtype="text"; text=@{content="[小秘书] ⚠️ $TargetDate 日报摘要任务异常：输出仅 $($digestLines.Count) 行，耗时 $([int]$elapsed)s。JSAPI 可能不可用，请检查钉钉/daemon 状态。"}} | ConvertTo-Json -Compress
+        try { Invoke-RestMethod -Uri $wh -Method Post -Body $body -ContentType "application/json" -TimeoutSec 10 | Out-Null } catch {}
+    }
+}
 
 # 重启钉钉以恢复 UI 状态（搜索框等）
 Write-Log "[digest] restarting DingTalk to restore UI ..."

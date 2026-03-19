@@ -1,5 +1,20 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - dingtalk-desktop 稳定性修复（AgentFix）
+
+**状态**: 验收通过
+
+**内容**:
+- `daemon.py`: 引入 `_frida_call` 超时包装（3s），防止 Frida `exports_sync` 卡死导致 `_fetch_lock` 永久持有；`_wait_for_fetch_beacon` timeout 从 30s 压缩至 8s；HTTP handler 正确传递 `max_seconds` 参数；`fetch_history`/`fetch_reports_paginated` 加锁前预检 JSAPI 可用性
+- `report_digest.py`: `fetch_full_contents` 加防腐层 `_looks_like_error_page`，URL 过期返回 400 时不覆盖原文本；stdout 强制 utf-8（防 GBK 崩溃）；`_daemon_request` timeout 75s；fetch 失败后 3s 缓冲
+- `run_daily_digest.ps1`: 日志写入从 `Add-Content` 改为 `.NET AppendAllText`（解决 GBK 乱码）；加失败告警（输出 <3 行时发 webhook 通知）
+- `digest_config.json`: 新增「思奕汇报直通车」「数值小分队」两个日报群
+- `message_templates.json`: 所有补充平面 emoji 替换为 BMP 安全字符
+- `skill_router.py`: 支持 `cid_names` 映射、`source_name` 上下文传递
+- `db/store.py`: 数据层工具函数补充
+
+---
+
 ## 2026-03-18 - 新增活动界面 UE 审核规则
 
 **状态**: 验收通过

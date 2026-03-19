@@ -120,6 +120,19 @@
   "version_digest_webhook": "https://oapi.dingtalk.com/robot/send?access_token=bbfd047b27aa532ffb63efd05c9db6a7dd38d646a6c07f2009e78c93bc7f8057",
   "discover_marker": "#日报收集",
   "resume_notify_webhook": "https://oapi.dingtalk.com/robot/send?access_token=2816ab39197d77e816fa943c358fea510752bb27d5041725b87b345288b76bae",
+  "memo_tracker": {
+    "group_cid": "73216314617",
+    "default_who": "助理大白",
+    "default_due_days": 7,
+    "default_module": "备忘",
+    "task_reminder_base": "http://192.168.20.114:8111",
+    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117"
+  },
+  "doc_review": {
+    "group_cid": "73216314617",
+    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117",
+    "palace_url": "http://127.0.0.1:8300"
+  },
   "recruit_cids": [
     {
       "cid": "73137527367",
