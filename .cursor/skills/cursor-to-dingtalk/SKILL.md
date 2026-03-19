@@ -108,6 +108,20 @@ Invoke-RestMethod -Uri "http://127.0.0.1:19200/send" -Method POST -Body $body -C
 
 单条消息不宜过长；若内容很多，可只发摘要 + 「详情见本地 / 文档链接」。**未带 Agent 代号的推送视为不符合本 Skill 要求。**
 
+## 事后查是哪个 Agent 发的
+
+每次通过 Webhook 成功发送后，脚本会往 **`dingtalk-desktop/logs/cursor_webhook_sends.log`** 追加一行，格式：
+
+```
+2026-03-19 14:32:01	AgentFlow-工作摘要	len=256
+```
+
+- **时间**：发送时刻，可与钉钉消息的收到时间对照。
+- **第二列**：即 `DINGTALK_TITLE`，钉钉消息标题就是它（Agent代号-工作摘要），可直接对应。
+- **len**：正文长度，便于区分不同摘要。
+
+若钉钉里只看到「小秘书提醒」或旧格式标题，打开该 log，按时间倒序看最近几条，即可对应到是哪个会话/Agent 发的。
+
 ## 与 dingtalk-desktop 的关系
 
 - **默认用 Webhook**：不依赖 daemon，不占用用户身份。

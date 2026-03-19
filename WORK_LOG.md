@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - cursor-to-dingtalk Webhook 发送日志
+
+**状态**: 验收通过
+
+**内容**:
+- `send_result_webhook.py`: 成功发送后向 `dingtalk-desktop/logs/cursor_webhook_sends.log` 追加一行（时间、DINGTALK_TITLE、正文长度），便于按钉钉收到时间反查是哪个 Agent 发的
+- `SKILL.md`: 新增「事后查是哪个 Agent 发的」一节，说明 log 路径与对照方式
+
+---
+
 ## 2026-03-19 - dingtalk-desktop 稳定性修复（AgentFix）
 
 **状态**: 验收通过

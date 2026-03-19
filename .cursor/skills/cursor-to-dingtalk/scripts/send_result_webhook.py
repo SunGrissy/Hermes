@@ -10,8 +10,25 @@ import sys
 import json
 import urllib.request
 import urllib.error
+from datetime import datetime
 
 FOOTER = "\n\n###### ※ 小秘书提醒"
+SEND_LOG_NAME = "cursor_webhook_sends.log"
+
+
+def _log_send(title: str, content_len: int):
+    """追加一条发送记录到 dingtalk-desktop/logs/，便于按时间查是哪个 Agent 发的。"""
+    root = _workspace_root()
+    log_dir = os.path.join(root, "dingtalk-desktop", "logs")
+    log_path = os.path.join(log_dir, SEND_LOG_NAME)
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(
+                f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\t{title}\tlen={content_len}\n"
+            )
+    except Exception:
+        pass
 DEFAULT_TITLE = "Agent代号-工作摘要"
 WEBHOOK_KEY = "cursor_session"
 
@@ -108,6 +125,7 @@ def main():
     title = os.environ.get("DINGTALK_TITLE", "").strip() or DEFAULT_TITLE
     ok, msg = send_markdown(url, title, text)
     if ok:
+        _log_send(title, len(content))
         print("sent")
         return 0
     print("error:", msg, file=sys.stderr)
