@@ -119,6 +119,12 @@ def init_db():
                 )
         except Exception:
             pass
+        # 旧版「删除」为软删；现改为物理删。启动时清掉残留 deleted 行，避免占库与列表歧义
+        try:
+            c.execute("DELETE FROM memo_items WHERE status = 'deleted'")
+            c.execute("DELETE FROM wish_items WHERE status = 'deleted'")
+        except Exception:
+            pass
         c.commit()
         c.close()
 
@@ -232,6 +238,20 @@ def save_memo_item(memo_seq, msg_id, text, who='', due=None,
         c.close()
 
 
+def update_memo_due(memo_seq, due):
+    """将进行中备忘的到期日改为 due（YYYY-MM-DD）。返回影响行数。"""
+    with _lock:
+        c = _conn()
+        cur = c.execute(
+            "UPDATE memo_items SET due=? WHERE memo_seq=? AND status='active'",
+            (due, memo_seq),
+        )
+        n = cur.rowcount
+        c.commit()
+        c.close()
+    return int(n or 0)
+
+
 def close_memo_item(memo_seq):
     with _lock:
         c = _conn()
@@ -244,15 +264,14 @@ def close_memo_item(memo_seq):
 
 
 def delete_memo_item(memo_seq):
-    """标记备忘为已删除（status='deleted'），用于「删除 memo N」指令。"""
+    """从本地库物理删除备忘行（「删除 memo N」）。返回删除行数。"""
     with _lock:
         c = _conn()
-        c.execute(
-            "UPDATE memo_items SET status='deleted', ts_closed=? WHERE memo_seq=?",
-            (int(datetime.now().timestamp()), memo_seq),
-        )
+        cur = c.execute("DELETE FROM memo_items WHERE memo_seq=?", (memo_seq,))
+        n = cur.rowcount
         c.commit()
         c.close()
+    return int(n or 0)
 
 
 def get_memo_by_seq(memo_seq):
@@ -340,15 +359,14 @@ def save_wish_item(wish_seq, msg_id, text, task_reminder_id=None):
 
 
 def delete_wish_item(wish_seq):
-    """标记愿望为已删除（status='deleted'），用于「删除 wish N」指令。"""
+    """从本地库物理删除愿望行（「删除 wish N」）。返回删除行数。"""
     with _lock:
         c = _conn()
-        c.execute(
-            "UPDATE wish_items SET status='deleted', ts_closed=? WHERE wish_seq=?",
-            (int(datetime.now().timestamp()), wish_seq),
-        )
+        cur = c.execute("DELETE FROM wish_items WHERE wish_seq=?", (wish_seq,))
+        n = cur.rowcount
         c.commit()
         c.close()
+    return int(n or 0)
 
 
 def close_wish_item(wish_seq):

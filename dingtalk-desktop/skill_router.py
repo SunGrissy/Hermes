@@ -16,7 +16,7 @@
   - 启动时由 daemon.py 调用 SkillRouter.start()
   - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各群的新消息
   - ct=502 且未处理过 → 交给 skills/resume_screen
-  - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望单」 → 交给 skills/memo_tracker
+  - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker
   - 通过 DB + 内存 seen_ids 实现幂等
   - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
 """
@@ -44,6 +44,8 @@ from skills.memo_tracker import (
     process_close_wish,
     process_delete,
     process_delete_wish,
+    process_defer_memo,
+    parse_defer_memo_command,
     process_today_focus,
     process_tomorrow_focus,
     process_week_focus,
@@ -384,7 +386,7 @@ _RE_TODAY_FOCUS = re.compile(
     r'今天\s*(?:我要?)?\s*关注\s*啥|今天\s*有啥\s*(?:要做的|要关注)|今天\s*关注\s*啥'
 )
 _RE_TOMORROW_FOCUS = re.compile(
-    r'明天\s*(?:我要?)?\s*关注\s*啥|明天\s*有啥|明天\s*关注\s*啥'
+    r'明天\s*(?:我\s*)?(?:要\s*)?\s*关注\s*啥|明天\s*有啥'
 )
 _RE_WEEK_FOCUS = re.compile(
     r'本周\s*(?:我要?)?\s*关注\s*啥|本周\s*有啥|本周\s*关注\s*啥'
@@ -675,6 +677,27 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'week_focus error: {e}')
         return
 
+    pdef = parse_defer_memo_command(text)
+    if pdef is not None:
+        seqs, due_d = pdef
+        defer_dedup_id = f'def:{msg_cid}:{due_d or "nodate"}:{"|".join(sorted(map(str, seqs)))}'
+        if defer_dedup_id in memo_seen_ids:
+            memo_seen_ids.add(msg_id)
+            return
+        memo_seen_ids.add(defer_dedup_id)
+        key = (msg_cid, 'defer', tuple(seqs), due_d or '')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            process_defer_memo(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg)
+            memo_seen_ids.add(msg_id)
+            _log('push: 备忘延期已处理')
+        except Exception as e:
+            _log(f'defer_memo error: {e}')
+        return
+
     if _RE_DELETE_WISH.search(text):
         m_seq = re.search(r'删除\s*(?:wish|愿望)\s*#?\s*(\d+)', text, re.IGNORECASE)
         if m_seq:
@@ -922,6 +945,26 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'week_focus error: {e}')
+            continue
+
+        pdef = parse_defer_memo_command(text)
+        if pdef is not None:
+            seqs, due_d = pdef
+            defer_dedup_id = f'def:{str(group_cid).strip()}:{due_d or "nodate"}:{"|".join(sorted(map(str, seqs)))}'
+            if defer_dedup_id in seen_ids:
+                seen_ids.add(msg_id)
+                continue
+            seen_ids.add(defer_dedup_id)
+            key = (str(group_cid), 'defer', tuple(seqs), due_d or '')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                process_defer_memo(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg)
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'defer_memo error: {e}')
             continue
 
         if _RE_CLOSE_WISH.search(text):

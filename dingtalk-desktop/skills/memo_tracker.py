@@ -35,6 +35,7 @@ from db.store import (
     is_memo_processed,
     close_memo_item,
     delete_memo_item,
+    update_memo_due,
     get_pending_memos,
     get_memo_by_seq,
     get_next_wish_seq,
@@ -87,6 +88,13 @@ _DEFAULT_TEMPLATES = {
     'wish_close': 'done: wish #{seq} {summary}',
     'wish_close_already': 'wish #{seq} 已是完成状态',
     'wish_close_deleted': 'wish #{seq} 已删除，无法完成',
+    'memo_close_deleted': 'memo #{seq} 已删除，无法标记完成',
+    'defer_title': '### 到期日已调整',
+    'defer_line_ok': '- **#{seq}** → {due}（本地备忘 + TR）',
+    'defer_line_db_only': '- **#{seq}** → {due}（仅本地备忘，TR 未找到 memo:#{seq}）',
+    'defer_line_tr_only': '- **#{seq}** → {due}（仅 TR，本地无进行中备忘）',
+    'defer_line_missing': '- **#{seq}** 未找到（本地与 TR 均无 memo:#{seq}）',
+    'defer_need_date': '未能从指令里解析目标日期，请写明「推到明天」「延到下周一」等。',
     'memo_duplicate': (
         '#### 备忘未重复收录\n\n已有进行中的 **Memo #{existing_seq}**（内容相同）\n'
         '{summary}\n\n未新建条目。\n\n----'
@@ -369,6 +377,35 @@ def _create_task_in_reminder(memo_seq, content, due_date, priority,
     except Exception as e:
         _log(f'write TaskReminder failed: {e}')
         return None
+
+
+def _get_pending_memos_from_tr(config):
+    """从 TR 读取未完成备忘，返回 [{memo_seq, text, due}, ...]，与本地展示字段对齐。TR 不可用返回 None。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return None
+    except Exception as e:
+        _log(f'read TaskReminder failed (focus): {e}')
+        return None
+    default_module = (config.get('default_module') or '备忘').strip() or '备忘'
+    memos = []
+    for t in tasks:
+        if (t.get('module') or '').strip() != default_module:
+            continue
+        if (t.get('processStatus') or '').lower() == 'done':
+            continue
+        note = t.get('note') or ''
+        m = re.search(r'memo:#(\d+)', note)
+        seq = m.group(1) if m else '?'
+        memos.append({
+            'memo_seq': seq,
+            'text': (t.get('what') or '').strip(),
+            'due': (t.get('due') or '').strip(),
+        })
+    return memos
 
 
 def _close_task_in_reminder(memo_seq, config):
@@ -662,12 +699,6 @@ def process_delete_wish(msg_id, text, group_cid, config):
         _send_wish_webhook(nf, config, group_cid)
         return True
 
-    if row.get('status') == 'deleted':
-        _log(f'delete wish: #{seq} already deleted')
-        ad = _render_template('wish_already_deleted', seq=seq, summary='')
-        _send_wish_webhook(ad, config, group_cid)
-        return True
-
     delete_wish_item(seq)
     tr_removed = _delete_task_in_reminder_wish(seq, config)
     summary = ((row.get('text') or '')[:30] + ('...' if len(row.get('text') or '') > 30 else ''))
@@ -700,6 +731,7 @@ def process_close_wish(msg_id, text, group_cid, config):
 
     if row.get('status') == 'deleted':
         _log(f'close wish: #{seq} deleted')
+        delete_wish_item(seq)
         txt = _render_template('wish_close_deleted', seq=seq, summary='')
         _send_wish_webhook(txt, config, group_cid)
         return True
@@ -741,6 +773,141 @@ def _delete_task_in_reminder(memo_seq, config):
     except Exception as e:
         _log(f'write TaskReminder failed: {e}')
         return False
+
+
+# ── 备忘延期（推到明天 / 1、9、10 延到下周一）──────────────────
+
+_DEFER_KEYWORDS = (
+    '推迟到', '顺延到', '延期到', '推到', '延到', '改到', '挪到', '调到', '延期', '推迟',
+)
+
+
+def _split_defer_memo_text(text: str):
+    """从「数字列表 + 延期词 + 日期」中切出 (head, tail)；无法解析返回 None。"""
+    t = (text or '').strip()
+    if not t:
+        return None
+    n = len(t)
+    best = None  # (index, keyword)
+    kws = sorted(set(_DEFER_KEYWORDS), key=len, reverse=True)
+    for i in range(n):
+        for kw in kws:
+            if t.startswith(kw, i):
+                if best is None or i < best[0]:
+                    best = (i, kw)
+                break
+    if not best or best[0] == 0:
+        return None
+    i, kw = best
+    head = t[:i].strip()
+    tail = t[i + len(kw) :].strip()
+    if not head or not tail:
+        return None
+    return head, tail
+
+
+def parse_defer_memo_command(text: str):
+    """
+    解析「1、9、10推到明天」类指令。
+    返回 (memo_seq 列表, 目标日期 YYYY-MM-DD)；不是延期指令返回 None。
+    """
+    sp = _split_defer_memo_text(text)
+    if not sp:
+        return None
+    head, tail = sp
+    seqs = [int(x) for x in re.findall(r'\d+', head)]
+    if not seqs:
+        return None
+    due_date, _ = _parse_chinese_date(tail)
+    if not due_date:
+        due_date, _ = _parse_chinese_date(text)
+    return (seqs, due_date)
+
+
+def _update_tasks_due_for_memo(memo_seq: int, due_date: str, config: dict) -> int:
+    """TaskReminder 中所有 note 含 memo:#N 的任务改为 due_date；返回改动条数。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return 0
+    except Exception as e:
+        _log(f'read TaskReminder failed (defer): {e}')
+        return 0
+    marker = f'memo:#{memo_seq}'
+    changed = 0
+    for task in tasks:
+        if marker in (task.get('note') or ''):
+            task['due'] = due_date
+            changed += 1
+    if not changed:
+        return 0
+    try:
+        _http_post_json(url, tasks)
+        return changed
+    except Exception as e:
+        _log(f'update TaskReminder due failed (defer): {e}')
+        return 0
+
+
+@_memo_serialized
+def process_defer_memo(msg_id, text, group_cid, config):
+    """
+    处理「#N 推到明天」「1、9、10 延到下周一」等：更新本地 memo_items.due 与 TR 任务 due。
+    返回 False 表示非延期指令；True 表示已识别并已回复（含部分失败说明）。
+    """
+    parsed = parse_defer_memo_command(text)
+    if not parsed:
+        return False
+    seqs, due_date = parsed
+    tpl = _load_memo_templates()
+    if not due_date:
+        hint = tpl.get('defer_need_date') or _DEFAULT_TEMPLATES.get(
+            'defer_need_date',
+            '未能从指令里解析目标日期，请写明「推到明天」等。',
+        )
+        _send_webhook(hint, config, group_cid=group_cid)
+        _log(f'defer_memo: need date, seqs={seqs}')
+        return True
+    lines = []
+    title = tpl.get('defer_title') or _DEFAULT_TEMPLATES.get('defer_title', '### 到期日已调整')
+    line_ok = tpl.get('defer_line_ok') or _DEFAULT_TEMPLATES.get('defer_line_ok', '')
+    line_db = tpl.get('defer_line_db_only') or _DEFAULT_TEMPLATES.get('defer_line_db_only', '')
+    line_tr = tpl.get('defer_line_tr_only') or _DEFAULT_TEMPLATES.get('defer_line_tr_only', '')
+    line_miss = tpl.get('defer_line_missing') or _DEFAULT_TEMPLATES.get('defer_line_missing', '')
+
+    for seq in seqs:
+        memo = get_memo_by_seq(seq)
+        db_ok = False
+        if memo and memo.get('status') == 'active':
+            db_ok = update_memo_due(seq, due_date) > 0
+        tr_n = _update_tasks_due_for_memo(seq, due_date, config)
+        if db_ok and tr_n > 0:
+            try:
+                lines.append(line_ok.format(seq=seq, due=due_date))
+            except Exception:
+                lines.append(f'- **#{seq}** → {due_date}（本地备忘 + TR）')
+        elif db_ok:
+            try:
+                lines.append(line_db.format(seq=seq, due=due_date))
+            except Exception:
+                lines.append(f'- **#{seq}** → {due_date}（仅本地备忘）')
+        elif tr_n > 0:
+            try:
+                lines.append(line_tr.format(seq=seq, due=due_date))
+            except Exception:
+                lines.append(f'- **#{seq}** → {due_date}（仅 TR）')
+        else:
+            try:
+                lines.append(line_miss.format(seq=seq, due=due_date))
+            except Exception:
+                lines.append(f'- **#{seq}** 未找到')
+
+    body = title + '\n\n' + '\n'.join(lines)
+    _send_webhook(body, config, group_cid=group_cid)
+    _log(f'defer_memo: seqs={seqs} -> {due_date}')
+    return True
 
 
 # ── 公开接口 ────────────────────────────────────────────────
@@ -819,6 +986,13 @@ def process_close(msg_id, text, group_cid, config):
         _send_webhook(not_found_text, config, group_cid=group_cid)
         return True
 
+    if memo.get('status') == 'deleted':
+        delete_memo_item(seq)
+        _log(f'close: memo #{seq} was deleted (cleaned row)')
+        txt = _render_template('memo_close_deleted', seq=seq, summary='')
+        _send_webhook(txt, config, group_cid=group_cid)
+        return True
+
     if memo['status'] == 'done':
         _log(f'close: memo #{seq} already done')
         return True
@@ -850,11 +1024,6 @@ def process_delete(msg_id, text, group_cid, config):
         not_found_text = _render_template('not_found', seq=seq, summary='')
         _send_webhook(not_found_text, config, group_cid=group_cid)
         return True
-    if memo['status'] == 'deleted':
-        _log(f'delete: memo #{seq} already deleted')
-        already_text = _render_template('already_deleted', seq=seq, summary='')
-        _send_webhook(already_text, config, group_cid=group_cid)
-        return True
     delete_memo_item(seq)
     tr_removed = _delete_task_in_reminder(seq, config)
     summary = (memo.get('text') or '')[:30] + ('...' if len(memo.get('text') or '') > 30 else '')
@@ -871,11 +1040,12 @@ def process_delete(msg_id, text, group_cid, config):
 def process_today_focus(config, group_cid=None):
     """
     列出今天应关注的任务：到期日 <= 今天（含超期、今日到期）。
-    通过 webhook 发送可读列表，返回是否发送成功。
-    group_cid：与发言群一致时走 wish_reply_webhook_by_cid。
+    数据优先从 TR 读取，与定时摘要一致；TR 不可用时回退到本地 SQLite。
     """
     today = datetime.now().strftime('%Y-%m-%d')
-    pending = get_pending_memos()
+    pending = _get_pending_memos_from_tr(config)
+    if pending is None:
+        pending = get_pending_memos()
     items = [m for m in pending if m.get('due') and m['due'] <= today]
     items.sort(key=lambda m: m.get('due') or '', reverse=False)
     tpl = _load_memo_templates()
@@ -908,13 +1078,14 @@ def process_today_focus(config, group_cid=None):
 def process_tomorrow_focus(config, group_cid=None):
     """
     列出明天到期的任务：到期日 = 明天。
-    通过 webhook 发送可读列表，返回是否发送成功。
-    group_cid：与发言群一致时走 wish_reply_webhook_by_cid。
+    数据优先从 TR 读取；TR 不可用时回退到本地 SQLite。
     """
     today = datetime.now().date()
     tomorrow_d = today + timedelta(days=1)
     tomorrow = tomorrow_d.strftime('%Y-%m-%d')
-    pending = get_pending_memos()
+    pending = _get_pending_memos_from_tr(config)
+    if pending is None:
+        pending = get_pending_memos()
     items = [m for m in pending if m.get('due') == tomorrow]
     items.sort(key=lambda m: m.get('due') or '')
     tpl = _load_memo_templates()
@@ -946,15 +1117,15 @@ def process_tomorrow_focus(config, group_cid=None):
 def process_week_focus(config, group_cid=None):
     """
     列出本周应关注的任务：到期日在 [今天, 本周日] 之间（含今天、含超期）。
-    通过 webhook 发送可读列表，返回是否发送成功。
-    group_cid：与发言群一致时走 wish_reply_webhook_by_cid。
+    数据优先从 TR 读取；TR 不可用时回退到本地 SQLite。
     """
     today_d = datetime.now().date()
     today = today_d.strftime('%Y-%m-%d')
-    # 本周日：周一=0，周日=6，所以 end_week = today + (6 - weekday)
     end_week_d = today_d + timedelta(days=(6 - today_d.weekday()))
     end_week = end_week_d.strftime('%Y-%m-%d')
-    pending = get_pending_memos()
+    pending = _get_pending_memos_from_tr(config)
+    if pending is None:
+        pending = get_pending_memos()
     items = [m for m in pending if m.get('due') and today <= m['due'] <= end_week]
     items.sort(key=lambda m: m.get('due') or '')
     tpl = _load_memo_templates()

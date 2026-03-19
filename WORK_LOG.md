@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - dingtalk-desktop 备忘延期与关注列表读 TR
+
+**状态**: 已推送 tygit（`origin`）
+
+**内容**:
+- `skills/memo_tracker.py`: 「N、M推到明天」类延期；今日/明日/本周关注优先从 TaskReminder 拉取，失败回退 SQLite；`_get_pending_memos_from_tr`
+- `skill_router.py`: 延期指令路由；明日关注正则支持「明天要关注啥」
+- `db/store.py`: `update_memo_due`
+- `message_templates.json`: `defer_*` 模板
+- `WEBHOOK_消息来源说明.md`: 备忘延期与日志说明
+
+---
+
 ## 2026-03-19 - dingtalk-desktop 备忘按群 Webhook、footer 分割线
 
 **状态**: 已推送 tygit（`origin` → `http://tygit.tuyoo.com/...`）；GitHub `main` 远端超前，本次未快进合入，需另 `fetch github` + `merge/rebase` 后再推
