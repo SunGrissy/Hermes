@@ -1,11 +1,12 @@
 """Palace Web — 报告批注系统 v0.2
 
-FastAPI 服务：报告展示 + 批注持久化 + 钉钉通知。
+FastAPI 服务：报告展示 + 批注持久化 + 钉钉通知 + 预审接口。
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import uuid
 from datetime import datetime
@@ -17,6 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+_PALACE_ROOT = Path(__file__).resolve().parent.parent
 
 # ---------------------------------------------------------------------------
 # Paths & constants
@@ -58,6 +61,17 @@ class ReportUpload(BaseModel):
     pipeline_stage: str = ""
     document_layer: str = ""
     data: dict  # raw REPORT_DATA from engine
+
+
+class PrecheckRequest(BaseModel):
+    """External caller requests a precheck on document text."""
+    text: str
+    scenario_id: str = "what_precheck"
+    title: str = ""
+    doc_layer: str = ""
+    doc_type: str = ""
+    format: str = "markdown"  # "json" or "markdown"
+    publish: bool = True
 
 
 class AnnotationUpdate(BaseModel):
@@ -114,6 +128,73 @@ def version():
         "last_update_ts": int(latest) if latest else 0,
         "files": files,
     }
+
+
+# ---------------------------------------------------------------------------
+# Precheck (runs engine on-demand)
+# ---------------------------------------------------------------------------
+
+import asyncio
+
+def _run_precheck_sync(text, scenario_id, title, doc_layer, doc_type, fmt, publish):
+    """同步执行预审（在线程池中运行，避免阻塞 uvicorn 事件循环）"""
+    if str(_PALACE_ROOT) not in sys.path:
+        sys.path.insert(0, str(_PALACE_ROOT))
+    from palace_engine.engine import run_scenario
+    from palace_engine.config import load_scenario
+    from palace_engine.report import generate_markdown
+
+    scenario_cfg = load_scenario(scenario_id)
+    pipeline_weight = scenario_cfg.get("pipeline_weight", "slow")
+    pipeline_stage = scenario_cfg.get("pipeline_stage", "scoping")
+
+    result = asyncio.run(run_scenario(
+        scenario_id, text,
+        document_layer=doc_layer, doc_type=doc_type,
+    ))
+
+    md_report = ""
+    if fmt == "markdown":
+        md_report = generate_markdown(
+            result, scenario_id=scenario_id, feature_title=title,
+            pipeline_weight=pipeline_weight, pipeline_stage=pipeline_stage,
+            document_layer=doc_layer,
+        )
+
+    report_id = None
+    if publish:
+        report_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+        doc = {
+            "id": report_id, "title": title, "scenario_id": scenario_id,
+            "feature_title": title, "pipeline_weight": pipeline_weight,
+            "pipeline_stage": pipeline_stage, "document_layer": doc_layer,
+            "data": result, "created_at": datetime.now().isoformat(),
+        }
+        _save_report(report_id, doc)
+
+    return {
+        "success": True,
+        "verdict": result.get("overall_verdict", "error"),
+        "blocker_count": result.get("blocker_count", 0),
+        "concern_count": result.get("concern_count", 0),
+        "report_id": report_id,
+        "markdown": md_report,
+        "data": result,
+    }
+
+
+@app.post("/api/precheck")
+async def run_precheck(body: PrecheckRequest):
+    """Run a Palace precheck scenario on the given text."""
+    if not body.text or len(body.text.strip()) < 30:
+        raise HTTPException(400, "Text too short for meaningful review")
+    title = body.title or "untitled"
+    result = await asyncio.to_thread(
+        _run_precheck_sync,
+        body.text, body.scenario_id, title, body.doc_layer,
+        body.doc_type, body.format, body.publish,
+    )
+    return result
 
 
 # ---------------------------------------------------------------------------
