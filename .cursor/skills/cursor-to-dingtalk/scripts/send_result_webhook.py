@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 通过钉钉机器人 Webhook 发送 Markdown 消息。
-正文由 stdin 或参数传入，末尾自动加 footer「小秘书提醒」（满足机器人关键词校验）。
-URL 解析顺序: 1) 环境变量 DINGTALK_WEBHOOK_URL  2) dingtalk-desktop/webhook_config.json 的 cursor_session
+标题：环境变量 DINGTALK_TITLE（默认 Agent代号-工作摘要），建议设为「本会话代号-工作摘要」如 AgentFlow-工作摘要。
+正文由 stdin 或文件传入，末尾自动加 footer「###### ※ 小秘书提醒」。
+URL: DINGTALK_WEBHOOK_URL 或 dingtalk-desktop/webhook_config.json 的 cursor_session。
 """
 import os
 import sys
@@ -10,7 +11,8 @@ import json
 import urllib.request
 import urllib.error
 
-FOOTER = "\n\n---\n小秘书提醒"
+FOOTER = "\n\n###### ※ 小秘书提醒"
+DEFAULT_TITLE = "Agent代号-工作摘要"
 WEBHOOK_KEY = "cursor_session"
 
 
@@ -103,7 +105,7 @@ def main():
         return 1
 
     text = content + FOOTER
-    title = "Cursor 会话结果"
+    title = os.environ.get("DINGTALK_TITLE", "").strip() or DEFAULT_TITLE
     ok, msg = send_markdown(url, title, text)
     if ok:
         print("sent")

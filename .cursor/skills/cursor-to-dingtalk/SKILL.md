@@ -35,13 +35,14 @@ description: 在 Cursor 会话结束或任务收尾时，把结果摘要通过�
 
 ### 方式一：Webhook（默认，机器人发）
 
-用户说「发钉钉」「会话结果发我」时**必须用此方式**，以机器人身份发，带「小秘书提醒」footer。
+用户说「发钉钉」「会话结果发我」时**必须用此方式**，以机器人身份发。**标题**为「Agent代号-工作摘要」；**footer** 为 `###### ※ 小秘书提醒`。
 
 **推荐两种方式（保证中文不乱码）：**
 
 ```powershell
 # 方式 A：先写入 UTF-8 文件，再传文件路径（最稳，Agent 首选）
-# 摘要内容写入临时文件时务必用 encoding=utf-8
+# 标题用本会话 Agent 代号，例如 AgentFlow-工作摘要
+$env:DINGTALK_TITLE = "AgentFlow-工作摘要"
 $summary = "## 本轮摘要`n- 完成 xxx"
 [System.IO.File]::WriteAllText("$env:TEMP\dt_summary.md", $summary, [System.Text.Encoding]::UTF8)
 py .cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py "$env:TEMP\dt_summary.md"
@@ -49,13 +50,15 @@ py .cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py "$env:TEMP\d
 
 ```powershell
 # 方式 B：管道 + 设控制台为 UTF-8（否则钉钉里中文会变成问号）
+$env:DINGTALK_TITLE = "AgentFlow-工作摘要"
 $OutputEncoding = [System.Text.Encoding]::UTF8
 "## 本轮摘要`n- 完成 xxx" | py .cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py
 ```
 
 - **不要**在 Windows 下把长中文直接当命令行参数传入（如 `py send_result_webhook.py "很多中文..."`），易因 GBK 导致钉钉里显示为问号。
+- **标题**：钉钉消息标题格式为「Agent代号-工作摘要」。发钉钉前请设置环境变量 **DINGTALK_TITLE** = 本会话代号-工作摘要（例如 `AgentFlow-工作摘要`）；未设置时脚本使用默认「Agent代号-工作摘要」。
+- **Footer**：脚本会在正文末尾自动追加 `###### ※ 小秘书提醒`（满足机器人关键词校验）。
 - URL 来源：`dingtalk-desktop/webhook_config.json` 的 **cursor_session**，或环境变量 `DINGTALK_WEBHOOK_URL`
-- 脚本会在正文末尾自动追加 `---` 和 `小秘书提醒`
 
 ## 保证中文渲染（必读）
 
