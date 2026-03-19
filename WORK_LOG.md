@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - dingtalk-desktop 备忘按群 Webhook、footer 分割线
+
+**状态**: 验收通过
+
+**内容**:
+- `skills/memo_tracker.py`: 备忘/TR/完成删除/关注等回复与许愿共用 `wish_reply_webhook_by_cid`；自动 footer 前插入分割线（模板 `separator`/`footer_separator`）；`_send_webhook` 统一选 Webhook
+- `skill_router.py`: 今日/明日/本周关注传入 `group_cid`
+- `digest_config.json`: `wish_reply_webhook_by_cid` 与白名单群说明、关键词说明
+- `message_templates.json`: memo_tracker footer 分割线说明
+- `skills/doc_review.py`、`db/store.py`: 预审与数据库配套（本轮一并提交）
+
+---
+
 ## 2026-03-19 - pm-system 子模块：UE 预审与 Boss 对齐（tygit 已推送）
 
 **状态**: 已推送

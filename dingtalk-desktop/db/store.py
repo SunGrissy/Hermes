@@ -275,6 +275,36 @@ def get_pending_memos():
         return [dict(r) for r in rows]
 
 
+def _normalize_body_dedup_key(text: str) -> str:
+    """备忘/愿望正文去重键：去首尾空白、合并连续空白、截断前缀长度。"""
+    if not text:
+        return ''
+    t = ' '.join(str(text).strip().split())
+    return (t[:200] or '').strip()
+
+
+def find_active_memo_duplicate_body(content: str):
+    """若已有进行中备忘与 content 归一化后相同，返回该条 dict，否则 None。"""
+    nk = _normalize_body_dedup_key(content)
+    if not nk:
+        return None
+    for m in get_pending_memos():
+        if _normalize_body_dedup_key(m.get('text') or '') == nk:
+            return dict(m)
+    return None
+
+
+def find_active_wish_duplicate_body(content: str):
+    """若已有进行中愿望与 content 归一化后相同，返回该条 dict，否则 None。"""
+    nk = _normalize_body_dedup_key(content)
+    if not nk:
+        return None
+    for w in get_pending_wishes():
+        if _normalize_body_dedup_key(w.get('text') or '') == nk:
+            return dict(w)
+    return None
+
+
 # ── wish_items（群「许愿」→ TaskReminder 愿望单，与备忘编号体系独立）────────
 
 def get_next_wish_seq():

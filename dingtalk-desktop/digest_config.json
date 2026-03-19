@@ -124,6 +124,11 @@
     "group_cid": "73216314617",
     "colleague_skill_cids": ["73472166912"],
     "_note_colleague_skill_cids": "他人发言仅白名单群入队（例：杨琳汇报直通车）；本人仍可在 group_cid 或白名单群发指令。助理群内同事发言默认忽略。",
+    "_note_wish_reply_webhook_by_cid": "备忘/TR/完成/删除 memo、今日/明日/本周关注、许愿/愿望单/删除或完成 wish 等技能回复均按「发言群」选 Webhook：wish_reply_webhook_by_cid 键为群 CID，值为该群机器人 URL；未映射的群用下方 webhook_url（或 webhook_config.json 的 memo_tracker）。",
+    "_note_wish_reply_keyword": "B 群等自定义机器人的「自定义关键词」若开启，须与 A/助理一致：小秘书提醒。发送侧由 memo_tracker 模板控制：Markdown 的 title=webhook_keyword，正文末尾 footer 含该词（见 message_templates.json memo_tracker）。",
+    "wish_reply_webhook_by_cid": {
+      "73472166912": "https://oapi.dingtalk.com/robot/send?access_token=319a628acc1bfe427c39ae119f60383cbe08d08265e6914f4fc56ffbc05acdea"
+    },
     "default_who": "助理大白",
     "default_due_days": 7,
     "default_module": "备忘",

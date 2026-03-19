@@ -18,6 +18,7 @@
   - ct=502 且未处理过 → 交给 skills/resume_screen
   - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望单」 → 交给 skills/memo_tracker
   - 通过 DB + 内存 seen_ids 实现幂等
+  - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
 """
 import os
 import re
@@ -55,6 +56,8 @@ from skills.doc_review import (
     extract_doc_url_from_message,
     process_doc_review,
     get_doc_review_no_link_message,
+    try_user_stop_doc_review,
+    send_no_active_doc_review_stop_reply,
 )
 from skills.status_check import run_and_send as run_status_check_and_send
 from lib.utils import get_webhook_url, DATA_DIR
@@ -394,6 +397,10 @@ _RE_PRECHECK_FORCE_PREFIX = re.compile(
 _RE_PRECHECK_FORCE_SUFFIX = re.compile(
     r'^\s*预审\s*(?:再来|重试|重跑)(?:[!！。.\s]*)?$'
 )
+# 停止 Palace 子进程：停止预审 / 中断预审 / 叫停预审 / 预审停止 …
+_RE_PRECHECK_STOP = re.compile(
+    r'^\s*(?:(?:停止|中断|叫停)\s*预审|预审\s*(?:停止|中断|叫停))(?:[!！。.,，\s]*)?$'
+)
 # 支持「上班啦」「上班」「上班啦！」等，整条以上班啦/上班开头且无其它实质内容即可
 _RE_MORNING = re.compile(r'^\s*(?:上班啦|上班)\s*[!！。.~\s]*$')
 
@@ -461,6 +468,19 @@ def _is_stale_command_msg(msg: dict, now_ms: int, max_age_ms: int) -> bool:
     return (now_ms - ts) > max_age_ms
 
 
+def _skip_msg_before_router_start(msg: dict, router_start_ms: int) -> bool:
+    """True：本条消息早于 skill_router 本次 start()，应跳过（重启后不追溯）。
+
+    router_start_ms<=0 时不启用。ts<=0 视为不可靠，一律跳过以免误处理历史。
+    """
+    if not router_start_ms or router_start_ms <= 0:
+        return False
+    ts = int(msg.get('ts') or 0)
+    if ts <= 0:
+        return True
+    return ts < router_start_ms
+
+
 def _memo_content_key(text: str) -> str:
     """备忘内容归一化，用于短时去重（同一条备忘不重复收录）。"""
     if not text:
@@ -492,9 +512,14 @@ def _normalize_push_record(record: dict) -> dict:
 
 def _dispatch_one_message(record: dict, memo_cfg: dict,
                           memo_seen_ids: set, doc_review_cfg: dict = None,
-                          doc_seen_ids: set = None):
-    """推送到达时立刻处理单条：消息 cid 须在 memo 助理群或 colleague_skill_cids 白名单内。"""
+                          doc_seen_ids: set = None, router_start_ms: int = 0):
+    """推送到达时立刻处理单条：消息 cid 须在 memo 助理群或 colleague_skill_cids 白名单内。
+
+    router_start_ms：本次 router 启动时刻（毫秒）；早于该时刻的记录不处理（与轮询一致）。
+    """
     msg = _normalize_push_record(record)
+    if _skip_msg_before_router_start(msg, router_start_ms):
+        return
     msg_cid = str(msg.get('cid', '') or '')
     if msg_cid not in _memo_allowed_cids(memo_cfg):
         return
@@ -507,6 +532,22 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         return
     msg_id = _make_msg_id(msg)
     if not msg_id:
+        return
+
+    # 预审所在群：用户叫停（终止 Palace + 停进度推送）
+    if (
+        doc_review_cfg
+        and str(doc_review_cfg.get('group_cid') or '').strip()
+        and msg_cid == str(doc_review_cfg.get('group_cid')).strip()
+        and _RE_PRECHECK_STOP.match(text)
+    ):
+        wh = doc_review_cfg.get('webhook_url', '')
+        if try_user_stop_doc_review(wh):
+            _log('push: 预审已按用户指令叫停')
+        else:
+            send_no_active_doc_review_stop_reply(wh)
+        if doc_seen_ids is not None:
+            doc_seen_ids.add(msg_id)
         return
 
     # 预审：即时拉取近期消息、回溯文档链接后执行（推送即刚发生，不做时间窗判断；轮询侧再做过期过滤）
@@ -599,7 +640,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             return
         _recent_cmd_ts[key] = now_ms
         try:
-            process_today_focus(memo_cfg)
+            process_today_focus(memo_cfg, group_cid=msg_cid)
             memo_seen_ids.add(msg_id)
             _log('push: 今日关注已回复')
         except Exception as e:
@@ -613,7 +654,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             return
         _recent_cmd_ts[key] = now_ms
         try:
-            process_tomorrow_focus(memo_cfg)
+            process_tomorrow_focus(memo_cfg, group_cid=msg_cid)
             memo_seen_ids.add(msg_id)
             _log('push: 明日关注已回复')
         except Exception as e:
@@ -627,7 +668,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             return
         _recent_cmd_ts[key] = now_ms
         try:
-            process_week_focus(memo_cfg)
+            process_week_focus(memo_cfg, group_cid=msg_cid)
             memo_seen_ids.add(msg_id)
             _log('push: 本周关注已回复')
         except Exception as e:
@@ -741,7 +782,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             return
         _recent_cmd_ts[key] = now_ms
         try:
-            process_wish_list(memo_cfg)
+            process_wish_list(memo_cfg, group_cid=msg_cid)
             memo_seen_ids.add(msg_id)
             _log('push: 愿望单列表已打印并推送')
         except Exception as e:
@@ -779,8 +820,12 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'memo error: {e}')
 
 
-def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
-    """轮询助理通知群, 处理备忘/完成指令（JSAPI 不可用时自动降级到 beacon 日志）"""
+def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
+                    router_start_ms: int = 0):
+    """轮询助理通知群, 处理备忘/完成指令（JSAPI 不可用时自动降级到 beacon 日志）。
+
+    router_start_ms：仅处理不早于本次 router 启动的消息（重启后不追溯）。
+    """
     messages = _fetch_memo_messages(group_cid, max_age_ms=_MEMO_MAX_AGE_MS)
     now_ms = int(time.time() * 1000)
 
@@ -789,7 +834,9 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
         if not text:
             continue
 
-        msg_ts = msg.get('ts', 0)
+        msg_ts = int(msg.get('ts') or 0)
+        if _skip_msg_before_router_start(msg, router_start_ms):
+            continue
         if msg_ts and (now_ms - msg_ts) > _MEMO_MAX_AGE_MS:
             continue
 
@@ -855,7 +902,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
 
         if _RE_TODAY_FOCUS.search(text):
             try:
-                process_today_focus(memo_cfg)
+                process_today_focus(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'today_focus error: {e}')
@@ -863,7 +910,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
 
         if _RE_TOMORROW_FOCUS.search(text):
             try:
-                process_tomorrow_focus(memo_cfg)
+                process_tomorrow_focus(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'tomorrow_focus error: {e}')
@@ -871,7 +918,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
 
         if _RE_WEEK_FOCUS.search(text):
             try:
-                process_week_focus(memo_cfg)
+                process_week_focus(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'week_focus error: {e}')
@@ -929,7 +976,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
                 continue
             _recent_cmd_ts[key] = now_ms
             try:
-                process_wish_list(memo_cfg)
+                process_wish_list(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'wish_list error: {e}')
@@ -985,11 +1032,13 @@ def _send_notify(text: str, webhook_url: str):
         _log(f'notify webhook failed: {e}')
 
 
-def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set):
+def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set,
+                          router_start_ms: int = 0):
     """轮询助理通知群，检测'预审'指令，回溯找最近的文档链接后启动预审。
 
     触发条件：用户先发文档链接（消息A），再发'预审'（消息B）。
     以消息B的 msg_id 做去重 key。
+    router_start_ms：仅处理不早于本次 router 启动的预审指令（重启后不追溯）。
     """
     messages = _fetch_memo_messages(group_cid, max_age_ms=_DOC_REVIEW_MAX_AGE_MS)
     now_ms = int(time.time() * 1000)
@@ -1002,16 +1051,28 @@ def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set):
         if not text:
             continue
 
+        if _skip_msg_before_router_start(msg, router_start_ms):
+            continue
+
         if _is_stale_command_msg(msg, now_ms, _PRECHECK_CMD_MAX_AGE_MS):
+            continue
+
+        msg_id = _make_msg_id(msg)
+        if not msg_id or msg_id in seen_ids:
+            continue
+
+        if _RE_PRECHECK_STOP.match(text):
+            if try_user_stop_doc_review(webhook_url):
+                _log('poll: 预审已按用户指令叫停')
+            else:
+                send_no_active_doc_review_stop_reply(webhook_url)
+            seen_ids.add(msg_id)
             continue
 
         _poll_is_precheck, _poll_force_precheck = _precheck_command_flags(text)
         if not _poll_is_precheck:
             continue
 
-        msg_id = _make_msg_id(msg)
-        if not msg_id or msg_id in seen_ids:
-            continue
         if is_doc_review_processed(msg_id):
             seen_ids.add(msg_id)
             continue
@@ -1059,11 +1120,12 @@ class SkillRouter:
         self._seen_ids: set = set()
         self._memo_seen_ids: set = set()
         self._doc_seen_ids: set = set()
-        # 本次启动时刻（毫秒），用于过滤"daemon 启动前已存在的消息"
-        self._start_ts: int = int(time.time() * 1000)
+        # 在 start() 首行赋值；轮询与推送均不处理早于此时刻的消息
+        self._start_ts: int = 0
 
     def start(self, memo_event_queue=None):
         """启动后台轮询线程（由 daemon.py 调用）。memo_event_queue 非空时备忘/完成走推送立刻响应，不再轮询。"""
+        self._start_ts = int(time.time() * 1000)
         init_db()
         _log('DB initialized')
 
@@ -1134,6 +1196,7 @@ class SkillRouter:
                 _dispatch_one_message(
                     record, memo_cfg, self._memo_seen_ids,
                     doc_review_cfg=doc_review_cfg, doc_seen_ids=self._doc_seen_ids,
+                    router_start_ms=self._start_ts,
                 )
             except Exception as e:
                 _log(f'memo push dispatch error: {e}')
@@ -1155,14 +1218,20 @@ class SkillRouter:
             if not getattr(self, '_memo_queue', None):
                 for _poll_cid in sorted(_memo_allowed_cids(memo_cfg)):
                     try:
-                        _poll_memo_once(_poll_cid, memo_cfg, self._memo_seen_ids)
+                        _poll_memo_once(
+                            _poll_cid, memo_cfg, self._memo_seen_ids,
+                            router_start_ms=self._start_ts,
+                        )
                     except Exception as e:
                         _log(f'memo poll [{_poll_cid}] error: {e}')
 
             if doc_review_cfg and doc_review_cfg.get('group_cid'):
                 try:
-                    _poll_doc_review_once(doc_review_cfg['group_cid'],
-                                          doc_review_cfg, self._doc_seen_ids)
+                    _poll_doc_review_once(
+                        doc_review_cfg['group_cid'],
+                        doc_review_cfg, self._doc_seen_ids,
+                        router_start_ms=self._start_ts,
+                    )
                 except Exception as e:
                     _log(f'doc_review poll error: {e}')
 

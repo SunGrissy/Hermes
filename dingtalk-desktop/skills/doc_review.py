@@ -15,7 +15,8 @@
 
   拉取文档与 Palace 预审耗时较长时，按 digest `doc_review_progress_interval_seconds`（默认 30s，0 关闭）
   经 webhook 推送阶段性进度（阶段名 + 已等待秒数）。
-  
+  用户可在预审所在群发「停止预审」「中断预审」「叫停预审」等终止 Palace 子进程并收到确认推送。
+
 所有通知使用 Markdown，title/footer 含「小秘书提醒」以满足钉钉机器人自定义关键词（与助理群其它机器人一致）。
 """
 import os
@@ -340,6 +341,116 @@ def _stop_doc_review_progress(handle) -> None:
         pass
 
 
+# ── 单实例预审运行态：叫停 Palace 子进程 + 停进度线程 ───────────────
+_doc_run_lock = threading.Lock()
+_doc_run_state = {
+    'in_progress': False,
+    'cancel': None,       # threading.Event
+    'proc': None,         # subprocess.Popen | None
+    'prog': None,         # progress handle | None
+    'msg_id': '',         # 当前 run 的预审指令 msg_id（叫停后写库用）
+    'url': '',
+    'normalized_url': '',
+}
+
+
+def _doc_review_acquire_run(msg_id: str, url: str, normalized_url: str) -> threading.Event | None:
+    """开始一次预审；若已有进行中的预审则返回 None。"""
+    with _doc_run_lock:
+        if _doc_run_state['in_progress']:
+            return None
+        _doc_run_state['in_progress'] = True
+        _doc_run_state['cancel'] = threading.Event()
+        _doc_run_state['proc'] = None
+        _doc_run_state['prog'] = None
+        _doc_run_state['msg_id'] = str(msg_id or '')
+        _doc_run_state['url'] = url or ''
+        _doc_run_state['normalized_url'] = normalized_url or ''
+        return _doc_run_state['cancel']
+
+
+def _doc_review_set_proc(proc) -> None:
+    with _doc_run_lock:
+        _doc_run_state['proc'] = proc
+
+
+def _doc_review_set_prog(prog) -> None:
+    with _doc_run_lock:
+        _doc_run_state['prog'] = prog
+
+
+def _doc_review_release_run() -> None:
+    with _doc_run_lock:
+        _doc_run_state['in_progress'] = False
+        _doc_run_state['cancel'] = None
+        _doc_run_state['proc'] = None
+        _doc_run_state['prog'] = None
+        _doc_run_state['msg_id'] = ''
+        _doc_run_state['url'] = ''
+        _doc_run_state['normalized_url'] = ''
+
+
+def _terminate_palace_proc(proc: subprocess.Popen) -> None:
+    if not proc:
+        return
+    try:
+        proc.terminate()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def try_user_stop_doc_review(webhook_url: str) -> bool:
+    """
+    用户「停止/中断/叫停预审」：终止 Palace 子进程、停止进度推送、发确认。
+    返回 True 表示当时确有进行中的预审并已处理；False 表示没有进行中的任务。
+    """
+    with _doc_run_lock:
+        if not _doc_run_state['in_progress']:
+            return False
+        cancel = _doc_run_state['cancel']
+        proc = _doc_run_state['proc']
+        prog = _doc_run_state['prog']
+        # 已在叫停过程中且子进程已结束：不再重复推送「已中断」
+        skip_notify = bool(cancel and cancel.is_set() and proc is None)
+    if cancel is not None:
+        cancel.set()
+    _terminate_palace_proc(proc)
+    _stop_doc_review_progress(prog)
+    if not skip_notify:
+        tpl = _load_doc_review_templates()
+        msg = (tpl.get('user_stopped') or '').strip() or (
+            'PM助理 已按你的指令**中断**本次文档预审（Palace 子进程已终止）。'
+        )
+        _send_webhook(msg, webhook_url)
+    _log('user stopped doc_review (terminate + progress off)')
+    return True
+
+
+def send_no_active_doc_review_stop_reply(webhook_url: str) -> None:
+    """没有进行中的预审时回复用户。"""
+    tpl = _load_doc_review_templates()
+    msg = (tpl.get('no_active_to_stop') or '').strip() or (
+        'PM助理 当前没有进行中的文档预审，无需停止。'
+    )
+    _send_webhook(msg, webhook_url)
+
+
+def send_doc_review_busy_reply(webhook_url: str) -> None:
+    """已有预审进行中，拒绝并发。"""
+    tpl = _load_doc_review_templates()
+    msg = (tpl.get('review_busy') or '').strip() or (
+        'PM助理 已有一项文档预审正在进行中，请稍候完成，或先发「停止预审」中断当前任务。'
+    )
+    _send_webhook(msg, webhook_url)
+
+
 def _send_webhook_markdown(title: str, md_text: str, webhook_url: str) -> bool:
     """发送 Markdown 格式的钉钉消息（解析 errcode）。"""
     if not webhook_url:
@@ -365,10 +476,35 @@ def _send_webhook_markdown(title: str, md_text: str, webhook_url: str) -> bool:
         return False
 
 
-def _run_palace_cli(content: str, title: str, palace_root: str,
-                    palace_base: str, provider: str = '',
-                    palace_timeout: int = 600) -> dict:
-    """用子进程调 Palace run.py CLI 执行预审，返回解析后的结果 dict"""
+def _parse_palace_cli_stdout(stdout: str) -> dict:
+    """解析 Palace run.py 标准输出中的 JSON 与 report_id。"""
+    stdout = (stdout or '').strip()
+    json_start = stdout.find('{')
+    json_end = stdout.rfind('}')
+    if json_start < 0 or json_end < 0:
+        return {'_error': f'No JSON in output: {stdout[:200]}'}
+    data = json.loads(stdout[json_start:json_end + 1])
+    report_id = None
+    for line in stdout.split('\n'):
+        if 'Published to Palace Web:' in line and '/report/' in line:
+            report_id = line.split('/report/')[-1].strip()
+            break
+    return {
+        'success': True,
+        'verdict': data.get('overall_verdict', 'error'),
+        'blocker_count': data.get('blocker_count', 0),
+        'concern_count': data.get('concern_count', 0),
+        'report_id': report_id,
+        'data': data,
+    }
+
+
+def _run_palace_cli_cancellable(
+    content: str, title: str, palace_root: str,
+    palace_base: str, provider: str,
+    palace_timeout: int, cancel_event: threading.Event,
+) -> dict:
+    """用 Popen 跑 Palace CLI，可被 cancel_event / try_user_stop_doc_review 终止。"""
     run_py = os.path.join(palace_root, 'run.py')
     if not os.path.isfile(run_py):
         return {'_error': f'Palace run.py not found at {run_py}'}
@@ -395,43 +531,68 @@ def _run_palace_cli(content: str, title: str, palace_root: str,
         if provider:
             env['PALACE_PROVIDER'] = provider
 
-        _log(f'subprocess: {" ".join(cmd[:6])}...')
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, encoding='utf-8',
-            timeout=palace_timeout, cwd=palace_root, env=env,
+        _log(f'subprocess (cancellable): {" ".join(cmd[:6])}...')
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            cwd=palace_root,
+            env=env,
         )
+        _doc_review_set_proc(proc)
+        out_buf: list = []
 
-        if result.returncode != 0:
-            _log(f'Palace CLI stderr: {result.stderr[:300]}')
-            return {'_error': f'exit code {result.returncode}: {result.stderr[:200]}'}
+        def _read_stdout():
+            try:
+                if proc.stdout:
+                    out_buf.append(proc.stdout.read())
+            except Exception:
+                pass
 
-        stdout = result.stdout.strip()
-        # run.py --format json 输出 JSON 到 stdout，--publish 会额外输出一行 "Published to ..."
-        # 找 JSON 部分（从第一个 { 到最后一个 }）
-        json_start = stdout.find('{')
-        json_end = stdout.rfind('}')
-        if json_start < 0 or json_end < 0:
-            return {'_error': f'No JSON in output: {stdout[:200]}'}
-
-        data = json.loads(stdout[json_start:json_end + 1])
-
-        # 从 --publish 输出行提取 report_id
-        report_id = None
-        for line in stdout.split('\n'):
-            if 'Published to Palace Web:' in line and '/report/' in line:
-                report_id = line.split('/report/')[-1].strip()
-                break
-
-        return {
-            'success': True,
-            'verdict': data.get('overall_verdict', 'error'),
-            'blocker_count': data.get('blocker_count', 0),
-            'concern_count': data.get('concern_count', 0),
-            'report_id': report_id,
-            'data': data,
-        }
-    except subprocess.TimeoutExpired:
-        return {'_error': f'Palace CLI timed out ({palace_timeout}s)'}
+        reader_th = threading.Thread(target=_read_stdout, daemon=True)
+        reader_th.start()
+        deadline = time.time() + float(palace_timeout)
+        try:
+            while True:
+                if cancel_event.is_set():
+                    _terminate_palace_proc(proc)
+                    try:
+                        reader_th.join(timeout=15)
+                    except Exception:
+                        pass
+                    return {'_cancelled': True, '_error': 'user cancelled'}
+                ret = proc.poll()
+                if ret is not None:
+                    break
+                if time.time() > deadline:
+                    _terminate_palace_proc(proc)
+                    try:
+                        reader_th.join(timeout=15)
+                    except Exception:
+                        pass
+                    return {'_error': f'Palace CLI timed out ({palace_timeout}s)'}
+                time.sleep(0.25)
+            try:
+                stderr = proc.stderr.read() if proc.stderr else ''
+            except Exception:
+                stderr = ''
+            try:
+                reader_th.join(timeout=120)
+            except Exception:
+                pass
+            stdout = out_buf[0] if out_buf else ''
+            if proc.returncode != 0:
+                err_tail = (stderr or '')[:300]
+                _log(f'Palace CLI stderr: {err_tail}')
+                return {
+                    '_error': f'exit code {proc.returncode}: {(stderr or "")[:200]}',
+                }
+            return _parse_palace_cli_stdout(stdout or '')
+        finally:
+            _doc_review_set_proc(None)
     except Exception as e:
         return {'_error': str(e)}
     finally:
@@ -626,13 +787,23 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
             return False
 
     _log(f'开始预审: {url[:60]}...')
-    # ── Step 1: 拉取文档内容 ──────────────────────────────────
-    _send_webhook(tpl.get('started', 'PM助理 收到文档链接，正在读取并预审，请稍候（约 1-2 分钟）...'),
-                  webhook_url)
+    cancel = _doc_review_acquire_run(msg_id, url, normalized_url)
+    if cancel is None:
+        send_doc_review_busy_reply(webhook_url)
+        return False
 
-    progress_interval = int(config.get('doc_review_progress_interval_seconds', 30))
-    prog = _spawn_doc_review_progress(webhook_url, tpl, progress_interval)
+    prog = None
     try:
+        # ── Step 1: 拉取文档内容 ──────────────────────────────────
+        _send_webhook(
+            tpl.get('started', 'PM助理 收到文档链接，正在读取并预审，请稍候（约 1-2 分钟）...'),
+            webhook_url,
+        )
+
+        progress_interval = int(config.get('doc_review_progress_interval_seconds', 30))
+        prog = _spawn_doc_review_progress(webhook_url, tpl, progress_interval)
+        _doc_review_set_prog(prog)
+
         fetch_result = _post(DAEMON_URL.rstrip('/') + '/fetch_report_content', {
             'url': url,
             'wait_extra': 15,
@@ -651,9 +822,7 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
         method  = fetch_result.get('extraction_method', 'body')
         length  = fetch_result.get('text_length', 0)
 
-        # 清理 title 中的零宽字符
         title = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u2061-\u2069]+', '', title)
-        # 提取 "xxx · 钉钉文档" 中的实际标题
         if ' · ' in title:
             title = title.split(' · ')[0].strip()
 
@@ -663,6 +832,17 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
             prog['state']['doc_title'] = title
             prog['state']['phase'] = 'Palace 多角色预审'
 
+        if cancel.is_set():
+            _log('doc_review: fetch 完成后检测到用户叫停，不写 Palace')
+            try:
+                save_doc_review_result(
+                    msg_id=msg_id, doc_url=url, doc_title=title or '',
+                    verdict='cancelled', doc_url_normalized=normalized_url,
+                )
+            except Exception:
+                pass
+            return False
+
         if not content or length < 50:
             _log('content too short, SPA may not have rendered')
             msg = (tpl.get('content_too_short') or 'PM助理 文档《{title}》内容过少（{length} 字），可能页面未完全渲染。\n{url}').format(title=title, length=length, url=url)
@@ -670,15 +850,28 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
             _save_failed(msg_id, url, title, doc_url_normalized=normalized_url)
             return False
 
-        # ── Step 2: 调 Palace CLI 预审 ──────────────────────────────
+        # ── Step 2: 调 Palace CLI 预审（可终止）──────────────────────
         palace_root = config.get('palace_root', '') or PALACE_ROOT
         palace_base = config.get('palace_url', '') or PALACE_URL
         _log(f'calling Palace CLI (root={palace_root}) ...')
 
         provider = config.get('palace_provider', '')
         palace_timeout = int(config.get('doc_review_palace_timeout_seconds', 600))
-        palace_resp = _run_palace_cli(content, title, palace_root, palace_base,
-                                       provider=provider, palace_timeout=palace_timeout)
+        palace_resp = _run_palace_cli_cancellable(
+            content, title, palace_root, palace_base,
+            provider, palace_timeout, cancel,
+        )
+
+        if palace_resp.get('_cancelled'):
+            _log('doc_review: Palace 阶段被用户叫停')
+            try:
+                save_doc_review_result(
+                    msg_id=msg_id, doc_url=url, doc_title=title,
+                    verdict='cancelled', doc_url_normalized=normalized_url,
+                )
+            except Exception:
+                pass
+            return False
 
         if not palace_resp or palace_resp.get('_error'):
             err = (palace_resp or {}).get('_error', 'Palace precheck failed')
@@ -712,3 +905,5 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
         return True
     finally:
         _stop_doc_review_progress(prog)
+        _doc_review_set_prog(None)
+        _doc_review_release_run()

@@ -21,12 +21,15 @@ from datetime import datetime, timedelta
 # [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
 # [AgentWish Task] 开始时间: 2026-03-19
 # [AgentWish Task] 任务目标: WISH wish 序号/列表/删除 wish N + TaskReminder 愿望单
+# [AgentWish Task] 白名单群备忘/关注等与许愿共用 wish_reply_webhook_by_cid，避免回复发到助理群
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.join(_THIS_DIR, '..')
 _TEMPLATE_PATH = os.path.join(_ROOT, 'message_templates.json')
 
 sys.path.insert(0, _ROOT)
 from db.store import (
+    find_active_memo_duplicate_body,
+    find_active_wish_duplicate_body,
     save_memo_item,
     get_next_memo_seq,
     is_memo_processed,
@@ -84,6 +87,14 @@ _DEFAULT_TEMPLATES = {
     'wish_close': 'done: wish #{seq} {summary}',
     'wish_close_already': 'wish #{seq} 已是完成状态',
     'wish_close_deleted': 'wish #{seq} 已删除，无法完成',
+    'memo_duplicate': (
+        '#### 备忘未重复收录\n\n已有进行中的 **Memo #{existing_seq}**（内容相同）\n'
+        '{summary}\n\n未新建条目。\n\n----'
+    ),
+    'wish_duplicate': (
+        '#### 愿望未重复收录\n\n已有进行中的 **Wish #{existing_seq}**（内容相同）\n'
+        '{summary}\n\n未新建条目。\n\n----'
+    ),
 }
 
 
@@ -110,20 +121,46 @@ def _render_template(key: str, **kwargs) -> str:
 
 # ── HTTP helpers ────────────────────────────────────────────
 
-def _send_webhook(text, config):
+def _wish_webhook_for_cid(config: dict, group_cid) -> str:
+    """备忘/许愿等技能对群回复的 Webhook：优先 wish_reply_webhook_by_cid[cid]，否则 webhook_url（助理群机器人）。"""
+    gc = str(group_cid or '').strip()
+    raw = config.get('wish_reply_webhook_by_cid')
+    if isinstance(raw, dict) and gc:
+        u = raw.get(gc)
+        if u is None:
+            u = raw.get(str(gc))
+        if u is not None and str(u).strip():
+            return str(u).strip()
+    return (config.get('webhook_url') or '').strip()
+
+
+def _send_wish_webhook(text, config, group_cid=None):
+    """许愿/愿望单/删除或完成 wish 的群回复，按发言群 CID 选机器人（多群各用各机器人）。"""
+    return _send_webhook(text, config, group_cid=group_cid)
+
+
+def _send_webhook(text, config, group_cid=None):
     """通过 Webhook 机器人身份发送 markdown 消息。
-    - title 字段放 webhook_keyword（机器人关键词校验，不显示在正文）
-    - 正文自动追加 footer（※ 小秘书提醒）
+    - 按 group_cid 选 URL（与 wish_reply_webhook_by_cid 一致）；无映射则用 webhook_url
+    - title 字段放 webhook_keyword（钉钉自定义关键词校验，与机器人 A/B 一致：小秘书提醒）
+    - 正文自动追加 footer（含「小秘书提醒」）；其前插入分割线（模板 footer_separator 或 separator，默认 ---）
     """
-    webhook = config.get('webhook_url', '')
+    webhook = _wish_webhook_for_cid(config, group_cid)
     if not webhook:
         _log('no webhook_url, skip reply')
         return None
     tpl = _load_memo_templates()
-    keyword = tpl.get('webhook_keyword', '[小秘书提醒]')
+    keyword = tpl.get('webhook_keyword', '小秘书提醒')
     footer  = tpl.get('footer', '###### ※ 小秘书提醒')
     if footer and footer not in text:
-        text = text + '\n\n' + footer
+        sep = tpl.get('footer_separator')
+        if sep is None:
+            sep = tpl.get('separator', '---')
+        sep = str(sep).strip()
+        if sep:
+            text = text + '\n\n' + sep + '\n\n' + footer
+        else:
+            text = text + '\n\n' + footer
     payload = json.dumps({
         'msgtype': 'markdown',
         'markdown': {'title': keyword, 'text': text},
@@ -525,6 +562,16 @@ def process_wish(msg_id, text, group_cid, config):
     if not content:
         content = (text or '').strip()
 
+    dup_w = find_active_wish_duplicate_body(content)
+    if dup_w:
+        es = dup_w.get('wish_seq', '')
+        sm = ((dup_w.get('text') or '')[:80] + (
+            '...' if len(dup_w.get('text') or '') > 80 else ''))
+        body = _render_template('wish_duplicate', existing_seq=es, summary=sm)
+        _send_wish_webhook(body, config, group_cid)
+        _log(f'wish duplicate body, skip new (existing #{es}): {sm!r}')
+        return True
+
     wish_seq = get_next_wish_seq()
     tr_id = _create_wish_task_in_reminder(content, config, wish_seq)
     if tr_id is None:
@@ -540,15 +587,16 @@ def process_wish(msg_id, text, group_cid, config):
 
     summary = content[:80] + ('...' if len(content) > 80 else '')
     confirm_text = _render_template('wish_confirm', seq=wish_seq, summary=summary)
-    _send_webhook(confirm_text, config)
+    _send_wish_webhook(confirm_text, config, group_cid)
     _log(f'wish #{wish_seq} -> TaskReminder id={tr_id}: {summary}')
     return True
 
 
 @_memo_serialized
-def process_wish_list(config):
+def process_wish_list(config, group_cid=None):
     """
     群消息含「愿望单」时：打印并推送未完成愿望（含 wish #N）；兼容旧版 TR-only 条目。
+    group_cid：用于选择该群对应的许愿回复机器人 Webhook。
     """
     assignee = _wish_assignee(config)
     pending = get_pending_wishes()
@@ -593,7 +641,7 @@ def process_wish_list(config):
             body = title + '\n\n' + (empty_tpl or '（空）')
     else:
         body = title + '\n\n' + '\n\n'.join(lines_out)
-    _send_webhook(body, config)
+    _send_wish_webhook(body, config, group_cid)
     return True
 
 
@@ -611,13 +659,13 @@ def process_delete_wish(msg_id, text, group_cid, config):
     if not row:
         _log(f'delete wish: #{seq} not found')
         nf = _render_template('wish_not_found', seq=seq, summary='')
-        _send_webhook(nf, config)
+        _send_wish_webhook(nf, config, group_cid)
         return True
 
     if row.get('status') == 'deleted':
         _log(f'delete wish: #{seq} already deleted')
         ad = _render_template('wish_already_deleted', seq=seq, summary='')
-        _send_webhook(ad, config)
+        _send_wish_webhook(ad, config, group_cid)
         return True
 
     delete_wish_item(seq)
@@ -628,7 +676,7 @@ def process_delete_wish(msg_id, text, group_cid, config):
         delete_text += '\n（TR 已同步删除）'
     else:
         delete_text += '\n（TR 中未找到对应任务或已删除）'
-    _send_webhook(delete_text, config)
+    _send_wish_webhook(delete_text, config, group_cid)
     _log(f'wish #{seq} deleted: {summary}, TR removed={tr_removed}')
     return True
 
@@ -647,19 +695,19 @@ def process_close_wish(msg_id, text, group_cid, config):
     if not row:
         _log(f'close wish: #{seq} not found')
         nf = _render_template('wish_not_found', seq=seq, summary='')
-        _send_webhook(nf, config)
+        _send_wish_webhook(nf, config, group_cid)
         return True
 
     if row.get('status') == 'deleted':
         _log(f'close wish: #{seq} deleted')
         txt = _render_template('wish_close_deleted', seq=seq, summary='')
-        _send_webhook(txt, config)
+        _send_wish_webhook(txt, config, group_cid)
         return True
 
     if row.get('status') == 'done':
         _log(f'close wish: #{seq} already done')
         txt = _render_template('wish_close_already', seq=seq, summary='')
-        _send_webhook(txt, config)
+        _send_wish_webhook(txt, config, group_cid)
         return True
 
     close_wish_item(seq)
@@ -667,7 +715,7 @@ def process_close_wish(msg_id, text, group_cid, config):
 
     summary = ((row.get('text') or '')[:30] + ('...' if len(row.get('text') or '') > 30 else ''))
     close_text = _render_template('wish_close', seq=seq, summary=summary)
-    _send_webhook(close_text, config)
+    _send_wish_webhook(close_text, config, group_cid)
     _log(f'wish #{seq} closed: {summary}')
     return True
 
@@ -715,6 +763,16 @@ def process_memo(msg_id, text, context_msgs, memo_ts, group_cid, config):
     if not content:
         content = text
 
+    dup_m = find_active_memo_duplicate_body(content)
+    if dup_m:
+        es = dup_m.get('memo_seq', '')
+        sm = ((dup_m.get('text') or '')[:80] + (
+            '...' if len(dup_m.get('text') or '') > 80 else ''))
+        body = _render_template('memo_duplicate', existing_seq=es, summary=sm)
+        _send_webhook(body, config, group_cid=group_cid)
+        _log(f'memo duplicate body, skip new (existing #{es}): {sm!r}')
+        return True
+
     memo_seq = get_next_memo_seq()
 
     tr_id = _create_task_in_reminder(
@@ -738,7 +796,7 @@ def process_memo(msg_id, text, context_msgs, memo_ts, group_cid, config):
 
     summary = content[:30] + ('...' if len(content) > 30 else '')
     confirm_text = _render_template('confirm', seq=memo_seq, summary=summary)
-    _send_webhook(confirm_text, config)
+    _send_webhook(confirm_text, config, group_cid=group_cid)
     _log(f'memo #{memo_seq} -> TaskReminder: {summary}')
     return True
 
@@ -758,7 +816,7 @@ def process_close(msg_id, text, group_cid, config):
     if not memo:
         _log(f'close: memo #{seq} not found')
         not_found_text = _render_template('not_found', seq=seq, summary='')
-        _send_webhook(not_found_text, config)
+        _send_webhook(not_found_text, config, group_cid=group_cid)
         return True
 
     if memo['status'] == 'done':
@@ -770,7 +828,7 @@ def process_close(msg_id, text, group_cid, config):
 
     summary = memo['text'][:30] + ('...' if len(memo['text']) > 30 else '')
     close_text = _render_template('close', seq=seq, summary=summary)
-    _send_webhook(close_text, config)
+    _send_webhook(close_text, config, group_cid=group_cid)
     _log(f'memo #{seq} closed: {summary}')
     return True
 
@@ -790,12 +848,12 @@ def process_delete(msg_id, text, group_cid, config):
     if not memo:
         _log(f'delete: memo #{seq} not found')
         not_found_text = _render_template('not_found', seq=seq, summary='')
-        _send_webhook(not_found_text, config)
+        _send_webhook(not_found_text, config, group_cid=group_cid)
         return True
     if memo['status'] == 'deleted':
         _log(f'delete: memo #{seq} already deleted')
         already_text = _render_template('already_deleted', seq=seq, summary='')
-        _send_webhook(already_text, config)
+        _send_webhook(already_text, config, group_cid=group_cid)
         return True
     delete_memo_item(seq)
     tr_removed = _delete_task_in_reminder(seq, config)
@@ -805,15 +863,16 @@ def process_delete(msg_id, text, group_cid, config):
         delete_text += '\n（TR 已同步删除）'
     else:
         delete_text += '\n（TR 中未找到对应任务或已删除）'
-    _send_webhook(delete_text, config)
+    _send_webhook(delete_text, config, group_cid=group_cid)
     _log(f'memo #{seq} deleted: {summary}, TR removed={tr_removed}')
     return True
 
 
-def process_today_focus(config):
+def process_today_focus(config, group_cid=None):
     """
     列出今天应关注的任务：到期日 <= 今天（含超期、今日到期）。
     通过 webhook 发送可读列表，返回是否发送成功。
+    group_cid：与发言群一致时走 wish_reply_webhook_by_cid。
     """
     today = datetime.now().strftime('%Y-%m-%d')
     pending = get_pending_memos()
@@ -841,15 +900,16 @@ def process_today_focus(config):
                 line = f'{seq}. {text}{overdue_suffix}'
             parts.append(line)
         body = '\n\n'.join(parts)
-    _send_webhook(body, config)
+    _send_webhook(body, config, group_cid=group_cid)
     _log(f'today_focus: {len(items)} items')
     return True
 
 
-def process_tomorrow_focus(config):
+def process_tomorrow_focus(config, group_cid=None):
     """
     列出明天到期的任务：到期日 = 明天。
     通过 webhook 发送可读列表，返回是否发送成功。
+    group_cid：与发言群一致时走 wish_reply_webhook_by_cid。
     """
     today = datetime.now().date()
     tomorrow_d = today + timedelta(days=1)
@@ -878,15 +938,16 @@ def process_tomorrow_focus(config):
                 line = f'{seq}. {text}'
             parts.append(line)
         body = '\n\n'.join(parts)
-    _send_webhook(body, config)
+    _send_webhook(body, config, group_cid=group_cid)
     _log(f'tomorrow_focus: {len(items)} items')
     return True
 
 
-def process_week_focus(config):
+def process_week_focus(config, group_cid=None):
     """
     列出本周应关注的任务：到期日在 [今天, 本周日] 之间（含今天、含超期）。
     通过 webhook 发送可读列表，返回是否发送成功。
+    group_cid：与发言群一致时走 wish_reply_webhook_by_cid。
     """
     today_d = datetime.now().date()
     today = today_d.strftime('%Y-%m-%d')
@@ -919,6 +980,6 @@ def process_week_focus(config):
                 line = f'{seq}. {text}（{due}）{overdue_suffix}'
             parts.append(line)
         body = '\n\n'.join(parts)
-    _send_webhook(body, config)
+    _send_webhook(body, config, group_cid=group_cid)
     _log(f'week_focus: {len(items)} items')
     return True
