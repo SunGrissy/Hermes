@@ -2,11 +2,7 @@
 """
 通过钉钉机器人 Webhook 发送 Markdown 消息。
 正文由 stdin 或参数传入，末尾自动加 footer「小秘书提醒」（满足机器人关键词校验）。
-用法:
-  echo "## 摘要\n- 完成 xxx" | python send_result_webhook.py
-  python send_result_webhook.py "## 摘要\n- 完成 xxx"
-环境变量:
-  DINGTALK_WEBHOOK_URL  完整 webhook URL（必填，勿提交到仓库）
+URL 解析顺序: 1) 环境变量 DINGTALK_WEBHOOK_URL  2) dingtalk-desktop/webhook_config.json 的 cursor_session
 """
 import os
 import sys
@@ -15,6 +11,30 @@ import urllib.request
 import urllib.error
 
 FOOTER = "\n\n---\n小秘书提醒"
+WEBHOOK_KEY = "cursor_session"
+
+
+def _workspace_root():
+    """从脚本位置推到工作空间根目录。"""
+    here = os.path.abspath(os.path.dirname(__file__))
+    return os.path.abspath(os.path.join(here, "..", "..", "..", ".."))
+
+
+def _get_webhook_url() -> str:
+    """优先环境变量，否则读 dingtalk-desktop/webhook_config.json 的 cursor_session。"""
+    url = os.environ.get("DINGTALK_WEBHOOK_URL", "").strip()
+    if url:
+        return url
+    root = _workspace_root()
+    path = os.path.join(root, "dingtalk-desktop", "webhook_config.json")
+    if not os.path.isfile(path):
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        return (cfg.get(WEBHOOK_KEY) or "").strip()
+    except Exception:
+        return ""
 
 
 def send_markdown(webhook_url: str, title: str, text: str) -> tuple[bool, str]:
@@ -28,8 +48,8 @@ def send_markdown(webhook_url: str, title: str, text: str) -> tuple[bool, str]:
     }
     req = urllib.request.Request(
         webhook_url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"},
         method="POST",
     )
     try:
@@ -48,18 +68,36 @@ def send_markdown(webhook_url: str, title: str, text: str) -> tuple[bool, str]:
         return False, str(e)
 
 
+def _read_content() -> str:
+    """读正文：优先 UTF-8 文件路径，否则 stdin（强制 UTF-8），最后才用 argv。避免 Windows 下中文变问号。"""
+    # 1) 首个参数为存在的文件路径 → 从文件读 UTF-8
+    if len(sys.argv) > 1:
+        path = os.path.abspath(sys.argv[1])
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                return f.read().strip()
+    # 2) 有 stdin 输入（管道/重定向）→ 按 UTF-8 读
+    if not sys.stdin.isatty():
+        if hasattr(sys.stdin, "reconfigure"):
+            sys.stdin.reconfigure(encoding="utf-8")
+        raw = sys.stdin.buffer.read()
+        return raw.decode("utf-8", errors="replace").strip()
+    # 3) 命令行参数字符串（Windows 下长中文易乱码，推荐用文件或 stdin）
+    if len(sys.argv) > 1:
+        return " ".join(sys.argv[1:]).strip()
+    return ""
+
+
 def main():
-    url = os.environ.get("DINGTALK_WEBHOOK_URL", "").strip()
+    url = _get_webhook_url()
     if not url:
-        print("error: DINGTALK_WEBHOOK_URL not set", file=sys.stderr)
+        print(
+            "error: set DINGTALK_WEBHOOK_URL or dingtalk-desktop/webhook_config.json cursor_session",
+            file=sys.stderr,
+        )
         return 1
 
-    if len(sys.argv) > 1:
-        content = " ".join(sys.argv[1:])
-    else:
-        content = sys.stdin.read()
-
-    content = content.strip()
+    content = _read_content()
     if not content:
         print("error: empty content", file=sys.stderr)
         return 1

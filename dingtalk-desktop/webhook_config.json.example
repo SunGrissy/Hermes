@@ -1,0 +1,9 @@
+{
+  "_comment": "复制为 webhook_config.json，填入完整 webhook URL（含 access_token），勿提交。key 用途: cursor_session=Cursor会话结果, default=助理通用, version_digest=版本摘要, resume_notify=简历通知, memo_tracker=备忘, doc_review=文档预审",
+  "cursor_session": "",
+  "default": "",
+  "version_digest": "",
+  "resume_notify": "",
+  "memo_tracker": "",
+  "doc_review": ""
+}
