@@ -2,7 +2,7 @@
 
 ## 2026-03-19 - dingtalk-desktop 手机 push 备忘补水与 /fetch 稳定性
 
-**状态**: 已提交待推送 tygit（`origin`）
+**状态**: 已推送 tygit（`origin` → `http://tygit.tuyoo.com/...`）；GitHub 同次 push 被拒（远端超前，需另 `pull --rebase` / `merge` 后再推）
 
 **内容**:
 - `lib/monitor.py`: 本人消息在手机仅 push、无 send 时仍 `memo_callback` 入队；push 时间戳毫秒化与发送者字段兜底
