@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - pm-system 子模块：UE 预审与 Boss 对齐（tygit 已推送）
+
+**状态**: 已推送
+
+**内容**:
+- `pm-system`（子模块 `main` df5a4fb）: `backend/main.py` UE 预审 API、`/upc` 与 `upc-ctrl` 路由；`ue-precheck/*`；`boss-precheck/list` 互链
+
+---
+
 ## 2026-03-19 - dingtalk-desktop 文档预审进度心跳与完成摘要样式
 
 **状态**: 验收通过
