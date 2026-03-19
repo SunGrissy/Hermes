@@ -399,7 +399,7 @@ knowledge_sections:
   - north_star               # §零 北极星（增长效能，建议的锚点）
 
 data_sources:
-  - producer_context         # producer-context.mdc（团队93人现状）
+  - producer_context         # producer-context.mdc（团队80人现状）
   - org_structure            # org-structure.html 中的组织数据
   - rubrics                  # rubric_*.json（各职能标尺定义）
   - performeval_members      # PerformEval 成员数据
