@@ -365,10 +365,14 @@ class FridaDaemon:
         src = p.get('src', 'unknown')
         if src == 'send':
             _process_send(data, p.get('uri', ''),
-                          self._dedup, MY_UID, LOG_FILE, False)
+                          self._dedup, MY_UID, LOG_FILE, False,
+                          memo_callback=getattr(self, '_memo_callback', None))
         else:
+            # 他人发言仅走 ProcessPush：必须入队才能秒级响应「许愿」等。
+            # 自己发的仍以 ProcessRequest(send) 入队；push 侧跳过 is_self，避免与 send 双份。
             _process_push(data, src,
-                          self._dedup, MY_UID, LOG_FILE, False)
+                          self._dedup, MY_UID, LOG_FILE, False,
+                          memo_callback=getattr(self, '_memo_callback', None))
             for cid in ContactsDB.drain_pending_resolve():
                 self.queue_name_resolve(cid)
 
@@ -2253,8 +2257,38 @@ def main():
     _daemon._beacon.start()
     log('Beacon 服务器已启动')
 
+    _memo_event_queue = None
     if _daemon.attach():
         log('Frida 已附加，CEF 就绪')
+        import queue as _queue_module
+        _memo_event_queue = _queue_module.Queue()
+        try:
+            with open(os.path.join(_PROJECT_ROOT, 'digest_config.json'), 'r', encoding='utf-8') as _f:
+                _cfg = json.load(_f)
+            _mt = _cfg.get('memo_tracker') or {}
+            _memo_cid = str((_mt.get('group_cid') or _cfg.get('notify_target') or '')).strip()
+            _colleague_skill_cids = set()
+            for _x in (_mt.get('colleague_skill_cids') or []):
+                _xs = str(_x).strip()
+                if _xs:
+                    _colleague_skill_cids.add(_xs)
+        except Exception:
+            _memo_cid = ''
+            _colleague_skill_cids = set()
+
+        def _memo_callback(rec):
+            """助理群 group_cid 内消息一律入队（本人备忘/预审/上班啦依赖此路径；MY_UID 未配置时本人消息易被误判为他人）。
+            白名单群 colleague_skill_cids 内消息入队（本人+他人）。"""
+            c = str(rec.get('cid') or '').strip()
+            if not c:
+                return
+            allow = (_memo_cid and c == _memo_cid) or (c in _colleague_skill_cids)
+            if allow:
+                try:
+                    _memo_event_queue.put(rec)
+                except Exception:
+                    pass
+        _daemon._memo_callback = _memo_callback
         _daemon.start_monitor()
     else:
         log('初始附加失败，watchdog 将自动重试')
@@ -2263,8 +2297,8 @@ def main():
     _daemon.start_name_resolver()
     log('Watchdog + NameResolver 已启动')
 
-    _start_skill_router()
-    log('SkillRouter 已启动')
+    _start_skill_router(_memo_event_queue)
+    log('SkillRouter 已启动' + (' (助理群推送=秒级)' if _memo_event_queue else ''))
 
     _http_server = ThreadedHTTPServer(('127.0.0.1', DAEMON_PORT), DaemonHandler)
     log(f'HTTP API 就绪: http://127.0.0.1:{DAEMON_PORT}')

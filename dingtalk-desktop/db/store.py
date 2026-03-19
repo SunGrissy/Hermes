@@ -93,6 +93,19 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_doc_review_msg_id
                 ON doc_review_log(msg_id);
+
+            CREATE TABLE IF NOT EXISTS wish_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                wish_seq    INTEGER NOT NULL,
+                msg_id      TEXT NOT NULL UNIQUE,
+                text        TEXT NOT NULL,
+                task_reminder_id INTEGER,
+                status      TEXT DEFAULT 'active',
+                ts_created  INTEGER,
+                ts_closed   INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_wish_seq
+                ON wish_items(wish_seq);
         """)
         # 兼容旧库：增加规范化 URL 列（用于同一文档时间窗口去重）
         try:
@@ -257,6 +270,84 @@ def get_pending_memos():
         c = _conn()
         rows = c.execute(
             "SELECT * FROM memo_items WHERE status='active' ORDER BY memo_seq"
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+
+
+# ── wish_items（群「许愿」→ TaskReminder 愿望单，与备忘编号体系独立）────────
+
+def get_next_wish_seq():
+    with _lock:
+        c = _conn()
+        row = c.execute("SELECT MAX(wish_seq) FROM wish_items").fetchone()
+        c.close()
+        return (row[0] or 0) + 1
+
+
+def is_wish_processed(msg_id):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT id FROM wish_items WHERE msg_id=?", (str(msg_id),)
+        ).fetchone()
+        c.close()
+        return row is not None
+
+
+def save_wish_item(wish_seq, msg_id, text, task_reminder_id=None):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "INSERT OR IGNORE INTO wish_items "
+            "(wish_seq, msg_id, text, task_reminder_id, status, ts_created) "
+            "VALUES (?,?,?,?,?,?)",
+            (wish_seq, str(msg_id), text, task_reminder_id, 'active',
+             int(datetime.now().timestamp())),
+        )
+        c.commit()
+        c.close()
+
+
+def delete_wish_item(wish_seq):
+    """标记愿望为已删除（status='deleted'），用于「删除 wish N」指令。"""
+    with _lock:
+        c = _conn()
+        c.execute(
+            "UPDATE wish_items SET status='deleted', ts_closed=? WHERE wish_seq=?",
+            (int(datetime.now().timestamp()), wish_seq),
+        )
+        c.commit()
+        c.close()
+
+
+def close_wish_item(wish_seq):
+    """标记愿望为已完成（status='done'），用于「完成 wish N」指令。"""
+    with _lock:
+        c = _conn()
+        c.execute(
+            "UPDATE wish_items SET status='done', ts_closed=? WHERE wish_seq=?",
+            (int(datetime.now().timestamp()), wish_seq),
+        )
+        c.commit()
+        c.close()
+
+
+def get_wish_by_seq(wish_seq):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT * FROM wish_items WHERE wish_seq=?", (wish_seq,)
+        ).fetchone()
+        c.close()
+        return dict(row) if row else None
+
+
+def get_pending_wishes():
+    with _lock:
+        c = _conn()
+        rows = c.execute(
+            "SELECT * FROM wish_items WHERE status='active' ORDER BY wish_seq"
         ).fetchall()
         c.close()
         return [dict(r) for r in rows]

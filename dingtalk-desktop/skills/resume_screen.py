@@ -233,11 +233,18 @@ def _parse_llm_output(text: str) -> dict:
 # ── 加载 webhook 配置 ────────────────────────────────────────
 
 def _load_resume_webhook() -> str:
-    cfg_path = os.path.join(_ROOT, 'digest_config.json')
+    # 优先从 webhook_config.json 的 resume_notify 读取，无则回退 digest_config
     try:
-        with open(cfg_path, 'r', encoding='utf-8') as f:
-            cfg = json.load(f)
-        return cfg.get('resume_notify_webhook', '')
+        sys.path.insert(0, _ROOT)
+        from lib.utils import get_webhook_url
+        fallback = ''
+        try:
+            with open(os.path.join(_ROOT, 'digest_config.json'), 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            fallback = cfg.get('resume_notify_webhook', '')
+        except Exception:
+            pass
+        return get_webhook_url('resume_notify', fallback)
     except Exception:
         return ''
 

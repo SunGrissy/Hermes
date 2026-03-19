@@ -147,8 +147,8 @@ def _display_and_log(cid, sender, ts, msg_id, ct, text, encrypted,
         f.write(json.dumps(record, ensure_ascii=False, default=str) + '\n')
 
 
-def _process_push(data, source, dedup, my_uid, log_path, enable_toast):
-    """处理接收到的推送消息"""
+def _process_push(data, source, dedup, my_uid, log_path, enable_toast, memo_callback=None):
+    """处理接收到的推送消息。memo_callback(record) 若提供，则对每条 record 调用（用于助理群秒级技能路由）。"""
     import msgpack
     try:
         unpacker = msgpack.Unpacker(raw=True, strict_map_key=False)
@@ -202,6 +202,24 @@ def _process_push(data, source, dedup, my_uid, log_path, enable_toast):
                 encrypted = '||' in raw_content
                 text = origin_text or card_text or (raw_content if not encrypted else '')
 
+                # ct=3100 富文本：origin_text 常为空，从 raw JSON 的 attachments[].extension.desc 合并
+                if ct == 3100 and raw_content and not encrypted:
+                    try:
+                        rd = json.loads(raw_content) if isinstance(raw_content, str) else None
+                        if isinstance(rd, dict):
+                            descs = []
+                            for att in (rd.get('attachments') or []):
+                                extn = att.get('extension') or {}
+                                desc = (extn.get('desc') or '').strip()
+                                if desc and desc not in descs:
+                                    descs.append(desc)
+                            if descs:
+                                merged = '\n'.join(descs).strip()
+                                if not text or len(merged) > len(text):
+                                    text = merged
+                    except Exception:
+                        pass
+
                 if not text and ct == 300 and isinstance(co, dict):
                     try:
                         cards = co.get(7, [])
@@ -252,13 +270,63 @@ def _process_push(data, source, dedup, my_uid, log_path, enable_toast):
                     md_extra=md_extra,
                     card_ext=card_ext,
                 )
+                if memo_callback and callable(memo_callback):
+                    try:
+                        # 自己发的消息已由 ProcessRequest(send) 入队；push 回显再入队会触发两遍技能
+                        if str(sender).strip() == str(my_uid).strip():
+                            pass
+                        else:
+                            rec = {
+                                'cid': cid, 'uid': sender, 'ts': ts, 'msg_id': msg_id,
+                                'content_type': ct, 'text': (text or '')[:500], 'raw': '',
+                                'md_extra': md_extra,
+                            }
+                            memo_callback(rec)
+                    except Exception:
+                        pass
     except Exception as e:
         print(f"  [解码错误] {e}", flush=True)
 
 
-def _process_send(data, uri, dedup, my_uid, log_path, enable_toast):
-    """处理发出的请求消息"""
+_RE_ALIDOCS = __import__('re').compile(
+    r'https?://alidocs\.dingtalk\.com/i/nodes/[^\s\]>)\u3001\u3002\uff0c"\']*'
+)
+
+
+def _find_alidocs_in_obj(obj, seen=None):
+    """递归从 dict/list 中找第一个 alidocs URL 字符串，供文档卡片等无 origin_text 时用。"""
+    if seen is None:
+        seen = set()
+    if id(obj) in seen:
+        return None
+    if isinstance(obj, str):
+        m = _RE_ALIDOCS.search(obj)
+        if m:
+            return m.group(0)
+        if 'alidocs.dingtalk.com' in obj:
+            return obj.strip()
+        return None
+    if isinstance(obj, dict):
+        seen.add(id(obj))
+        for v in obj.values():
+            u = _find_alidocs_in_obj(v, seen)
+            if u:
+                return u
+        return None
+    if isinstance(obj, (list, tuple)):
+        seen.add(id(obj))
+        for v in obj:
+            u = _find_alidocs_in_obj(v, seen)
+            if u:
+                return u
+        return None
+    return None
+
+
+def _process_send(data, uri, dedup, my_uid, log_path, enable_toast, memo_callback=None):
+    """处理发出的请求消息。若提供 memo_callback，则对助理群内的发送也调用（仅处理「我」在助理群发的指令）。"""
     import msgpack
+    import time
     try:
         decoded = deep_decode(
             msgpack.unpackb(data, raw=True, strict_map_key=False))
@@ -271,14 +339,46 @@ def _process_send(data, uri, dedup, my_uid, log_path, enable_toast):
 
         ext = decoded.get(7, {}) if isinstance(decoded.get(7), dict) else {}
         origin_text = str(ext.get('origin_text', ''))
-        if not origin_text:
-            return
 
         sender = str(decoded.get(8, my_uid))
         co = decoded.get(5, {})
         ct = co.get(1, 0) if isinstance(co, dict) else 0
 
-        if dedup.is_seen(('send', cid, origin_text[:50])):
+        raw_content = ''
+        if isinstance(co, dict):
+            cd = co.get(2, {})
+            if isinstance(cd, dict):
+                raw_content = str(cd.get(1, ''))
+            elif isinstance(cd, str):
+                raw_content = cd
+        encrypted = '||' in raw_content
+        # 自己发送的富文本：origin_text 常为空，从 raw 合并 desc（与 ProcessPush 一致）
+        if ct == 3100 and raw_content and not encrypted:
+            try:
+                rd = json.loads(raw_content) if isinstance(raw_content, str) else None
+                if isinstance(rd, dict):
+                    descs = []
+                    for att in (rd.get('attachments') or []):
+                        extn = att.get('extension') or {}
+                        desc = (extn.get('desc') or '').strip()
+                        if desc and desc not in descs:
+                            descs.append(desc)
+                    if descs:
+                        merged = '\n'.join(descs).strip()
+                        if not origin_text or len(merged) > len(origin_text):
+                            origin_text = merged
+            except Exception:
+                pass
+
+        # 文档卡片等可能无 origin_text，从整包中提取 alidocs URL 以便预审回溯能找到
+        if not origin_text:
+            origin_text = _find_alidocs_in_obj(decoded) or ''
+        if not origin_text:
+            return
+
+        # 归一化后再去重，避免同一句因首尾/中间空格差异被 Hook 触发两次时重复入队
+        origin_for_dedup = ' '.join(origin_text.strip().split())[:80]
+        if dedup.is_seen(('send', cid, origin_for_dedup)):
             return
 
         _display_and_log(
@@ -286,6 +386,18 @@ def _process_send(data, uri, dedup, my_uid, log_path, enable_toast):
             'send', my_uid, log_path, enable_toast,
             list(ext.keys()) if ext else [],
         )
+        if memo_callback and callable(memo_callback):
+            try:
+                ts_ms = int(time.time() * 1000)
+                rec = {
+                    'cid': cid, 'uid': sender, 'ts': ts_ms,
+                    'msg_id': f'{ts_ms}_{sender}',
+                    'content_type': ct, 'text': (origin_text or '')[:500], 'raw': '',
+                    'md_extra': {},
+                }
+                memo_callback(rec)
+            except Exception:
+                pass
     except Exception:
         pass
 

@@ -35,6 +35,27 @@ def _find_data_dir():
 DATA_DIR = _find_data_dir()
 os.makedirs(DATA_DIR, exist_ok=True)
 
+# dingtalk-desktop 项目根目录（lib 的上一级）
+_DINGTALK_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+WEBHOOK_CONFIG_PATH = os.path.join(_DINGTALK_ROOT, 'webhook_config.json')
+
+
+def get_webhook_url(key: str, fallback: str = '') -> str:
+    """从 webhook_config.json 按 key 读取机器人 webhook URL；无则返回 fallback。
+    key 与 webhook_config.json 的键一致，如 memo_tracker / doc_review / resume_notify / default。
+    """
+    if not key:
+        return fallback
+    if not os.path.isfile(WEBHOOK_CONFIG_PATH):
+        return fallback
+    try:
+        with open(WEBHOOK_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        return (cfg.get(key) or '').strip() or fallback
+    except Exception:
+        return fallback
+
+
 DEFAULT_MY_UID = os.environ.get('DINGTALK_MY_UID', '316550726')
 
 ADV_SEARCH_URL = (

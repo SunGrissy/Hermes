@@ -2,7 +2,7 @@
 """
 备忘追踪技能
 
-触发条件：助理通知群内收到包含"备忘"或"完成"的文本消息
+触发条件：助理通知群内收到包含"备忘"/"TR"或"完成"的文本消息
 流程：
   备忘录入: 解析内容 -> 存DB -> 写入TaskReminder -> 群内回复确认
   备忘关闭: 查找对应备忘 -> 更新DB+TaskReminder -> 群内回复
@@ -12,20 +12,48 @@ import re
 import sys
 import json
 import time
+import threading
+import functools
 import urllib.request
 from datetime import datetime, timedelta
 
 # [AgentMemo Task] 开始时间: 2026-03-18 19:00
 # [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
+# [AgentWish Task] 开始时间: 2026-03-19
+# [AgentWish Task] 任务目标: WISH wish 序号/列表/删除 wish N + TaskReminder 愿望单
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.join(_THIS_DIR, '..')
 _TEMPLATE_PATH = os.path.join(_ROOT, 'message_templates.json')
 
 sys.path.insert(0, _ROOT)
 from db.store import (
-    save_memo_item, get_next_memo_seq, is_memo_processed,
-    close_memo_item, delete_memo_item, get_pending_memos, get_memo_by_seq,
+    save_memo_item,
+    get_next_memo_seq,
+    is_memo_processed,
+    close_memo_item,
+    delete_memo_item,
+    get_pending_memos,
+    get_memo_by_seq,
+    get_next_wish_seq,
+    is_wish_processed,
+    save_wish_item,
+    delete_wish_item,
+    close_wish_item,
+    get_wish_by_seq,
+    get_pending_wishes,
 )
+
+# 备忘/愿望写入与删除串行化，避免 Frida 双触发或 push+poll 交错导致同一 memo_seq 双插或双删双推
+_MEMO_PIPELINE_LOCK = threading.Lock()
+
+
+def _memo_serialized(fn):
+    @functools.wraps(fn)
+    def _wrapped(*args, **kwargs):
+        with _MEMO_PIPELINE_LOCK:
+            return fn(*args, **kwargs)
+    return _wrapped
+
 
 def _log(msg):
     ts = datetime.now().strftime('%H:%M:%S')
@@ -33,14 +61,29 @@ def _log(msg):
 
 
 _DEFAULT_TEMPLATES = {
-    'confirm': 'memo #{seq}: {summary}',
+    'confirm': '### 备忘已收录\n\nMemo #{seq}\n{summary}\n\n----',
     'close': 'done: memo #{seq} {summary}',
     'delete': 'memo #{seq} deleted: {summary}',
     'already_deleted': 'memo #{seq} already deleted',
     'not_found': 'not found: memo #{seq}',
-    'today_focus_title': '**今日关注**（到期/超期）',
+    'today_focus_title': '**今日关注** {date}（到期/超期）',
     'today_focus_empty': '今天没有到期或超期的备忘。',
-    'today_focus_item': '#{seq} {text}（{due}）',
+    'today_focus_item': '#{seq} {text}{overdue_suffix}',
+    'tomorrow_focus_title': '**明日关注** {date}',
+    'tomorrow_focus_empty': '明天没有到期的备忘。',
+    'week_focus_title': '**本周关注** {date}～{end_date}',
+    'week_focus_empty': '本周没有到期或超期的备忘。',
+    'wish_confirm': '### 愿望已收录\n\nWish #{seq}\n{summary}\n\n----',
+    'wish_list_title': '### **愿望单**（未完成）',
+    'wish_list_empty': '当前没有分配给「{assignee}」的未完成任务。',
+    'wish_list_item': '**wish #{seq}** {title}',
+    'wish_list_item_legacy': '· {title}',
+    'wish_delete': 'wish #{seq} 已删除：{summary}',
+    'wish_already_deleted': 'wish #{seq} 已是删除状态',
+    'wish_not_found': 'not found: wish #{seq}',
+    'wish_close': 'done: wish #{seq} {summary}',
+    'wish_close_already': 'wish #{seq} 已是完成状态',
+    'wish_close_deleted': 'wish #{seq} 已删除，无法完成',
 }
 
 
@@ -196,7 +239,7 @@ def _parse_memo_text(text):
     返回: (content, due_date, priority)
     """
     content = re.sub(
-        r'[\uff3b【\[]*(?:备忘|提醒我)[\uff3d】\]]*', '', text.strip()).strip()
+        r'[\uff3b【\[]*(?:备忘|提醒我|TR)[\uff3d】\]]*', '', text.strip()).strip()
 
     due_date = None
     priority = 'medium'
@@ -322,6 +365,313 @@ def _close_task_in_reminder(memo_seq, config):
         return False
 
 
+def _wish_assignee(config: dict) -> str:
+    return (config.get('wish_assignee') or '愿望单').strip() or '愿望单'
+
+
+def _parse_wish_text(text: str) -> str:
+    """去掉触发词「许愿」及常见括号标记，剩余作为任务标题。"""
+    if not text:
+        return ''
+    t = text.strip()
+    t = re.sub(r'[\uff3b【\[]+许愿[\uff3d】\]]+', ' ', t)
+    t = re.sub(r'^\s*许愿\s*', '', t)
+    t = re.sub(r'\s+许愿\s+', ' ', t)
+    t = ' '.join(t.split())
+    return (t or text.strip()).strip()
+
+
+def wish_content_key(text: str) -> str:
+    """路由层短时去重：与 _parse_wish_text 一致归一化后截断。"""
+    t = _parse_wish_text(text)
+    t = ' '.join(t.split())
+    return (t[:120] or '').strip()
+
+
+def _create_wish_task_in_reminder(content: str, config: dict, wish_seq: int):
+    """写入一条分配给愿望单负责人的 TaskReminder 任务；note 含 wish:#N 供删除对齐。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            tasks = []
+    except Exception as e:
+        _log(f'read TaskReminder failed (wish): {e}')
+        tasks = []
+
+    now_ts = int(time.time() * 1000)
+    wish_who = _wish_assignee(config)
+    default_due_days = int(config.get('wish_default_due_days', config.get('default_due_days', 7)))
+    due_date = (datetime.now() + timedelta(days=default_due_days)).strftime('%Y-%m-%d')
+    mod = (config.get('wish_module') or '愿望单').strip() or '愿望单'
+
+    new_task = {
+        'id': now_ts,
+        'who': wish_who,
+        'what': content,
+        'note': f'wish:#{wish_seq} source:dingtalk',
+        'module': mod,
+        'version': '',
+        'due': due_date,
+        'priority': 'medium',
+        'freq': 3,
+        'created': now_ts,
+        'lastChecked': 0,
+        'status': 'active',
+        'processStatus': 'todo',
+    }
+    tasks.append(new_task)
+    try:
+        _http_post_json(url, tasks)
+        return now_ts
+    except Exception as e:
+        _log(f'write TaskReminder failed (wish): {e}')
+        return None
+
+
+def _fetch_legacy_wish_titles(config: dict) -> list:
+    """TR 中旧版 note=wish:dingtalk、无 wish:# 序号的任务标题（兼容升级前数据）。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return []
+    except Exception as e:
+        _log(f'read TaskReminder failed (wish legacy list): {e}')
+        return []
+
+    wish_who = _wish_assignee(config)
+    titles = []
+    for task in tasks:
+        who = (task.get('who') or '').strip()
+        if who != wish_who:
+            continue
+        if (task.get('processStatus') or '').lower() == 'done':
+            continue
+        note = (task.get('note') or '')
+        if re.search(r'wish:#\d+', note):
+            continue
+        if 'wish:dingtalk' not in note and 'wish:' not in note:
+            continue
+        w = (task.get('what') or '').strip()
+        if w:
+            titles.append(w)
+    return titles
+
+
+def _delete_task_in_reminder_wish(wish_seq: int, config: dict) -> bool:
+    """从 TaskReminder 移除 note 含 wish:#N 的任务。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return False
+    except Exception as e:
+        _log(f'read TaskReminder failed (wish delete): {e}')
+        return False
+    marker = f'wish:#{wish_seq}'
+    new_tasks = [t for t in tasks if marker not in (t.get('note') or '')]
+    if len(new_tasks) == len(tasks):
+        return False
+    try:
+        _http_post_json(url, new_tasks)
+        return True
+    except Exception as e:
+        _log(f'write TaskReminder failed (wish delete): {e}')
+        return False
+
+
+def _close_task_in_reminder_wish(wish_seq: int, config: dict) -> bool:
+    """将 TaskReminder 中 note 含 wish:#N 的任务标为 processStatus=done（与备忘完成一致）。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return False
+    except Exception as e:
+        _log(f'read TaskReminder failed (wish close): {e}')
+        return False
+    marker = f'wish:#{wish_seq}'
+    found = False
+    for task in tasks:
+        if marker in (task.get('note') or ''):
+            task['processStatus'] = 'done'
+            found = True
+            break
+    if not found:
+        return False
+    try:
+        _http_post_json(url, tasks)
+        return True
+    except Exception as e:
+        _log(f'update TaskReminder failed (wish close): {e}')
+        return False
+
+
+@_memo_serialized
+def process_wish(msg_id, text, group_cid, config):
+    """
+    群消息含「许愿」时：分配 wish_seq，写本地库 + TaskReminder（负责人 wish_assignee）。
+    返回 True 成功 / None 表示 TaskReminder 不可用需重试。
+    """
+    if is_wish_processed(msg_id):
+        return True
+
+    content = _parse_wish_text(text)
+    if not content:
+        content = (text or '').strip()
+
+    wish_seq = get_next_wish_seq()
+    tr_id = _create_wish_task_in_reminder(content, config, wish_seq)
+    if tr_id is None:
+        _log(f'TaskReminder unreachable, wish #{wish_seq} deferred msg={msg_id}')
+        return None
+
+    save_wish_item(
+        wish_seq=wish_seq,
+        msg_id=msg_id,
+        text=content,
+        task_reminder_id=tr_id,
+    )
+
+    summary = content[:80] + ('...' if len(content) > 80 else '')
+    confirm_text = _render_template('wish_confirm', seq=wish_seq, summary=summary)
+    _send_webhook(confirm_text, config)
+    _log(f'wish #{wish_seq} -> TaskReminder id={tr_id}: {summary}')
+    return True
+
+
+@_memo_serialized
+def process_wish_list(config):
+    """
+    群消息含「愿望单」时：打印并推送未完成愿望（含 wish #N）；兼容旧版 TR-only 条目。
+    """
+    assignee = _wish_assignee(config)
+    pending = get_pending_wishes()
+    # TR 里仅含 wish:dingtalk、无 wish:# 序号的旧数据，避免升级后漏列
+    legacy_titles = _fetch_legacy_wish_titles(config)
+
+    total_lines = len(pending) + len(legacy_titles)
+    _log(f'愿望单 [{assignee}] 共 {total_lines} 条（编号 {len(pending)} + 旧版 {len(legacy_titles)}），标题如下：')
+    for w in pending:
+        _log(f'  wish #{w.get("wish_seq")} {w.get("text", "")}')
+    for t in legacy_titles:
+        _log(f'  （旧）{t}')
+
+    tpl = _load_memo_templates()
+    title_tpl = tpl.get('wish_list_title') or _DEFAULT_TEMPLATES.get('wish_list_title', '')
+    try:
+        title = title_tpl.format(assignee=assignee)
+    except Exception:
+        title = title_tpl
+
+    lines_out = []
+    item_tpl = tpl.get('wish_list_item') or _DEFAULT_TEMPLATES.get('wish_list_item', '')
+    legacy_tpl = tpl.get('wish_list_item_legacy') or _DEFAULT_TEMPLATES.get('wish_list_item_legacy', '· {title}')
+    for w in pending:
+        seq = w.get('wish_seq', '')
+        tit = (w.get('text') or '')[:200]
+        try:
+            lines_out.append(item_tpl.format(seq=seq, title=tit))
+        except Exception:
+            lines_out.append(f'**wish #{seq}** {tit}')
+    for t in legacy_titles:
+        try:
+            lines_out.append(legacy_tpl.format(title=t))
+        except Exception:
+            lines_out.append(f'· {t}')
+
+    if not lines_out:
+        empty_tpl = tpl.get('wish_list_empty') or _DEFAULT_TEMPLATES.get('wish_list_empty', '')
+        try:
+            body = title + '\n\n' + empty_tpl.format(assignee=assignee)
+        except Exception:
+            body = title + '\n\n' + (empty_tpl or '（空）')
+    else:
+        body = title + '\n\n' + '\n\n'.join(lines_out)
+    _send_webhook(body, config)
+    return True
+
+
+@_memo_serialized
+def process_delete_wish(msg_id, text, group_cid, config):
+    """
+    处理「删除 wish N」「删除愿望 N」（忽略大小写，wish 与数字间可有空格或 #）。
+    """
+    m = re.search(r'删除\s*(?:wish|愿望)\s*#?\s*(\d+)', (text or ''), re.IGNORECASE)
+    if not m:
+        return False
+
+    seq = int(m.group(1))
+    row = get_wish_by_seq(seq)
+    if not row:
+        _log(f'delete wish: #{seq} not found')
+        nf = _render_template('wish_not_found', seq=seq, summary='')
+        _send_webhook(nf, config)
+        return True
+
+    if row.get('status') == 'deleted':
+        _log(f'delete wish: #{seq} already deleted')
+        ad = _render_template('wish_already_deleted', seq=seq, summary='')
+        _send_webhook(ad, config)
+        return True
+
+    delete_wish_item(seq)
+    tr_removed = _delete_task_in_reminder_wish(seq, config)
+    summary = ((row.get('text') or '')[:30] + ('...' if len(row.get('text') or '') > 30 else ''))
+    delete_text = _render_template('wish_delete', seq=seq, summary=summary)
+    if tr_removed:
+        delete_text += '\n（TR 已同步删除）'
+    else:
+        delete_text += '\n（TR 中未找到对应任务或已删除）'
+    _send_webhook(delete_text, config)
+    _log(f'wish #{seq} deleted: {summary}, TR removed={tr_removed}')
+    return True
+
+
+@_memo_serialized
+def process_close_wish(msg_id, text, group_cid, config):
+    """
+    处理「完成 wish N」「关闭愿望 N」（忽略大小写）。
+    """
+    m = re.search(r'(?:完成|关闭)\s*(?:wish|愿望)\s*#?\s*(\d+)', (text or ''), re.IGNORECASE)
+    if not m:
+        return False
+
+    seq = int(m.group(1))
+    row = get_wish_by_seq(seq)
+    if not row:
+        _log(f'close wish: #{seq} not found')
+        nf = _render_template('wish_not_found', seq=seq, summary='')
+        _send_webhook(nf, config)
+        return True
+
+    if row.get('status') == 'deleted':
+        _log(f'close wish: #{seq} deleted')
+        txt = _render_template('wish_close_deleted', seq=seq, summary='')
+        _send_webhook(txt, config)
+        return True
+
+    if row.get('status') == 'done':
+        _log(f'close wish: #{seq} already done')
+        txt = _render_template('wish_close_already', seq=seq, summary='')
+        _send_webhook(txt, config)
+        return True
+
+    close_wish_item(seq)
+    _close_task_in_reminder_wish(seq, config)
+
+    summary = ((row.get('text') or '')[:30] + ('...' if len(row.get('text') or '') > 30 else ''))
+    close_text = _render_template('wish_close', seq=seq, summary=summary)
+    _send_webhook(close_text, config)
+    _log(f'wish #{seq} closed: {summary}')
+    return True
+
+
 def _delete_task_in_reminder(memo_seq, config):
     """从 TaskReminder 列表中移除对应备忘任务（真正删掉）。"""
     base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
@@ -347,6 +697,7 @@ def _delete_task_in_reminder(memo_seq, config):
 
 # ── 公开接口 ────────────────────────────────────────────────
 
+@_memo_serialized
 def process_memo(msg_id, text, context_msgs, memo_ts, group_cid, config):
     """
     处理备忘消息。
@@ -392,6 +743,7 @@ def process_memo(msg_id, text, context_msgs, memo_ts, group_cid, config):
     return True
 
 
+@_memo_serialized
 def process_close(msg_id, text, group_cid, config):
     """
     处理完成/关闭消息。
@@ -423,6 +775,7 @@ def process_close(msg_id, text, group_cid, config):
     return True
 
 
+@_memo_serialized
 def process_delete(msg_id, text, group_cid, config):
     """
     处理「删除 memo N」指令。
@@ -467,25 +820,105 @@ def process_today_focus(config):
     items = [m for m in pending if m.get('due') and m['due'] <= today]
     items.sort(key=lambda m: m.get('due') or '', reverse=False)
     tpl = _load_memo_templates()
-    title = tpl.get('today_focus_title') or _DEFAULT_TEMPLATES.get('today_focus_title', '**今日关注**')
-    lines = [title, '']
+    title_tpl = tpl.get('today_focus_title') or _DEFAULT_TEMPLATES.get('today_focus_title', '**今日关注**')
+    try:
+        title = title_tpl.format(date=today)
+    except Exception:
+        title = title_tpl
     if not items:
         empty = tpl.get('today_focus_empty') or _DEFAULT_TEMPLATES.get('today_focus_empty', '今天没有到期或超期的备忘。')
-        lines.append(empty)
+        body = title + '\n\n' + empty
     else:
+        parts = [title]
+        for m in items:
+            seq = m.get('memo_seq', '')
+            text = (m.get('text') or '')[:60] + ('...' if len(m.get('text') or '') > 60 else '')
+            overdue_suffix = '（超期）' if (m.get('due') or '') < today else ''
+            item_tpl = tpl.get('today_focus_item') or _DEFAULT_TEMPLATES.get('today_focus_item', '#{seq} {text}')
+            try:
+                line = item_tpl.format(seq=seq, text=text, overdue_suffix=overdue_suffix)
+            except Exception:
+                line = f'{seq}. {text}{overdue_suffix}'
+            parts.append(line)
+        body = '\n\n'.join(parts)
+    _send_webhook(body, config)
+    _log(f'today_focus: {len(items)} items')
+    return True
+
+
+def process_tomorrow_focus(config):
+    """
+    列出明天到期的任务：到期日 = 明天。
+    通过 webhook 发送可读列表，返回是否发送成功。
+    """
+    today = datetime.now().date()
+    tomorrow_d = today + timedelta(days=1)
+    tomorrow = tomorrow_d.strftime('%Y-%m-%d')
+    pending = get_pending_memos()
+    items = [m for m in pending if m.get('due') == tomorrow]
+    items.sort(key=lambda m: m.get('due') or '')
+    tpl = _load_memo_templates()
+    title_tpl = tpl.get('tomorrow_focus_title') or _DEFAULT_TEMPLATES.get('tomorrow_focus_title', '**明日关注** {date}')
+    try:
+        title = title_tpl.format(date=tomorrow)
+    except Exception:
+        title = title_tpl
+    if not items:
+        empty = tpl.get('tomorrow_focus_empty') or _DEFAULT_TEMPLATES.get('tomorrow_focus_empty', '明天没有到期的备忘。')
+        body = title + '\n\n' + empty
+    else:
+        parts = [title]
+        for m in items:
+            seq = m.get('memo_seq', '')
+            text = (m.get('text') or '')[:60] + ('...' if len(m.get('text') or '') > 60 else '')
+            item_tpl = tpl.get('today_focus_item') or tpl.get('tomorrow_focus_item') or _DEFAULT_TEMPLATES.get('today_focus_item', '#{seq} {text}{overdue_suffix}')
+            try:
+                line = item_tpl.format(seq=seq, text=text, overdue_suffix='')
+            except Exception:
+                line = f'{seq}. {text}'
+            parts.append(line)
+        body = '\n\n'.join(parts)
+    _send_webhook(body, config)
+    _log(f'tomorrow_focus: {len(items)} items')
+    return True
+
+
+def process_week_focus(config):
+    """
+    列出本周应关注的任务：到期日在 [今天, 本周日] 之间（含今天、含超期）。
+    通过 webhook 发送可读列表，返回是否发送成功。
+    """
+    today_d = datetime.now().date()
+    today = today_d.strftime('%Y-%m-%d')
+    # 本周日：周一=0，周日=6，所以 end_week = today + (6 - weekday)
+    end_week_d = today_d + timedelta(days=(6 - today_d.weekday()))
+    end_week = end_week_d.strftime('%Y-%m-%d')
+    pending = get_pending_memos()
+    items = [m for m in pending if m.get('due') and today <= m['due'] <= end_week]
+    items.sort(key=lambda m: m.get('due') or '')
+    tpl = _load_memo_templates()
+    title_tpl = tpl.get('week_focus_title') or _DEFAULT_TEMPLATES.get('week_focus_title', '**本周关注** {date}～{end_date}')
+    try:
+        title = title_tpl.format(date=today, end_date=end_week)
+    except Exception:
+        title = title_tpl
+    if not items:
+        empty = tpl.get('week_focus_empty') or _DEFAULT_TEMPLATES.get('week_focus_empty', '本周没有到期或超期的备忘。')
+        body = title + '\n\n' + empty
+    else:
+        parts = [title]
         for m in items:
             seq = m.get('memo_seq', '')
             text = (m.get('text') or '')[:60] + ('...' if len(m.get('text') or '') > 60 else '')
             due = m.get('due') or '-'
-            if due < today:
-                due = f'{due}（超期）'
-            item_tpl = tpl.get('today_focus_item') or _DEFAULT_TEMPLATES.get('today_focus_item', '#{seq} {text}（{due}）')
+            overdue_suffix = '（超期）' if due < today else ''
+            item_tpl = tpl.get('today_focus_item') or tpl.get('week_focus_item') or _DEFAULT_TEMPLATES.get('today_focus_item', '#{seq} {text}{overdue_suffix}')
             try:
-                line = item_tpl.format(seq=seq, text=text, due=due)
+                line = item_tpl.format(seq=seq, text=text, overdue_suffix=overdue_suffix)
             except Exception:
-                line = f'{seq}. {text}（{due}）'
-            lines.append(line)
-    body = '\n'.join(lines)
+                line = f'{seq}. {text}（{due}）{overdue_suffix}'
+            parts.append(line)
+        body = '\n\n'.join(parts)
     _send_webhook(body, config)
-    _log(f'today_focus: {len(items)} items')
+    _log(f'week_focus: {len(items)} items')
     return True

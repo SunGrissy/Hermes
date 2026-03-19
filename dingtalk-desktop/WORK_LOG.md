@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-19] 预审技能 + 推送缓存 + 强制重跑 + 助理群入队
+
+### 状态：验收通过
+
+### 本次工作内容
+
+- `skills/doc_review.py`：文档预审（钉钉文档抓取 + Palace），同一文档短时去重；支持「再预审」等跳过去重
+- `skill_router.py`：预审口令扩展；助理群最近文档 URL 推送缓存，预审优先不走 fetch；与备忘同队列消费
+- `daemon.py`：助理群消息一律可入 `memo_event_queue`（避免 MY_UID 不一致导致备忘/预审无推送）
+- `message_templates.json`：预审文案与「强制重跑」提示
+
+---
+
 ## [2026-03-19] 备忘推送立刻响应 + 删除/今日关注 + cursor-to-dingtalk 编码
 
 ### 状态：验收通过

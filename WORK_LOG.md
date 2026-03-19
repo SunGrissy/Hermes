@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - dingtalk-desktop 备忘/预审推送与文档预审
+
+**状态**: 验收通过
+
+**内容**:
+- `daemon.py`: 助理群 `memo_callback` 入队不再依赖 `MY_UID` 与本人判定，避免本人指令被误丢
+- `skill_router.py`: 预审强制重跑口令（再预审/强制预审等）；推送路径缓存最近文档 URL，优先免 `/fetch`；推送侧时间窗与路由调整
+- `skills/doc_review.py`: 新增文档预审技能（AliDocs + Palace）；`force_bypass_recent_window` 跳过短时去重
+- `message_templates.json`: 预审相关模板与说明
+- `lib/monitor.py`、`lib/utils.py`、`db/store.py`、`digest_config.json`、`memo_tracker.py`、`resume_screen.py`: 备忘推送、去重与配置配套
+
+---
+
 ## 2026-03-19 - cursor-to-dingtalk Webhook 发送日志
 
 **状态**: 验收通过

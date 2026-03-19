@@ -122,16 +122,24 @@
   "resume_notify_webhook": "https://oapi.dingtalk.com/robot/send?access_token=2816ab39197d77e816fa943c358fea510752bb27d5041725b87b345288b76bae",
   "memo_tracker": {
     "group_cid": "73216314617",
+    "colleague_skill_cids": ["73472166912"],
+    "_note_colleague_skill_cids": "他人发言仅白名单群入队（例：杨琳汇报直通车）；本人仍可在 group_cid 或白名单群发指令。助理群内同事发言默认忽略。",
     "default_who": "助理大白",
     "default_due_days": 7,
     "default_module": "备忘",
+    "wish_assignee": "愿望单",
+    "wish_module": "愿望单",
     "task_reminder_base": "http://192.168.20.114:8111",
     "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117"
   },
   "doc_review": {
     "group_cid": "73216314617",
     "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117",
-    "palace_url": "http://127.0.0.1:8300"
+    "palace_url": "http://127.0.0.1:8300",
+    "doc_review_window_seconds": 3600,
+    "doc_review_palace_timeout_seconds": 600,
+    "_note_doc_review_progress": "预审进度心跳：每隔 N 秒推送一条（阶段+已等待秒数）；设为 0 关闭",
+    "doc_review_progress_interval_seconds": 30
   },
   "recruit_cids": [
     {
