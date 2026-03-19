@@ -2,7 +2,7 @@
 
 ## 2026-03-19 - dingtalk-desktop 备忘按群 Webhook、footer 分割线
 
-**状态**: 验收通过
+**状态**: 已推送 tygit（`origin` → `http://tygit.tuyoo.com/...`）；GitHub `main` 远端超前，本次未快进合入，需另 `fetch github` + `merge/rebase` 后再推
 
 **内容**:
 - `skills/memo_tracker.py`: 备忘/TR/完成删除/关注等回复与许愿共用 `wish_reply_webhook_by_cid`；自动 footer 前插入分割线（模板 `separator`/`footer_separator`）；`_send_webhook` 统一选 Webhook
