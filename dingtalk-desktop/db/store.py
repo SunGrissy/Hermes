@@ -94,6 +94,18 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_doc_review_msg_id
                 ON doc_review_log(msg_id);
         """)
+        # 兼容旧库：增加规范化 URL 列（用于同一文档时间窗口去重）
+        try:
+            info = c.execute("PRAGMA table_info(doc_review_log)").fetchall()
+            col_names = [row[1] for row in info]
+            if 'doc_url_normalized' not in col_names:
+                c.execute("ALTER TABLE doc_review_log ADD COLUMN doc_url_normalized TEXT")
+                c.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_doc_review_normalized_ts "
+                    "ON doc_review_log(doc_url_normalized, ts_saved)"
+                )
+        except Exception:
+            pass
         c.commit()
         c.close()
 
@@ -218,6 +230,18 @@ def close_memo_item(memo_seq):
         c.close()
 
 
+def delete_memo_item(memo_seq):
+    """标记备忘为已删除（status='deleted'），用于「删除 memo N」指令。"""
+    with _lock:
+        c = _conn()
+        c.execute(
+            "UPDATE memo_items SET status='deleted', ts_closed=? WHERE memo_seq=?",
+            (int(datetime.now().timestamp()), memo_seq),
+        )
+        c.commit()
+        c.close()
+
+
 def get_memo_by_seq(memo_seq):
     with _lock:
         c = _conn()
@@ -251,18 +275,45 @@ def is_doc_review_processed(msg_id):
 
 
 def save_doc_review_result(msg_id, doc_url, doc_title='',
-                            verdict='', report_id=''):
+                            verdict='', report_id='', doc_url_normalized=''):
     with _lock:
         c = _conn()
-        c.execute(
-            "INSERT OR IGNORE INTO doc_review_log "
-            "(msg_id, doc_url, doc_title, verdict, report_id, ts_saved) "
-            "VALUES (?,?,?,?,?,?)",
-            (str(msg_id), doc_url, doc_title, verdict, report_id,
-             int(datetime.now().timestamp())),
-        )
+        ts = int(datetime.now().timestamp())
+        try:
+            c.execute(
+                "INSERT OR IGNORE INTO doc_review_log "
+                "(msg_id, doc_url, doc_title, verdict, report_id, doc_url_normalized, ts_saved) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (str(msg_id), doc_url, doc_title, verdict, report_id,
+                 (doc_url_normalized or '').strip() or None, ts),
+            )
+        except Exception:
+            c.execute(
+                "INSERT OR IGNORE INTO doc_review_log "
+                "(msg_id, doc_url, doc_title, verdict, report_id, ts_saved) "
+                "VALUES (?,?,?,?,?,?)",
+                (str(msg_id), doc_url, doc_title, verdict, report_id, ts),
+            )
         c.commit()
         c.close()
+
+
+def was_doc_attempted_recently(normalized_url: str, window_seconds: int) -> bool:
+    """同一规范化文档 URL 在 window_seconds 内是否已有尝试记录（成功/失败/跳过都算）。"""
+    if not (normalized_url or str(normalized_url).strip()):
+        return False
+    cutoff = int(datetime.now().timestamp()) - int(window_seconds)
+    with _lock:
+        c = _conn()
+        try:
+            row = c.execute(
+                "SELECT id FROM doc_review_log WHERE doc_url_normalized=? AND ts_saved>=? LIMIT 1",
+                (str(normalized_url).strip(), cutoff),
+            ).fetchone()
+        except Exception:
+            row = None  # 旧库无 doc_url_normalized 列时视为未尝试
+        c.close()
+    return row is not None
 
 
 if __name__ == '__main__':

@@ -5,6 +5,7 @@
 当前支持：
   - 监听招聘群内 ct=502（PDF 文件消息）→ 触发简历 AI 初筛
   - 监听助理通知群文本消息 → 备忘录入 / 关闭
+  - 助理通知群发送「上班啦」→ 执行 MyAgents 工具状态检查，结果经 webhook（小秘书提醒）推送
 
 架构：
   - 启动时由 daemon.py 调用 SkillRouter.start()
@@ -29,8 +30,14 @@ sys.path.insert(0, _THIS_DIR)
 
 from db.store import init_db, is_resume_processed, is_memo_processed, is_doc_review_processed
 from skills.resume_screen import process_resume_message
-from skills.memo_tracker import process_memo, process_close
-from skills.doc_review import extract_doc_url, process_doc_review
+from skills.memo_tracker import process_memo, process_close, process_delete, process_today_focus
+from skills.doc_review import (
+    extract_doc_url,
+    extract_doc_url_from_message,
+    process_doc_review,
+    get_doc_review_no_link_message,
+)
+from skills.status_check import run_and_send as run_status_check_and_send
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 POLL_INTERVAL = int(os.environ.get('SKILL_ROUTER_INTERVAL', '60'))   # 秒
@@ -313,12 +320,111 @@ def _extract_message_text(msg: dict) -> str:
     return text
 
 
-_RE_MEMO = re.compile(r'[\uff3b【\[]*(?:备忘|提醒我)[\uff3d】\]]*')
-_RE_CLOSE = re.compile(r'(?:完成|关闭)\s*#?\d+')
+_RE_MEMO   = re.compile(r'[\uff3b【\[]*(?:备忘|提醒我)[\uff3d】\]]*')
+_RE_CLOSE  = re.compile(r'(?:完成|关闭)\s*#?\d+')
+_RE_DELETE = re.compile(r'删除\s*(?:memo|备忘)\s*#?\s*\d+', re.IGNORECASE)
+_RE_TODAY_FOCUS = re.compile(
+    r'今天\s*(?:我要?)?\s*关注\s*啥|今天\s*有啥\s*(?:要做的|要关注)|今天\s*关注\s*啥'
+)
 _RE_PRECHECK = re.compile(r'^\s*预审[!！。.\s]*$')
+# 支持「上班啦」「上班啦！」「上班啦~」等，整条以上班啦开头且无其它实质内容即可
+_RE_MORNING = re.compile(r'^\s*上班啦\s*[!！。.~\s]*$')
 
 _MEMO_MAX_AGE_MS       = 24 * 3600 * 1000   # 处理 24 小时内的备忘（beacon 日志兜底，seen_ids 保幂等）
 _DOC_REVIEW_MAX_AGE_MS = 30 * 60 * 1000    # 预审指令保持 30 分钟窗口（避免误触发历史链接）
+
+
+def _normalize_push_record(record: dict) -> dict:
+    """把 monitor 推送的 record 转成与 _read_log_messages 一致的 msg 结构（含 uid）。"""
+    uid = record.get('uid', '') or ''
+    if not uid:
+        try:
+            me = record.get('md_extra') or {}
+            inner = me.get(3) or me.get('3') or {}
+            uid = str(inner.get(1) or inner.get('1') or '')
+        except Exception:
+            uid = ''
+    return {
+        'cid': record.get('cid', ''),
+        'uid': uid,
+        'ts': record.get('ts', 0),
+        'content_type': record.get('content_type', 0),
+        'text': record.get('text', '') or '',
+        'raw': '',
+    }
+
+
+def _dispatch_one_message(record: dict, group_cid: str, memo_cfg: dict,
+                          memo_seen_ids: set):
+    """推送到达时立刻处理单条：仅备忘/完成，同 cid 才处理。"""
+    msg = _normalize_push_record(record)
+    if str(msg.get('cid', '')) != str(group_cid):
+        return
+    ct = int(msg.get('content_type') or 0)
+    if ct not in (1, 3100):
+        return
+    text = _extract_message_text(msg)
+    if not text:
+        return
+    msg_id = _make_msg_id(msg)
+    if not msg_id or msg_id in memo_seen_ids:
+        return
+
+    if _RE_MORNING.match(text):
+        try:
+            webhook_url = memo_cfg.get('webhook_url', '')
+            if webhook_url and run_status_check_and_send(webhook_url):
+                _log('push: 上班啦 -> 已执行状态检查并推送')
+            else:
+                _log('push: 上班啦 -> webhook 未配置或发送失败')
+            memo_seen_ids.add(msg_id)
+        except Exception as e:
+            _log(f'morning status_check error: {e}')
+        return
+
+    if _RE_DELETE.search(text):
+        try:
+            if process_delete(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
+                memo_seen_ids.add(msg_id)
+                _log('push: 删除指令已处理')
+        except Exception as e:
+            _log(f'delete error: {e}')
+        return
+
+    if _RE_TODAY_FOCUS.search(text):
+        try:
+            process_today_focus(memo_cfg)
+            memo_seen_ids.add(msg_id)
+            _log('push: 今日关注已回复')
+        except Exception as e:
+            _log(f'today_focus error: {e}')
+        return
+
+    if _RE_CLOSE.search(text):
+        try:
+            process_close(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg)
+            memo_seen_ids.add(msg_id)
+            _log('push: 完成指令已处理')
+        except Exception as e:
+            _log(f'close error: {e}')
+        return
+
+    if _RE_MEMO.search(text):
+        if is_memo_processed(msg_id):
+            memo_seen_ids.add(msg_id)
+            return
+        try:
+            memo_ts = int(msg.get('ts', 0))
+            result = process_memo(
+                msg_id=msg_id, text=text,
+                context_msgs=[msg], memo_ts=memo_ts,
+                group_cid=group_cid, config=memo_cfg,
+            )
+            if result is not None:
+                memo_seen_ids.add(msg_id)
+                _log('push: 备忘已收录')
+        except Exception as e:
+            _log(f'memo error: {e}')
 
 
 def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
@@ -340,6 +446,32 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set):
 
         msg_id = _make_msg_id(msg)
         if not msg_id or msg_id in seen_ids:
+            continue
+
+        if _RE_MORNING.match(text):
+            try:
+                webhook_url = memo_cfg.get('webhook_url', '')
+                if webhook_url and run_status_check_and_send(webhook_url):
+                    _log('poll: 上班啦 -> 已执行状态检查并推送')
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'morning status_check error: {e}')
+            continue
+
+        if _RE_DELETE.search(text):
+            try:
+                if process_delete(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
+                    seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'delete error: {e}')
+            continue
+
+        if _RE_TODAY_FOCUS.search(text):
+            try:
+                process_today_focus(memo_cfg)
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'today_focus error: {e}')
             continue
 
         if _RE_CLOSE.search(text):
@@ -426,23 +558,14 @@ def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set):
         doc_url = None
         for j in range(i - 1, -1, -1):
             prev_msg = msgs_by_ts[j]
-            prev_ct = int(prev_msg.get('content_type') or 0)
-            if prev_ct not in (1, 3100):
-                continue
-            prev_text = _extract_message_text(prev_msg)
-            if prev_text:
-                url = extract_doc_url(prev_text)
-                if url:
-                    doc_url = url
-                    break
+            url = extract_doc_url_from_message(prev_msg)
+            if url:
+                doc_url = url
+                break
 
         if not doc_url:
             _log('收到预审指令，但未找到前序文档链接')
-            _send_notify(
-                '小秘书提醒 收到预审指令，但未找到最近的文档链接。'
-                '请先发送文档链接，再发送"预审"。',
-                webhook_url,
-            )
+            _send_notify(get_doc_review_no_link_message(), webhook_url)
             seen_ids.add(msg_id)
             continue
 
@@ -477,8 +600,8 @@ class SkillRouter:
         # 本次启动时刻（毫秒），用于过滤"daemon 启动前已存在的消息"
         self._start_ts: int = int(time.time() * 1000)
 
-    def start(self):
-        """启动后台轮询线程（由 daemon.py 调用）"""
+    def start(self, memo_event_queue=None):
+        """启动后台轮询线程（由 daemon.py 调用）。memo_event_queue 非空时备忘/完成走推送立刻响应，不再轮询。"""
         init_db()
         _log('DB initialized')
 
@@ -487,7 +610,6 @@ class SkillRouter:
         cid_names    = cfg.get('cid_names', {})
         notify_cid   = cfg['notify_cid']
         memo_cfg     = cfg.get('memo_tracker', {})
-
         doc_review_cfg = cfg.get('doc_review', {})
 
         has_resume     = bool(recruit_cids)
@@ -497,7 +619,7 @@ class SkillRouter:
         if has_resume:
             _log(f'resume watch: {recruit_cids}, notify: {notify_cid or "source group"}')
         if has_memo:
-            _log(f'memo watch: {memo_cfg["group_cid"]}')
+            _log(f'memo watch: {memo_cfg["group_cid"]}' + (' (push)' if memo_event_queue else ''))
         if has_doc_review:
             _log(f'doc_review watch: {doc_review_cfg["group_cid"]}')
         if not has_resume and not has_memo and not has_doc_review:
@@ -506,6 +628,8 @@ class SkillRouter:
 
         _log(f'poll interval: {POLL_INTERVAL}s')
         self._running = True
+        self._memo_queue = memo_event_queue
+
         self._thread = threading.Thread(
             target=self._loop,
             args=(recruit_cids, cid_names, notify_cid, memo_cfg, doc_review_cfg),
@@ -513,8 +637,35 @@ class SkillRouter:
         )
         self._thread.start()
 
+        if memo_event_queue and memo_cfg.get('group_cid'):
+            push_thread = threading.Thread(
+                target=self._memo_push_loop,
+                args=(memo_cfg['group_cid'], memo_cfg),
+                daemon=True,
+            )
+            push_thread.start()
+            _log('memo push consumer started')
+
     def stop(self):
         self._running = False
+
+    def _memo_push_loop(self, group_cid: str, memo_cfg: dict):
+        """消费 daemon 推送的消息，仅处理备忘群，立刻响应备忘/完成。"""
+        import queue as queue_module
+        q = getattr(self, '_memo_queue', None)
+        if not q:
+            return
+        while self._running:
+            try:
+                record = q.get(timeout=1.0)
+            except queue_module.Empty:
+                continue
+            except Exception:
+                break
+            try:
+                _dispatch_one_message(record, group_cid, memo_cfg, self._memo_seen_ids)
+            except Exception as e:
+                _log(f'memo push dispatch error: {e}')
 
     def _loop(self, recruit_cids: list, cid_names: dict,
               notify_cid: str, memo_cfg: dict, doc_review_cfg: dict = None):
@@ -530,7 +681,7 @@ class SkillRouter:
                 except Exception as e:
                     _log(f'resume poll [{source_name or cid}] error: {e}')
 
-            if memo_cfg.get('group_cid'):
+            if memo_cfg.get('group_cid') and not getattr(self, '_memo_queue', None):
                 try:
                     _poll_memo_once(memo_cfg['group_cid'], memo_cfg,
                                     self._memo_seen_ids)
@@ -551,9 +702,9 @@ class SkillRouter:
 _router = SkillRouter()
 
 
-def start_router():
-    """供 daemon.py 调用的入口"""
-    _router.start()
+def start_router(memo_event_queue=None):
+    """供 daemon.py 调用的入口。memo_event_queue 非空时备忘走推送立刻响应。"""
+    _router.start(memo_event_queue)
 
 
 if __name__ == '__main__':

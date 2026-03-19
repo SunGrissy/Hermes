@@ -79,11 +79,16 @@
 
   "memo_tracker": {
     "confirm": "memo #{seq}: {summary}",
-    "close": "done: memo #{seq} {summary}",
-    "not_found": "not found: memo #{seq}",
+    "close": "✅ done: memo #{seq} {summary}",
+    "delete": "❌ 备忘 #{seq} 已删除：{summary}",
+    "already_deleted": "⚠️ 备忘 #{seq} 已是删除状态",
+    "not_found": "❓ not found: memo #{seq}",
+    "today_focus_title": "**今日关注**（到期 / 超期）",
+    "today_focus_empty": "今天没有到期或超期的备忘。",
+    "today_focus_item": "#{seq} {text}（{due}）",
     "reminder_title": "### memo follow-up: {count} pending",
-    "reminder_urgent": "**urgent({count}):**",
-    "reminder_due_soon": "**due this week({count}):**",
+    "reminder_urgent": "**⚠️ urgent({count}):**",
+    "reminder_due_soon": "**⏰ due this week({count}):**",
     "reminder_other": "**other({count}):**",
     "reminder_item": "  #{seq} {who} {text} ({due_info})",
     "footer": "###### bot reminder"
@@ -118,6 +123,40 @@
 
     "source_line": "► **来源：** {source}",
 
+    "footer": "###### ※ 小秘书提醒"
+  },
+
+  "status_check": {
+    "_note": "MyAgents 工具运行状态检查，由「上班啦」触发，通过机器人 webhook 发送（关键词：小秘书提醒）",
+    "keyword": "小秘书提醒",
+    "title": "## 工具状态 [{timestamp}]",
+    "intro": "收到「上班啦」，已执行一次检查：",
+    "item_ok": "✅ **{name}** — 正常（{endpoint}）",
+    "item_fail": "❌ **{name}** — 未响应（{endpoint}）",
+    "item_skip": "⏭ **{name}** — 未检测（{reason}）",
+    "summary_ok": "**汇总**：{ok_count}/{total} 项正常",
+    "summary_partial": "**汇总**：{ok_count}/{total} 项正常，{fail_count} 项异常",
+    "separator": "---",
+    "footer": "###### ※ 小秘书提醒"
+  },
+
+  "doc_review": {
+    "_note": "预审流程各阶段推送文案，均需含「小秘书提醒」以触发机器人",
+    "keyword": "小秘书提醒",
+    "started": "小秘书提醒 收到文档链接，正在读取并预审，请稍候（约 1-2 分钟）...",
+    "fetch_fail": "小秘书提醒 文档读取失败: {error}",
+    "content_too_short": "小秘书提醒 文档《{title}》内容过少（{length} 字），可能页面未完全渲染。\n{url}",
+    "palace_fail": "小秘书提醒 文档预审引擎异常: {error}\n文档: {title}\n{url}",
+    "no_link": "小秘书提醒 收到预审指令，但未找到最近的文档链接。请先发送文档链接，再发送「预审」。",
+    "recently_attempted": "小秘书提醒 该文档在近期已尝试过预审，请 {minutes} 分钟后再试。",
+    "summary_header": "小秘书提醒 文档预审完成",
+    "summary_doc": "文档: {title}",
+    "summary_verdict": "结论: {verdict_emoji} {verdict_label}",
+    "summary_p0": "P0 阻断: {count} 项",
+    "summary_p1": "P1 关注: {count} 项",
+    "summary_chars": "提取字数: {text_length}",
+    "summary_report": "完整报告: {report_url}",
+    "summary_original": "原文: {url}",
     "footer": "###### ※ 小秘书提醒"
   }
 }

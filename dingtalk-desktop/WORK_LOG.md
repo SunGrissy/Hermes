@@ -1,5 +1,32 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-19] 备忘推送立刻响应 + 删除/今日关注 + cursor-to-dingtalk 编码
+
+### 状态：验收通过
+
+### 本次工作内容
+
+#### 1. 备忘/完成/删除 走推送立刻响应
+- daemon：`memo_event_queue`，monitor 写日志时 `on_record` 推队列；`start_router(queue)` 传入 skill_router
+- lib/monitor：`_display_and_log` / `_process_push` 支持 `on_record` 回调
+- skill_router：`_memo_push_loop` 消费队列，`_dispatch_one_message` 单条处理；备忘群不再轮询，仅简历/文档预审轮询
+
+#### 2. 删除 memo N
+- 指令：`删除memo N` / `删除备忘 N`；store 新增 `delete_memo_item`（status=deleted）；TR 从列表移除对应任务
+- 已删状态回复「已是删除状态」；成功删除注明「TR 已同步删除」或「TR 中未找到对应任务或已删除」
+
+#### 3. 今日关注语义
+- 发「今天我要关注啥」/「今天关注啥」→ 列出到期日≤今天的备忘（超期+今日到期），编号可读排版；模板 today_focus_title/empty/item
+
+#### 4. TR 一条只对应一条备忘
+- `_create_task_in_reminder` 的 note 只保留 `memo:#{seq} source:dingtalk`，不写入上文 context
+
+#### 5. cursor-to-dingtalk 中文问号修复
+- send_result_webhook.py：stdin 用 `stdin.buffer.read().decode('utf-8')`；`json.dumps(ensure_ascii=False)`；请求头 `charset=utf-8`
+- SKILL.md：管道前设 `$OutputEncoding = [System.Text.Encoding]::UTF8`
+
+---
+
 ## [2026-03-18] 应届生初筛分支
 
 ### 状态：验收通过
