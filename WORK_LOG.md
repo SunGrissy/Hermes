@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - dingtalk-desktop 文档预审进度心跳与完成摘要样式
+
+**状态**: 验收通过
+
+**内容**:
+- `skills/doc_review.py`: 预审长流程后台按间隔 webhook 推送阶段与已等待秒数（可配置，0 关闭）；完成摘要重构为分层 Markdown、清单数与 issues 列表对齐、原文/报告短链、截断与展示条数可配
+- `message_templates.json`: `doc_review` 新增 `progress_update`、摘要分段/统计/链接等模板键
+
+---
+
 ## 2026-03-19 - dingtalk-desktop 备忘/预审推送与文档预审
 
 **状态**: 验收通过

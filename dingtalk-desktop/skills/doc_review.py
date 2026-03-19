@@ -571,7 +571,7 @@ def _build_summary(palace_resp: dict, title: str, url: str,
         report_url = f'{base.rstrip("/")}/report/{report_id}'
         rlab = _palace_report_link_label(report_url)
         lines.append(
-            _line('summary_report', report_url=report_url)
+            _line('summary_report', report_url=report_url, report_link_label=rlab)
             or f'**完整报告** {_markdown_link(rlab, report_url)}'
         )
     lines.append(
