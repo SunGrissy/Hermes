@@ -177,8 +177,12 @@ def _process_push(data, source, dedup, my_uid, log_path, enable_toast, memo_call
                     continue
 
                 cid = str(md.get(2, ''))
-                sender = str(md.get(24, ''))
-                ts = md.get(6, 0)
+                # 手机端部分版本 24 为空，26 等字段偶发为发送者 id
+                sender = str(md.get(24, '') or md.get(26, '') or '').strip()
+                ts_raw = md.get(6, 0)
+                ts = _coerce_push_ts_ms(ts_raw)
+                if ts <= 0:
+                    ts = int(time.time() * 1000)
                 msg_id = md.get(4, 0)
 
                 if dedup.is_seen((cid, msg_id, ts)):
@@ -272,20 +276,32 @@ def _process_push(data, source, dedup, my_uid, log_path, enable_toast, memo_call
                 )
                 if memo_callback and callable(memo_callback):
                     try:
-                        # 自己发的消息已由 ProcessRequest(send) 入队；push 回显再入队会触发两遍技能
-                        if str(sender).strip() == str(my_uid).strip():
-                            pass
-                        else:
-                            rec = {
-                                'cid': cid, 'uid': sender, 'ts': ts, 'msg_id': msg_id,
-                                'content_type': ct, 'text': (text or '')[:500], 'raw': '',
-                                'md_extra': md_extra,
-                            }
-                            memo_callback(rec)
+                        # 本人消息：电脑发会先有 send Hook 再收到 push 回显，skill_router 按备忘/愿望
+                        # 内容键去重（memo_c: / wish_c:），避免双收录；手机发只有 push、无 send，必须入队。
+                        rec = {
+                            'cid': cid, 'uid': sender, 'ts': ts, 'msg_id': msg_id,
+                            'content_type': ct, 'text': (text or '')[:500], 'raw': '',
+                            'md_extra': md_extra,
+                        }
+                        memo_callback(rec)
                     except Exception:
                         pass
     except Exception as e:
         print(f"  [解码错误] {e}", flush=True)
+
+
+def _coerce_push_ts_ms(ts_raw):
+    """push 包 md[6] 可能是秒或毫秒，统一成毫秒；无效则返回 0。"""
+    try:
+        t = int(ts_raw or 0)
+    except (TypeError, ValueError):
+        return 0
+    if t <= 0:
+        return 0
+    # 秒级约 10 位；毫秒级当前约 13 位
+    if t < 10**11:
+        return t * 1000
+    return t
 
 
 _RE_ALIDOCS = __import__('re').compile(

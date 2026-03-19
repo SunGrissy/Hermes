@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## 2026-03-19 - dingtalk-desktop 手机 push 备忘补水与 /fetch 稳定性
+
+**状态**: 已提交待推送 tygit（`origin`）
+
+**内容**:
+- `lib/monitor.py`: 本人消息在手机仅 push、无 send 时仍 `memo_callback` 入队；push 时间戳毫秒化与发送者字段兜底
+- `skill_router.py`: push 正文为空且 `content_type==1` 时调 `/fetch` 按时间对齐补全文；补水超时 75s + 失败重试 1 次（缓解 `_fetch_lock` 排队）
+- `daemon.py`: `_json_response` 写响应时忽略客户端已断开（避免 WinError 10053 刷屏）
+
+---
+
 ## 2026-03-19 - dingtalk-desktop 备忘延期与关注列表读 TR
 
 **状态**: 已推送 tygit（`origin`）

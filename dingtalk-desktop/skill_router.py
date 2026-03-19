@@ -163,6 +163,55 @@ def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 30) -> list
         return []
 
 
+# 手机/轻量 ProcessPush 常不带 origin_text（见 _msg_log ext_keys 仅 openConversationId 等），需用 JSAPI 补正文
+_HYDRATE_FETCH_MAX_DELTA_MS = 120_000
+# daemon 侧 _fetch_lock 串行 + JSAPI 重扫/等待 beacon 可达数十秒，客户端过短会先断开并触发 ConnectionAbortedError
+_HYDRATE_FETCH_TIMEOUT_S = 75
+
+
+def _try_hydrate_push_message_from_fetch(msg: dict) -> None:
+    """push 记录 text 为空时，调 /fetch 按时间戳对齐最近一条有正文的群消息。"""
+    cid = str(msg.get('cid') or '').strip()
+    push_ts = int(msg.get('ts') or 0)
+    if not cid or push_ts <= 0:
+        return
+    rows = []
+    for attempt in range(2):
+        rows = _fetch_recent_messages(cid, count=35, timeout=_HYDRATE_FETCH_TIMEOUT_S)
+        if rows:
+            break
+        if attempt == 0:
+            time.sleep(2.5)
+    if not rows:
+        return
+    best = None
+    best_d = None
+    for m in rows:
+        t = (m.get('text') or '').strip()
+        if not t:
+            continue
+        mts = int(m.get('ts') or 0)
+        if mts <= 0:
+            continue
+        d = abs(mts - push_ts)
+        if d > _HYDRATE_FETCH_MAX_DELTA_MS:
+            continue
+        if best_d is None or d < best_d:
+            best_d = d
+            best = m
+    if not best or best_d is None:
+        return
+    msg['text'] = best.get('text') or ''
+    rw = best.get('raw')
+    if rw:
+        msg['raw'] = rw
+    try:
+        msg['content_type'] = int(best.get('content_type') or msg.get('content_type') or 1)
+    except (TypeError, ValueError):
+        pass
+    _log(f'push: 已用 /fetch 补全正文 (delta_ms={best_d})')
+
+
 def _read_log_messages(cid: str, max_count: int = 50,
                        max_age_ms: int = 86400 * 1000) -> list:
     """从 beacon 监控日志读取指定 CID 的近期消息（JSAPI 不可用时的备选通道）。
@@ -336,7 +385,17 @@ def _poll_once(cid: str, notify_cid: str, seen_ids: set,
 def _make_msg_id(msg: dict) -> str | None:
     ts = str(msg.get('ts', ''))
     uid = str(msg.get('uid', ''))
-    return f'{ts}_{uid}' if (ts and uid) else None
+    if ts and uid:
+        return f'{ts}_{uid}'
+    dm = msg.get('ding_mid')
+    if dm is not None and str(dm).strip() not in ('', '0'):
+        sdm = str(dm).strip()
+        if ts:
+            return f'{ts}_mid{sdm}'
+        return f'mid_{sdm}'
+    if ts:
+        return f'{ts}_nouid'
+    return None
 
 
 def _extract_message_text(msg: dict) -> str:
@@ -473,13 +532,13 @@ def _is_stale_command_msg(msg: dict, now_ms: int, max_age_ms: int) -> bool:
 def _skip_msg_before_router_start(msg: dict, router_start_ms: int) -> bool:
     """True：本条消息早于 skill_router 本次 start()，应跳过（重启后不追溯）。
 
-    router_start_ms<=0 时不启用。ts<=0 视为不可靠，一律跳过以免误处理历史。
+    router_start_ms<=0 时不启用。ts<=0 且无 ding_mid 时视为不可靠；有 ding_mid 的实时 push 仍处理（手机端常见）。
     """
     if not router_start_ms or router_start_ms <= 0:
         return False
     ts = int(msg.get('ts') or 0)
     if ts <= 0:
-        return True
+        return msg.get('ding_mid') is None
     return ts < router_start_ms
 
 
@@ -502,6 +561,10 @@ def _normalize_push_record(record: dict) -> dict:
             uid = str(inner.get(1) or inner.get('1') or '')
         except Exception:
             uid = ''
+    dm = record.get('msg_id')
+    ding_mid = None
+    if dm is not None and str(dm).strip() not in ('', '0'):
+        ding_mid = dm
     return {
         'cid': record.get('cid', ''),
         'uid': uid,
@@ -509,6 +572,7 @@ def _normalize_push_record(record: dict) -> dict:
         'content_type': record.get('content_type', 0),
         'text': record.get('text', '') or '',
         'raw': '',
+        'ding_mid': ding_mid,
     }
 
 
@@ -528,6 +592,14 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
     _doc_g = str((doc_review_cfg or {}).get('group_cid') or '').strip()
     if _doc_g:
         _remember_push_doc_url_if_any(msg_cid, msg, _doc_g)
+
+    try:
+        _ct_h = int(msg.get('content_type') or 0)
+    except (TypeError, ValueError):
+        _ct_h = 0
+    # 仅文本类 push 补水；文件/卡片等空正文不应误配邻近文字
+    if _ct_h == 1 and not (msg.get('text') or '').strip():
+        _try_hydrate_push_message_from_fetch(msg)
 
     text = _normalize_command_text(_extract_message_text(msg))
     if not text:

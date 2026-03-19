@@ -2227,7 +2227,11 @@ class DaemonHandler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Content-Length', str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            # 客户端已超时关闭（如 skill_router urllib 先断开），避免刷屏 traceback
+            pass
 
     def log_message(self, *a):
         pass
