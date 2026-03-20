@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-20 - pm-system 子模块：ApiClient 版本级权限 shim（恢复版本发布按钮）
+
+**状态**: 已推送 tygit（`origin`）；子模块 `main` 指向 `06f173a`
+
+**内容**:
+- `pm-system/api-client.js`: 补充 `hasVersionPermission` / `requireVersionPermission` 兼容实现，与 `hasPermission` 默认放行一致；修复版本列表发布/编辑/删除按钮因方法缺失不渲染的问题
+
+---
+
 ## 2026-03-19 - dingtalk-desktop 手机 push 备忘补水与 /fetch 稳定性
 
 **状态**: 已推送 tygit（`origin` → `http://tygit.tuyoo.com/...`）；GitHub 同次 push 被拒（远端超前，需另 `pull --rebase` / `merge` 后再推）
