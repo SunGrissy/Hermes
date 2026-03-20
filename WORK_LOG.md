@@ -2,7 +2,7 @@
 
 ## 2026-03-20 - Git：默认仅推 tygit；novel 独立 GitHub 仓；规范与 Skill 同步
 
-**状态**: 已完成（待用户按需 `git push origin`）
+**状态**: 已完成（已 `git push origin main` → tygit）
 
 **内容**:
 - 父仓及 pm-system / performeval / cci_system / task_reminder / teamscore：`origin` 去掉 GitHub 双 push，仅 tygit；保留 `github` remote
