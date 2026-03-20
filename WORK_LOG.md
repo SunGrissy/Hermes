@@ -1,5 +1,19 @@
 # Work Log - MyAgents Root
 
+## 2026-03-21 - dingtalk-desktop：日报拉取/定时/自检与简历轮询超时
+
+**状态**: 验收通过（已提交推送 tygit origin）
+
+**内容**:
+- `report_digest.py`：`import time`；`_report_body` 与全文拉取策略；`--fetch-only`/`--window overnight-morning`/`--after`/`--before`；`--full-content`+fetch-only 钉钉全文；`--notify-default` 进度精简；Markdown 分片推送
+- `run_daily_digest.ps1`：子进程超时、进度/失败 webhook（ASCII 安全）、关键词「小秘书提醒」
+- `restart_daemon.ps1`：ASCII 输出；`daemon_health_notify.py`、`run_daemon_health_notify.ps1`：health+可选重启+default 通知
+- `skill_router.py`：简历轮询 `/fetch` 超时 75s
+- `message_templates.json`、`digest_config.json`：`report_digest` LLM 字数等
+- `db/store.py`、`skills/memo_tracker.py`：与 03-20 备忘/选题/运维同期改动一并入库
+
+---
+
 ## 2026-03-20 - dingtalk-desktop：快捷指令（人员筛选/选题独立号/运维/双发去重）
 
 **状态**: 验收通过

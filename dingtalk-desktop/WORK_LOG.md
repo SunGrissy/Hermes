@@ -1,5 +1,19 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-21] 日报拉取、定时任务、通道自检、简历 fetch 超时
+
+### 状态：验收通过
+
+### 本次工作内容
+
+- **report_digest**：`time` 导入；CEF 全文 `_report_body` 优先；`--fetch-only` + `--window overnight-morning` / `--after` `--before`；与 `--full-content` 组合发 default 全文（单条上限 12k 字）；`--notify-default` 仅保留阶段节点通知
+- **run_daily_digest.ps1**：`Start-Process`+`Wait-Process` 超时、钉钉进度/失败 Markdown
+- **restart_daemon.ps1**、**daemon_health_notify.py**、**run_daemon_health_notify.ps1**：daemon 健康检查、重启、default webhook 结论
+- **skill_router**：`_poll_once` 调 `/fetch` 超时改为 75s（对齐 hydrate）
+- **message_templates.json**、**digest_config.json**：日报 LLM `text_limit` 等
+
+---
+
 ## [2026-03-20] 快捷指令：人员筛选、选题独立号、桌面运维、双发去重
 
 ### 状态：验收通过

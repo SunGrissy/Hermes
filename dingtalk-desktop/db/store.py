@@ -476,6 +476,42 @@ def save_topic_item(topic_seq, msg_id, text, who='', due=None,
         c.close()
 
 
+def upsert_topic_from_tr_sync(topic_seq, text, who='', due=None,
+                              priority='medium', task_reminder_id=None):
+    """以 TR 为准写入/更新本地选题：无行则插入（msg_id=tr_sync:#）。"""
+    ts = int(datetime.now().timestamp())
+    text = (text or '').strip()
+    who = (who or '').strip()
+    due = (due or '').strip() or None
+    pr = (priority or 'medium').strip() or 'medium'
+    tid = task_reminder_id
+    synthetic_mid = f'tr_sync:{int(topic_seq)}'
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT id, msg_id FROM topic_items WHERE topic_seq=?",
+            (int(topic_seq),),
+        ).fetchone()
+        if row:
+            c.execute(
+                "UPDATE topic_items SET text=?, who=?, due=?, priority=?, "
+                "task_reminder_id=?, status='active', ts_closed=NULL "
+                "WHERE topic_seq=?",
+                (text, who, due, pr, tid, int(topic_seq)),
+            )
+        else:
+            c.execute(
+                "INSERT INTO topic_items "
+                "(topic_seq, msg_id, text, who, due, priority, context, "
+                " task_reminder_id, status, ts_created) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (int(topic_seq), synthetic_mid, text, who, due, pr,
+                 None, tid, 'active', ts),
+            )
+        c.commit()
+        c.close()
+
+
 def delete_topic_item(topic_seq):
     with _lock:
         c = _conn()

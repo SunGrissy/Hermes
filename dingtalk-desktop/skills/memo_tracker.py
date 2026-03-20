@@ -36,11 +36,13 @@ from db.store import (
     close_topic_item,
     delete_memo_item,
     delete_topic_item,
+    upsert_topic_from_tr_sync,
     update_memo_due,
     update_memo_text,
     get_pending_memos,
     get_pending_topics,
     get_memo_by_seq,
+    get_topic_by_seq,
     get_next_wish_seq,
     is_wish_processed,
     save_wish_item,
@@ -150,6 +152,14 @@ _DEFAULT_TEMPLATES = {
         '#### 选题未重复收录\n\n已有进行中的 **选题 #{existing_seq}**（内容相同）\n'
         '{summary}\n\n未新建条目。\n\n----'
     ),
+    'topic_library_title': '### **选题库**（TaskReminder，共 {n} 条）\n\n',
+    'topic_library_empty': 'TR 中没有带 `topic:#N` 的任务。\n\n',
+    'topic_library_item': (
+        '**topic #{seq}** [{status}] {what}\n'
+        '> 负责人：{who}　到期：{due}　模块：{module}\n\n'
+    ),
+    'topic_library_trunc': '\n（仅展示前 {n} 条，其余略；完整列表以 TR 为准）\n',
+    'topic_library_read_fail': '无法读取 TaskReminder，选题库暂不可用，请稍后重试。\n\n',
     'person_lookup_title': '### **「{keyword}」相关待办**（备忘 + 愿望）\n\n',
     'person_lookup_empty': '没有在进行中的备忘、愿望正文里找到「{keyword}」。\n\n',
     'person_lookup_memo_head': '**备忘**\n',
@@ -547,22 +557,66 @@ def _update_memo_task_in_tr(memo_seq: int, config: dict, *,
         return False
 
 
-def sync_tr_state_to_local_memos_wishes(config: dict) -> dict:
-    """TR 侧删除任务或标记 done 时，对齐本地 memo_items / wish_items / topic_items。"""
+def fetch_tr_tasks_for_sync(config: dict) -> list | None:
+    """拉取 TR 任务列表；失败返回 None（与空列表区分）。"""
     base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
     url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return []
+        return tasks
+    except Exception as e:
+        _log(f'sync TR: read failed {e}')
+        return None
+
+
+def _merge_tr_topic_snapshot(tasks: list) -> dict:
+    """note 含 topic:#N 的任务合并为 seq -> {done, what, who, due, tr_id, module, priority}。
+    同序号多条时优先保留「进行中」，否则取较新 id。
+    """
+    by_seq: dict[int, tuple[bool, dict]] = {}
+    for t in tasks or []:
+        if not isinstance(t, dict):
+            continue
+        note = t.get('note') or ''
+        mm = re.search(r'topic:#(\d+)', note)
+        if not mm:
+            continue
+        seq = int(mm.group(1))
+        done = (t.get('processStatus') or '').lower() == 'done'
+        cur = by_seq.get(seq)
+        if cur is None:
+            by_seq[seq] = (done, t)
+            continue
+        cur_done, cur_t = cur
+        if cur_done and not done:
+            by_seq[seq] = (done, t)
+        elif cur_done == done:
+            if int(t.get('id') or 0) >= int(cur_t.get('id') or 0):
+                by_seq[seq] = (done, t)
+    out = {}
+    for seq, (done, t) in by_seq.items():
+        out[seq] = {
+            'done': done,
+            'what': (t.get('what') or '').strip(),
+            'who': (t.get('who') or '').strip(),
+            'due': (t.get('due') or '').strip(),
+            'tr_id': t.get('id'),
+            'module': (t.get('module') or '').strip(),
+            'priority': (t.get('priority') or 'medium').strip() or 'medium',
+        }
+    return out
+
+
+def apply_tr_sync_to_local_tasks(tasks: list, config: dict) -> dict:
+    """在已拉取的 tasks 上执行 memo/wish/topic 与本地对齐（topic 以 TR 字段为真源）。"""
     out = {
         'memo_deleted': 0, 'memo_closed': 0,
         'wish_deleted': 0, 'wish_closed': 0,
         'topic_deleted': 0, 'topic_closed': 0,
+        'topic_merged': 0,
     }
-    try:
-        tasks = _http_get_json(url)
-        if not isinstance(tasks, list):
-            return out
-    except Exception as e:
-        _log(f'sync TR: read failed {e}')
-        return out
 
     memo_state = {}
     wish_state = {}
@@ -617,19 +671,155 @@ def sync_tr_state_to_local_memos_wishes(config: dict) -> dict:
             out['wish_closed'] += 1
             _log(f'sync: TR 已 done wish #{seq}，本地已闭环')
 
+    topic_snap = _merge_tr_topic_snapshot(tasks)
+
+    for seq, info in topic_snap.items():
+        if info['done']:
+            row = get_topic_by_seq(seq)
+            if row and row.get('status') == 'active':
+                close_topic_item(seq)
+                out['topic_closed'] += 1
+                _log(f'sync: TR 已 done topic #{seq}，本地已闭环')
+
+    def _tr_task_id_eq(a, b) -> bool:
+        if a is None and b is None:
+            return True
+        try:
+            return int(a) == int(b)
+        except (TypeError, ValueError):
+            return str(a or '') == str(b or '')
+
+    def _topic_needs_merge_from_tr(row, inf: dict) -> bool:
+        if row is None:
+            return True
+        if (row.get('status') or '') != 'active':
+            return True
+        d_loc = (row.get('due') or '') or ''
+        d_tr = (inf.get('due') or '') or ''
+        return (
+            (row.get('text') or '').strip() != (inf.get('what') or '').strip()
+            or (row.get('who') or '').strip() != (inf.get('who') or '').strip()
+            or d_loc != d_tr
+            or (row.get('priority') or 'medium') != (inf.get('priority') or 'medium')
+            or not _tr_task_id_eq(row.get('task_reminder_id'), inf.get('tr_id'))
+        )
+
+    for seq, info in topic_snap.items():
+        if info['done']:
+            continue
+        row = get_topic_by_seq(seq)
+        if not _topic_needs_merge_from_tr(row, info):
+            continue
+        upsert_topic_from_tr_sync(
+            topic_seq=seq,
+            text=info['what'],
+            who=info['who'],
+            due=info['due'] or None,
+            priority=info['priority'],
+            task_reminder_id=info['tr_id'],
+        )
+        out['topic_merged'] += 1
+        _log(f'sync: topic #{seq} 已与 TR 对齐')
+
     for m in list(get_pending_topics()):
         seq = int(m['topic_seq'])
-        st = topic_state.get(seq)
-        if st is None:
+        if seq not in topic_snap:
             delete_topic_item(seq)
             out['topic_deleted'] += 1
             _log(f'sync: TR 已无 topic #{seq}，已删本地')
-        elif st == 'done':
-            close_topic_item(seq)
-            out['topic_closed'] += 1
-            _log(f'sync: TR 已 done topic #{seq}，本地已闭环')
 
     return out
+
+
+def sync_tr_state_to_local_memos_wishes(config: dict) -> dict:
+    """TR 侧删除/完成/改文案时，对齐本地 memo_items / wish_items / topic_items。"""
+    empty = {
+        'memo_deleted': 0, 'memo_closed': 0,
+        'wish_deleted': 0, 'wish_closed': 0,
+        'topic_deleted': 0, 'topic_closed': 0,
+        'topic_merged': 0,
+    }
+    tasks = fetch_tr_tasks_for_sync(config)
+    if tasks is None:
+        return empty
+    return apply_tr_sync_to_local_tasks(tasks, config)
+
+
+def topic_library_match_text(text: str, config: dict | None = None) -> bool:
+    """是否为「选题库」列表指令（整句，避免与「选题xxx」收录冲突）。"""
+    t = _dedup_normalize_text(text or '')
+    if re.match(r'^\s*选题库\s*$', t):
+        return True
+    aliases = (config or {}).get('topic_library_aliases') if config else None
+    if isinstance(aliases, list):
+        for a in aliases:
+            s = str(a).strip()
+            if s and re.match(rf'^\s*{re.escape(s)}\s*$', t):
+                return True
+    return False
+
+
+def _format_topic_library_body(tasks: list, max_items: int = 80) -> str:
+    """从 TR tasks 中筛 topic:#N，按序号排序拼 markdown。"""
+    snap = _merge_tr_topic_snapshot(tasks)
+    rows = []
+    for seq in sorted(snap.keys()):
+        info = snap[seq]
+        st_lbl = '已完成' if info['done'] else '进行中'
+        what = info['what'] or '（无标题）'
+        if len(what) > 200:
+            what = what[:197] + '...'
+        line = _render_template(
+            'topic_library_item',
+            seq=seq,
+            status=st_lbl,
+            what=what,
+            who=info['who'] or '—',
+            due=info['due'] or '—',
+            module=info['module'] or '—',
+        )
+        rows.append(line)
+    total = len(rows)
+    if total == 0:
+        return _render_template('topic_library_empty')
+    trunc_note = ''
+    if total > max_items:
+        rows = rows[:max_items]
+        trunc_note = _render_template('topic_library_trunc', n=max_items)
+    title = _render_template('topic_library_title', n=total)
+    return title + ''.join(rows) + trunc_note
+
+
+def _send_webhook_chunks(text: str, config: dict, group_cid, chunk_size: int = 3200):
+    """钉钉 markdown 过长时拆多条（每条仍带 footer）。"""
+    text = (text or '').strip()
+    if len(text) <= chunk_size:
+        _send_webhook(text, config, group_cid=group_cid)
+        return
+    parts = []
+    while text:
+        parts.append(text[:chunk_size])
+        text = text[chunk_size:]
+    n = len(parts)
+    for i, chunk in enumerate(parts, start=1):
+        header = f'（{i}/{n}）\n\n' if n > 1 else ''
+        _send_webhook(header + chunk, config, group_cid=group_cid)
+
+
+@_memo_serialized
+def process_topic_library(config: dict, group_cid=None) -> None:
+    """群消息「选题库」：先与 TR 同步选题，再推送 TR 中全部 topic 列表。"""
+    tasks = fetch_tr_tasks_for_sync(config)
+    if tasks is None:
+        _send_webhook(
+            _render_template('topic_library_read_fail'),
+            config, group_cid=group_cid)
+        return
+    stats = apply_tr_sync_to_local_tasks(tasks, config)
+    if any(stats.values()):
+        _log(f'topic_library sync {stats}')
+    body = _format_topic_library_body(tasks)
+    _send_webhook_chunks(body, config, group_cid)
 
 
 def _parse_topic_pick_body(text: str) -> tuple:
@@ -660,12 +850,15 @@ def _parse_topic_pick_body(text: str) -> tuple:
     return display, reporter
 
 
-def _text_triggers_topic_pick(text: str) -> bool:
+def _text_triggers_topic_pick(text: str, config: dict | None = None) -> bool:
     if not text:
+        return False
+    if topic_library_match_text(text, config):
         return False
     if re.search(r'[\uff3b【\[]\s*选题\s*[\uff3d】\]]', text):
         return True
-    return bool(re.match(r'^\s*选题(?:\s*[:：，,]|\s+\S)', text))
+    # 行首「选题」：冒号/逗号、空白+正文，或「选题」后紧跟正文（无标点无空格，如 选题三国赛季）
+    return bool(re.match(r'^\s*选题(?:\s*[:：，,]|\s+\S|\S)', text))
 
 
 @_memo_serialized
@@ -760,7 +953,7 @@ def topic_pick_content_key(text: str) -> str:
 @_memo_serialized
 def process_topic_pick(msg_id, text, context_msgs, memo_ts, group_cid, config):
     """群选题收录：写入 topic_items（独立 topic_seq）+ TR（note: topic:#N）。"""
-    if not _text_triggers_topic_pick(text or ''):
+    if not _text_triggers_topic_pick(text or '', config):
         return False
     if is_topic_processed(msg_id):
         return True

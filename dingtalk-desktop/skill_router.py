@@ -4,14 +4,14 @@
 
 当前支持：
   - 监听招聘群内 ct=502（PDF 文件消息）→ 触发简历 AI 初筛
-  - 监听助理群 + memo_tracker.colleague_skill_cids 白名单群 → 备忘 / 许愿 / 完成 等（他人仅白名单群入队）
+  - 监听助理群 + memo_tracker.colleague_skill_cids 白名单群（及可选 topic_skill_group_cid 选题群）→ 备忘 / 许愿 / 完成 等（他人仅白名单群入队）
   - 文本含「许愿」「愿望」或英文 wish（整词）→ 写入 TaskReminder，负责人为配置项 wish_assignee（默认「愿望单」）
   - 文本含「愿望单」→ 列出未完成愿望（wish #N + 旧版 TR 条目）（日志 + webhook）；优先于「愿望」单独触发
   - 文本含「删除 wish N」「删除愿望 N」→ 删本地 wish 记录并移除 TR 中 wish:#N
   - 文本含「完成 wish N」「关闭愿望 N」→ 本地标 done，TR 中 wish:#N 标 processStatus=done
   - 助理通知群发送「上班啦」/「上班」→ 执行 MyAgents 工具状态检查，结果经 webhook（小秘书提醒）推送
   - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
-  - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 删除/done 与本地 memo/wish/topic
+  - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；「选题库」从 TR 列出全部 topic:#N 并先做一次本地同步；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 与本地 memo/wish/topic（选题以 TR 文案/删改/完成为准）
   - 助理群「预审」：推送路径下优先用本进程缓存的「上一条钉钉文档链接」（与备忘同源 send 事件），避免依赖 /fetch 回溯
 
 架构：
@@ -31,6 +31,10 @@ import threading
 import urllib.request
 from datetime import datetime
 
+# [AgentMemo Task] 开始时间: 2026-03-18 19:00
+# [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
+# [AgentWish Task] 开始时间: 2026-03-19
+# [AgentWish Task] 任务目标: WISH-001 群消息「许愿」/「愿望单」路由
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _THIS_DIR)
 
@@ -57,6 +61,9 @@ from skills.memo_tracker import (
     process_memo_assign_tr,
     process_topic_pick,
     topic_pick_content_key,
+    _text_triggers_topic_pick,
+    topic_library_match_text,
+    process_topic_library,
     process_person_lookup,
     person_lookup_match_keyword,
     sync_tr_state_to_local_memos_wishes,
@@ -142,6 +149,21 @@ def _load_config() -> dict:
             memo_cfg['colleague_skill_cids'] = []
         elif not isinstance(_col, list):
             memo_cfg['colleague_skill_cids'] = [str(_col).strip()] if str(_col).strip() else []
+
+        # 选题 / 选题库专用群：填 topic_skill_group_cid + webhook（URL 或 webhook_config 键），自动并入白名单与按群回复
+        tgc = str(memo_cfg.get('topic_skill_group_cid') or '').strip()
+        tkey = str(memo_cfg.get('topic_skill_webhook_key') or '').strip()
+        raw_tw = str(memo_cfg.get('topic_skill_webhook_url') or '').strip()
+        tw = (get_webhook_url(tkey, raw_tw) if tkey else raw_tw).strip()
+        if tgc and tw:
+            cols = memo_cfg['colleague_skill_cids']
+            if tgc not in cols:
+                cols.append(tgc)
+            br = memo_cfg.get('wish_reply_webhook_by_cid')
+            if not isinstance(br, dict):
+                br = {}
+                memo_cfg['wish_reply_webhook_by_cid'] = br
+            br[tgc] = tw
 
         return {
             'recruit_cids': cids,
@@ -570,9 +592,12 @@ def _memo_content_key(text: str) -> str:
     return (t[:80] or '').strip()
 
 
-def _text_triggers_new_wish(text: str) -> bool:
+def _text_triggers_new_wish(text: str, memo_cfg: dict | None = None) -> bool:
     """与「许愿」等效的新愿望触发：含愿望单时只走列表，不收录。"""
     if not text:
+        return False
+    # 选题优先：标题里常带「愿望/wish」等词，勿误进愿望单
+    if _text_triggers_topic_pick(text, memo_cfg):
         return False
     if '愿望单' in text:
         return False
@@ -950,7 +975,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'wish_list error: {e}')
         return
 
-    if _text_triggers_new_wish(text):
+    if _text_triggers_new_wish(text, memo_cfg):
         ck = wish_content_key(text)
         if ck:
             wish_dedup = 'wish_c:' + ck
@@ -971,6 +996,20 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
                 _log('push: 愿望已收录 TaskReminder')
         except Exception as e:
             _log(f'wish error: {e}')
+        return
+
+    if topic_library_match_text(text, memo_cfg):
+        key = (msg_cid, 'topic_library')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            process_topic_library(memo_cfg, group_cid=msg_cid)
+            memo_seen_ids.add(msg_id)
+            _log('push: 选题库已推送')
+        except Exception as e:
+            _log(f'topic_library error: {e}')
         return
 
     try:
@@ -1251,7 +1290,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'wish_list error: {e}')
             continue
 
-        if _text_triggers_new_wish(text):
+        if _text_triggers_new_wish(text, memo_cfg):
             ck = wish_content_key(text)
             if ck:
                 wish_dedup = 'wish_c:' + ck
@@ -1270,6 +1309,20 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                     seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'wish error: {e}')
+            continue
+
+        if topic_library_match_text(text, memo_cfg):
+            key = (str(group_cid), 'topic_library')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                process_topic_library(memo_cfg, group_cid=group_cid)
+                seen_ids.add(msg_id)
+                _log('poll: 选题库已推送')
+            except Exception as e:
+                _log(f'topic_library error: {e}')
             continue
 
         try:

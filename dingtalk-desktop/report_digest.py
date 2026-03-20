@@ -10,6 +10,10 @@ Usage:
     py report_digest.py --output digest.md      # save to file
     py report_digest.py --date ... --full-content --notify-default
         # progress pings to webhook_config.json \"default\" during fetch/analyze/send
+    py report_digest.py --fetch-only --window overnight-morning
+        # yesterday 18:30 -> today 09:00 local, no LLM, notify webhook \"default\"
+    py report_digest.py --fetch-only --window overnight-morning --full-content
+        # same + CEF 拉详情页全文，再发 default（耗时长）
 """
 import os
 import sys
@@ -207,16 +211,36 @@ def _daemon_request(path, body=None):
         return {'success': False, 'error': str(e)}
 
 
-def fetch_reports(target_date, report_cids):
+def _window_overnight_morning_local():
+    """昨天本地 18:30 → 今天本地 09:00。返回 (after_str, before_str, after_ms, before_ms, 短标签)。"""
+    now = datetime.now()
+    d_y = (now.date() - timedelta(days=1))
+    d_t = now.date()
+    start_dt = datetime(d_y.year, d_y.month, d_y.day, 18, 30, 0)
+    end_dt = datetime(d_t.year, d_t.month, d_t.day, 9, 0, 0)
+    after_str = start_dt.strftime('%Y-%m-%d %H:%M:%S')
+    before_str = end_dt.strftime('%Y-%m-%d %H:%M:%S')
+    after_ms = int(start_dt.timestamp() * 1000)
+    before_ms = int(end_dt.timestamp() * 1000)
+    label = f'{d_y.month}/{d_y.day} 18:30 - {d_t.month}/{d_t.day} 09:00'
+    return after_str, before_str, after_ms, before_ms, label
+
+
+def fetch_reports(target_date, report_cids, after_str=None, before_str=None):
     if not report_cids:
         print('[error] no report_cids configured -- run with --discover first',
               flush=True)
         return []
 
-    # 日报收集窗口：当天 18:30 → 次日 12:00（覆盖晚间提交和隔夜补交）
-    dt = datetime.strptime(target_date, '%Y-%m-%d')
-    after = (dt.replace(hour=18, minute=30, second=0)).strftime('%Y-%m-%d %H:%M:%S')
-    before = (dt + timedelta(days=1)).replace(hour=12, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
+    # 日报收集窗口：默认同日 18:30 → 次日 12:00；可传入 after_str/before_str 覆盖
+    if not after_str or not before_str:
+        dt = datetime.strptime(target_date, '%Y-%m-%d')
+        after_str = (dt.replace(hour=18, minute=30, second=0)).strftime(
+            '%Y-%m-%d %H:%M:%S')
+        before_str = (dt + timedelta(days=1)).replace(
+            hour=12, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
+    after = after_str
+    before = before_str
     all_msgs = []
     seen_keys = set()
 
@@ -272,7 +296,8 @@ def fetch_reports(target_date, report_cids):
     return dedup_result
 
 
-def _enrich_from_monitor_log(messages, target_date, report_cids):
+def _enrich_from_monitor_log(messages, target_date, report_cids,
+                             after_ts_ms=None, before_ts_ms=None):
     """Supplement JSAPI results with Monitor native hook log.
 
     Monitor captures all messages in real-time including those JSAPI misses
@@ -282,9 +307,14 @@ def _enrich_from_monitor_log(messages, target_date, report_cids):
     if not os.path.exists(_MSG_LOG):
         return messages
 
-    dt = datetime.strptime(target_date, '%Y-%m-%d')
-    after_ts = dt.replace(hour=18, minute=30).timestamp() * 1000
-    before_ts = (dt + timedelta(days=1)).replace(hour=12, minute=0).timestamp() * 1000
+    if after_ts_ms is None or before_ts_ms is None:
+        dt = datetime.strptime(target_date, '%Y-%m-%d')
+        after_ts = dt.replace(hour=18, minute=30).timestamp() * 1000
+        before_ts = (dt + timedelta(days=1)).replace(
+            hour=12, minute=0).timestamp() * 1000
+    else:
+        after_ts = float(after_ts_ms)
+        before_ts = float(before_ts_ms)
 
     tracked_cids = set()
     for entry in report_cids:
@@ -932,6 +962,101 @@ def manage_members(add=None, remove=None, discover_date=None, yes=False):
         print(f'  {_safe(name)}', flush=True)
 
 
+def _post_markdown_webhook(webhook_url: str, markdown_text: str) -> bool:
+    """单条 markdown；正文须含关键词「小秘书提醒」。"""
+    kw = '小秘书提醒'
+    if kw not in markdown_text:
+        markdown_text = f'{markdown_text}\n\n---\n###### {kw}'
+    payload = json.dumps(
+        {
+            'msgtype': 'markdown',
+            'markdown': {'title': f'{kw} · 日报拉取', 'text': markdown_text},
+        },
+        ensure_ascii=False,
+    ).encode('utf-8')
+    req = urllib.request.Request(
+        webhook_url,
+        data=payload,
+        method='POST',
+        headers={'Content-Type': 'application/json; charset=utf-8'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            out = json.loads(resp.read().decode('utf-8', errors='replace'))
+        if out.get('errcode') != 0:
+            print(f'[fetch-only] webhook err: {out}', flush=True)
+            return False
+        return True
+    except Exception as e:
+        print(f'[fetch-only] webhook exception: {e}', flush=True)
+        return False
+
+
+def _send_markdown_webhook_chunks(webhook_url: str, markdown_body: str,
+                                  max_chars: int = 3400) -> bool:
+    """超长则按段多条 markdown。"""
+    if len(markdown_body) <= max_chars:
+        return _post_markdown_webhook(webhook_url, markdown_body)
+    chunks = []
+    rest = markdown_body
+    while rest:
+        take = rest[:max_chars]
+        nl = take.rfind('\n')
+        if nl > max_chars // 2:
+            take = take[:nl]
+        chunks.append(take)
+        rest = rest[len(take):].lstrip('\n')
+    total = len(chunks)
+    for i, ch in enumerate(chunks, 1):
+        head = f'**({i}/{total}) 日报拉取续页**\n\n' if total > 1 else ''
+        if not _post_markdown_webhook(webhook_url, head + ch):
+            return False
+        time.sleep(0.45)
+    return True
+
+
+_FETCH_ONLY_MAX_CHARS_PER_REPORT = 12000  # 单条钉钉正文防爆炸
+
+
+def _format_fetch_only_markdown(messages, window_label, after_str, before_str,
+                                full_body=False):
+    kw = '小秘书提醒'
+    mode = '全文' if full_body else '预览'
+    lines = [
+        f'### {kw} · 日报拉取（无 LLM · {mode}）',
+        f'**窗口** {window_label}',
+        f'`after={after_str}` `before={before_str}`',
+        f'共 **{len(messages)}** 条（已去重）',
+        '',
+        '---',
+        '',
+    ]
+    for i, m in enumerate(messages, 1):
+        sender = (m.get('sender') or '?').strip()
+        grp = m.get('_source_group', m.get('_source', '?'))
+        body = _extract_report_text(m).strip()
+        ts = m.get('ts', 0)
+        lines.append(f'{i}. **{sender}** · {_safe(str(grp))} `ts={ts}`')
+        lines.append('')
+        if full_body:
+            cap = _FETCH_ONLY_MAX_CHARS_PER_REPORT
+            if len(body) > cap:
+                body = body[:cap] + (
+                    f'\n\n…(单条超过 {cap} 字，已截断)')
+            for ln in body.split('\n'):
+                lines.append(f'    {ln}')
+        else:
+            prev = body.replace('\n', ' ')
+            if len(prev) > 220:
+                prev = prev[:220] + '...'
+            lines.append(f'   {prev}')
+        lines.append('')
+        lines.append('---')
+        lines.append('')
+    lines.append(f'###### {kw}')
+    return '\n'.join(lines)
+
+
 def send_via_webhook(text, webhook_url):
     """通过钉钉自定义机器人 webhook 发送消息"""
     import urllib.request as _urllib_req
@@ -1005,6 +1130,29 @@ def main():
         action='store_true',
         help='Send progress to webhook_config.json key "default" (also env REPORT_DIGEST_NOTIFY_DEFAULT=1)',
     )
+    parser.add_argument(
+        '--fetch-only',
+        action='store_true',
+        help='Only pull reports + DingTalk notify; no LLM. Use --window overnight-morning or --after/--before',
+    )
+    parser.add_argument(
+        '--window',
+        default=None,
+        choices=['overnight-morning'],
+        help='overnight-morning: yesterday local 18:30 -> today local 09:00',
+    )
+    parser.add_argument(
+        '--after',
+        default=None,
+        metavar='TS',
+        help='Fetch lower bound YYYY-MM-DD HH:MM:SS (use with --before)',
+    )
+    parser.add_argument(
+        '--before',
+        default=None,
+        metavar='TS',
+        help='Fetch upper bound YYYY-MM-DD HH:MM:SS (use with --after)',
+    )
     args = parser.parse_args()
 
     if args.discover:
@@ -1025,6 +1173,72 @@ def main():
             yes=args.yes,
         )
         return
+
+    if args.fetch_only:
+        cfg = _load_config()
+        report_cids = cfg.get('report_cids', [])
+        wh = _load_default_webhook_url()
+        if not wh and not args.dry_run:
+            print('[error] fetch-only needs webhook_config.json "default" URL (or --dry-run)',
+                  flush=True)
+            return 1
+
+        if args.window == 'overnight-morning':
+            after_str, before_str, ams, bms, win_label = (
+                _window_overnight_morning_local())
+        elif args.after and args.before:
+            after_str = args.after.strip()
+            before_str = args.before.strip()
+            try:
+                ams = datetime.strptime(
+                    after_str, '%Y-%m-%d %H:%M:%S').timestamp() * 1000
+                bms = datetime.strptime(
+                    before_str, '%Y-%m-%d %H:%M:%S').timestamp() * 1000
+            except ValueError:
+                print('[error] --after/--before must be YYYY-MM-DD HH:MM:SS',
+                      flush=True)
+                return 1
+            win_label = f'{after_str} ~ {before_str}'
+        else:
+            target_d = args.date or datetime.now().strftime('%Y-%m-%d')
+            dt = datetime.strptime(target_d, '%Y-%m-%d')
+            after_str = (dt.replace(hour=18, minute=30, second=0)).strftime(
+                '%Y-%m-%d %H:%M:%S')
+            before_str = (dt + timedelta(days=1)).replace(
+                hour=12, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
+            ams = datetime.strptime(after_str, '%Y-%m-%d %H:%M:%S').timestamp() * 1000
+            bms = datetime.strptime(before_str, '%Y-%m-%d %H:%M:%S').timestamp() * 1000
+            win_label = f'标准窗 {target_d} 18:30 - 次日 12:00'
+
+        td_log = datetime.strptime(after_str.split()[0], '%Y-%m-%d').strftime(
+            '%Y-%m-%d')
+
+        print(f'[fetch-only] window={win_label}', flush=True)
+        messages = fetch_reports(
+            td_log, report_cids, after_str=after_str, before_str=before_str)
+        jsapi_n = len(messages)
+        messages = _enrich_from_monitor_log(
+            messages, td_log, report_cids, after_ts_ms=ams, before_ts_ms=bms)
+        print(f'[fetch-only] JSAPI 去重 {jsapi_n}, 合并 monitor 后 {len(messages)}',
+              flush=True)
+
+        if args.full_content:
+            print('[fetch-only] --full-content: CEF 拉取详情页（较慢）…', flush=True)
+            messages = fetch_full_contents(messages)
+
+        md = _format_fetch_only_markdown(
+            messages, win_label, after_str, before_str,
+            full_body=bool(args.full_content))
+        clip = md if len(md) <= 6000 else md[:6000] + '\n...'
+        print(clip, flush=True)
+
+        if args.dry_run:
+            print('[fetch-only] dry-run, skip webhook', flush=True)
+            return 0
+        if _send_markdown_webhook_chunks(wh, md):
+            print('[fetch-only] default webhook OK', flush=True)
+            return 0
+        return 1
 
     target_date = args.date or datetime.now().strftime('%Y-%m-%d')
     config = _load_config()
@@ -1070,7 +1284,7 @@ def main():
 
     if not messages:
         print('[report-digest] no reports found, exiting', flush=True)
-        return
+        return 0
 
     if args.full_content:
         messages = fetch_full_contents(messages)
@@ -1107,7 +1321,9 @@ def main():
             print(f'[report-digest] send failed: {result}', flush=True)
     elif args.dry_run:
         print('[report-digest] dry-run mode, not sending', flush=True)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    _code = main()
+    raise SystemExit(0 if _code is None else _code)
