@@ -346,7 +346,7 @@ def render_digest(versions):
     return title + '\n\n' + separator.join(blocks) + footer
 
 
-def send_via_webhook(text, webhook_url):
+def send_via_webhook(text, webhook_url, *, quiet=False):
     body = json.dumps({
         'msgtype': 'markdown',
         'markdown': {
@@ -361,14 +361,76 @@ def send_via_webhook(text, webhook_url):
         with urllib.request.urlopen(req, timeout=15) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             if result.get('errcode') == 0:
-                print('[send] webhook OK', flush=True)
+                if not quiet:
+                    print('[send] webhook OK', flush=True)
                 return {'success': True}
-            else:
+            if not quiet:
                 print(f'[send] webhook error: {result}', flush=True)
-                return {'success': False, 'error': str(result)}
+            return {'success': False, 'error': str(result)}
     except Exception as e:
-        print(f'[send] webhook exception: {e}', flush=True)
+        if not quiet:
+            print(f'[send] webhook exception: {e}', flush=True)
         return {'success': False, 'error': str(e)}
+
+
+def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
+    """拉取活跃版本、渲染摘要；可选发 webhook。供 skill_router 与 CLI 共用。
+
+    log_to_stdout=False 时不打印正文（避免 skill_router 线程里 GBK 控制台问题）。
+    返回 dict: ok（已配置 webhook 且发送成功时为 True）、versions_count、digest、error（可选）
+    """
+    config = _load_config()
+    pm_url = config.get('pm_system_url', 'http://127.0.0.1:8000').rstrip('/')
+    api_key = config.get('pm_system_api_key', '')
+    limit = config.get('version_digest_limit', 3)
+    webhook_url = config.get('version_digest_webhook', '') or config.get('webhook_url', '')
+
+    if log_to_stdout:
+        print(f'[version-digest] fetching from {pm_url}', flush=True)
+
+    try:
+        all_versions = fetch_dashboard(pm_url, api_key=api_key or None)
+    except Exception as e:
+        if log_to_stdout:
+            print(f'[error] cannot reach PmSystem: {e}', flush=True)
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+
+    versions = filter_active(all_versions, limit)
+    if log_to_stdout:
+        print(f'[version-digest] {len(versions)} active version(s)', flush=True)
+
+    for v in versions:
+        v['_api_key'] = api_key or None
+        enrich_pipeline(pm_url, v)
+
+    digest = render_digest(versions)
+    if log_to_stdout:
+        try:
+            print(f'\n{digest}\n', flush=True)
+        except UnicodeEncodeError:
+            enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+            safe = (digest + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
+            print(f'\n{safe}\n', flush=True)
+
+    if not send_webhook:
+        return {'ok': True, 'versions_count': len(versions), 'digest': digest, 'error': None}
+
+    if not webhook_url:
+        if log_to_stdout:
+            print('[version-digest] no webhook configured, skipping send', flush=True)
+        return {'ok': False, 'versions_count': len(versions), 'digest': digest,
+                'error': 'no_webhook'}
+
+    quiet = not log_to_stdout
+    result = send_via_webhook(digest, webhook_url, quiet=quiet)
+    ok = bool(result and result.get('success'))
+    if log_to_stdout:
+        if ok:
+            print('[version-digest] sent via webhook', flush=True)
+        else:
+            print('[version-digest] send failed', flush=True)
+    err = None if ok else (result or {}).get('error', 'send failed')
+    return {'ok': ok, 'versions_count': len(versions), 'digest': digest, 'error': err}
 
 
 def main():
@@ -379,44 +441,13 @@ def main():
                         help='Save digest to file')
     args = parser.parse_args()
 
-    config = _load_config()
-    pm_url = config.get('pm_system_url', 'http://127.0.0.1:8000').rstrip('/')
-    api_key = config.get('pm_system_api_key', '')
-    limit = config.get('version_digest_limit', 3)
-    webhook_url = config.get('version_digest_webhook', '') or config.get('webhook_url', '')
+    r = run_version_digest_send(send_webhook=not args.dry_run, log_to_stdout=True)
 
-    print(f'[version-digest] fetching from {pm_url}', flush=True)
-
-    try:
-        all_versions = fetch_dashboard(pm_url, api_key=api_key or None)
-    except Exception as e:
-        print(f'[error] cannot reach PmSystem: {e}', flush=True)
-        sys.exit(1)
-
-    versions = filter_active(all_versions, limit)
-    print(f'[version-digest] {len(versions)} active version(s)', flush=True)
-
-    for v in versions:
-        v['_api_key'] = api_key or None
-        enrich_pipeline(pm_url, v)
-
-    digest = render_digest(versions)
-    print(f'\n{digest}\n', flush=True)
-
-    if args.output:
+    digest = r.get('digest') or ''
+    if args.output and digest:
         with open(args.output, 'w', encoding='utf-8') as f:
             f.write(digest)
         print(f'[version-digest] saved to {args.output}', flush=True)
-
-    if not args.dry_run and webhook_url:
-        result = send_via_webhook(digest, webhook_url)
-        if result and result.get('success'):
-            print('[version-digest] sent via webhook', flush=True)
-        else:
-            print('[version-digest] send failed', flush=True)
-    elif not args.dry_run and not webhook_url:
-        print('[version-digest] no webhook configured, skipping send',
-              flush=True)
 
 
 if __name__ == '__main__':

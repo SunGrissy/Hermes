@@ -1,5 +1,19 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-20] 快捷指令：人员筛选、选题独立号、桌面运维、双发去重
+
+### 状态：验收通过
+
+### 本次工作内容
+
+- **人员关键词**：`person_lookup_aliases`；群内「洋哥」「找崔哥」等列出备忘+愿望；路由 15s 关键词节流 + `_MEMO_THROTTLE_LOCK`
+- **选题**：`topic_items` + TR `topic:#N`，与 `memo_seq` 独立；`topic_pick_confirm` / `topic_duplicate`；TR 同步闭环 topic
+- **备忘**：改描述/版本/指派全文去重（`_EDIT_CMD_DEDUP_LOCK`、与路由一致的零宽/繁体归一）；指派正则「指派给」、who 去冗余「给」
+- **桌面运维**（`desk_ops`）：检查大门（`daemon_health_notify --no-webhook`）、重启大门（`desk_ops_restart` 分离进程）、拉日报（`--full-content --notify-default`）；`desk_ops_enabled`
+- **脚本**：`daemon_health_notify.py` 增加 `--no-webhook`；`report_digest` / `version_digest` / `run_daily_digest.ps1` 与进度通知、定时说明同期维护
+
+---
+
 ## [2026-03-19] 预审技能 + 推送缓存 + 强制重跑 + 助理群入队
 
 ### 状态：验收通过

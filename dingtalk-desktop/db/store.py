@@ -6,6 +6,7 @@ SQLite 持久化封装。
   reports          — 每日日报采集记录
   digest_runs      — 每次摘要运行结果
   resume_screen_log — 简历 AI 初筛记录（ct=502 文件消息触发）
+  memo_items / wish_items / topic_items — 备忘、愿望、选题（选题独立 topic_seq，TR note 为 topic:#N）
 """
 import os
 import json
@@ -106,6 +107,23 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_wish_seq
                 ON wish_items(wish_seq);
+
+            CREATE TABLE IF NOT EXISTS topic_items (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                topic_seq   INTEGER NOT NULL,
+                msg_id      TEXT NOT NULL UNIQUE,
+                text        TEXT NOT NULL,
+                who         TEXT,
+                due         TEXT,
+                priority    TEXT DEFAULT 'medium',
+                context     TEXT,
+                task_reminder_id INTEGER,
+                status      TEXT DEFAULT 'active',
+                ts_created  INTEGER,
+                ts_closed   INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_topic_seq
+                ON topic_items(topic_seq);
         """)
         # 兼容旧库：增加规范化 URL 列（用于同一文档时间窗口去重）
         try:
@@ -123,6 +141,7 @@ def init_db():
         try:
             c.execute("DELETE FROM memo_items WHERE status = 'deleted'")
             c.execute("DELETE FROM wish_items WHERE status = 'deleted'")
+            c.execute("DELETE FROM topic_items WHERE status = 'deleted'")
         except Exception:
             pass
         c.commit()
@@ -245,6 +264,25 @@ def update_memo_due(memo_seq, due):
         cur = c.execute(
             "UPDATE memo_items SET due=? WHERE memo_seq=? AND status='active'",
             (due, memo_seq),
+        )
+        n = cur.rowcount
+        c.commit()
+        c.close()
+    return int(n or 0)
+
+
+def update_memo_text(memo_seq, text):
+    """更新进行中备忘正文（与 TR what 对齐）。返回影响行数。"""
+    if text is None:
+        return 0
+    text = str(text).strip()
+    if not text:
+        return 0
+    with _lock:
+        c = _conn()
+        cur = c.execute(
+            "UPDATE memo_items SET text=? WHERE memo_seq=? AND status='active'",
+            (text, memo_seq),
         )
         n = cur.rowcount
         c.commit()
@@ -399,6 +437,94 @@ def get_pending_wishes():
         ).fetchall()
         c.close()
         return [dict(r) for r in rows]
+
+
+# ── topic_items（群「选题」→ TR，topic_seq 独立，note 为 topic:#N）────────
+
+def get_next_topic_seq():
+    with _lock:
+        c = _conn()
+        row = c.execute("SELECT MAX(topic_seq) FROM topic_items").fetchone()
+        c.close()
+        return (row[0] or 0) + 1
+
+
+def is_topic_processed(msg_id):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT id FROM topic_items WHERE msg_id=?", (str(msg_id),)
+        ).fetchone()
+        c.close()
+        return row is not None
+
+
+def save_topic_item(topic_seq, msg_id, text, who='', due=None,
+                    priority='medium', context=None, task_reminder_id=None):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "INSERT OR IGNORE INTO topic_items "
+            "(topic_seq, msg_id, text, who, due, priority, context, "
+            " task_reminder_id, status, ts_created) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (topic_seq, str(msg_id), text, who, due, priority,
+             context, task_reminder_id, 'active',
+             int(datetime.now().timestamp())),
+        )
+        c.commit()
+        c.close()
+
+
+def delete_topic_item(topic_seq):
+    with _lock:
+        c = _conn()
+        cur = c.execute("DELETE FROM topic_items WHERE topic_seq=?", (topic_seq,))
+        n = cur.rowcount
+        c.commit()
+        c.close()
+    return int(n or 0)
+
+
+def close_topic_item(topic_seq):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "UPDATE topic_items SET status='done', ts_closed=? WHERE topic_seq=?",
+            (int(datetime.now().timestamp()), topic_seq),
+        )
+        c.commit()
+        c.close()
+
+
+def get_topic_by_seq(topic_seq):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT * FROM topic_items WHERE topic_seq=?", (topic_seq,)
+        ).fetchone()
+        c.close()
+        return dict(row) if row else None
+
+
+def get_pending_topics():
+    with _lock:
+        c = _conn()
+        rows = c.execute(
+            "SELECT * FROM topic_items WHERE status='active' ORDER BY topic_seq"
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
+
+
+def find_active_topic_duplicate_body(content: str):
+    nk = _normalize_body_dedup_key(content)
+    if not nk:
+        return None
+    for m in get_pending_topics():
+        if _normalize_body_dedup_key(m.get('text') or '') == nk:
+            return dict(m)
+    return None
 
 
 # ── doc_review_log ───────────────────────────────────────────

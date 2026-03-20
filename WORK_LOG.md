@@ -1,5 +1,20 @@
 # Work Log - MyAgents Root
 
+## 2026-03-20 - dingtalk-desktop：快捷指令（人员筛选/选题独立号/运维/双发去重）
+
+**状态**: 验收通过
+
+**内容**:
+- `db/store.py`：`topic_items` 选题独立编号；选题 CRUD/同步辅助
+- `skills/memo_tracker.py`：人员关键词筛选；选题走 `topic:#N`；备忘改描述/指派去重锁与文本归一；`_consume_edit_cmd_dedup` 原子化
+- `skills/desk_ops.py`：检查大门、重启大门、拉日报（含 `--notify-default`）
+- `desk_ops_restart.py`、`daemon_health_notify.py`（`--no-webhook`）
+- `skill_router.py`：desk_ops 与人员节流锁 `_MEMO_THROTTLE_LOCK`
+- `digest_config.json`、`message_templates.json`
+- `report_digest.py` / `run_daily_digest.ps1` / `version_digest.py`：与日报进度通知、定时任务说明等同期调整（见 dingtalk-desktop/WORK_LOG）
+
+---
+
 ## 2026-03-20 - pm-system 子模块：ApiClient 版本级权限 shim（恢复版本发布按钮）
 
 **状态**: 已推送 tygit（`origin`）；子模块 `main` 指向 `06f173a`

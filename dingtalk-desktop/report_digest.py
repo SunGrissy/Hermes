@@ -8,11 +8,14 @@ Usage:
     py report_digest.py --date 2026-03-15       # analyze specific date
     py report_digest.py --dry-run               # print summary, don't send
     py report_digest.py --output digest.md      # save to file
+    py report_digest.py --date ... --full-content --notify-default
+        # progress pings to webhook_config.json \"default\" during fetch/analyze/send
 """
 import os
 import sys
 import io
 import json
+import time
 import argparse
 import urllib.request
 from datetime import datetime, timedelta
@@ -26,6 +29,62 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
 
 DAEMON_URL = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 NOTIFY_TARGET = os.environ.get('REPORT_NOTIFY_TARGET', '')
+
+# --notify-default: webhook_config.json key \"default\"，拉取/分析/推送各阶段进度
+_PROGRESS_WEBHOOK_URL = ''
+_PROGRESS_KW = '小秘书提醒'
+
+
+def _set_progress_webhook(url: str) -> None:
+    global _PROGRESS_WEBHOOK_URL
+    _PROGRESS_WEBHOOK_URL = (url or '').strip()
+
+
+def _load_default_webhook_url() -> str:
+    try:
+        root = os.path.dirname(os.path.abspath(__file__))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from lib.utils import get_webhook_url  # noqa: E402
+
+        return (get_webhook_url('default', '') or '').strip()
+    except Exception:
+        return ''
+
+
+def _notify_progress(title: str, lines: list) -> None:
+    """Markdown to default robot; no-op if _PROGRESS_WEBHOOK_URL empty."""
+    if not _PROGRESS_WEBHOOK_URL:
+        return
+    body = '\n'.join(str(x) for x in lines if x is not None)
+    text = (
+        f'### {_PROGRESS_KW} · 日报进度\n'
+        f'**{title}**\n\n{body}\n\n'
+        f'---\n###### ※ {_PROGRESS_KW}'
+    )
+    payload = json.dumps(
+        {
+            'msgtype': 'markdown',
+            'markdown': {
+                'title': f'{_PROGRESS_KW} · 日报进度',
+                'text': text,
+            },
+        },
+        ensure_ascii=False,
+    ).encode('utf-8')
+    req = urllib.request.Request(
+        _PROGRESS_WEBHOOK_URL,
+        data=payload,
+        method='POST',
+        headers={'Content-Type': 'application/json; charset=utf-8'},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            out = json.loads(resp.read().decode('utf-8', errors='replace'))
+        if out.get('errcode') != 0:
+            print(f'[progress] webhook err: {out}', flush=True)
+    except Exception as e:
+        print(f'[progress] webhook fail: {e}', flush=True)
 
 
 def _safe(s):
@@ -87,7 +146,7 @@ _DEFAULT_REPORT_TEMPLATE = {
         'quality_flags':  {'header': '⚠️ 质量标记', 'item_format': '• {name}：{issue}',          'show': True, 'max_items': 8},
         'attention_items':{'header': '【关注】',    'item_format': '→ [{source}] {content}',     'show': True, 'max_items': 8},
     },
-    'llm': {'text_limit_per_person': 2500},
+    'llm': {'text_limit_per_person': 6000},
 }
 
 
@@ -173,8 +232,9 @@ def fetch_reports(target_date, report_cids):
             'max_seconds': 60,
         })
         if not result.get('success'):
+            err = result.get('error', '') or ''
             print(f'[warn] fetch from {_safe(name)} failed: '
-                  f'{result.get("error", "")}', flush=True)
+                  f'{err}', flush=True)
             time.sleep(3)   # 给 JSAPI browser 短暂恢复时间
             continue
         fetched = result.get('messages', [])
@@ -298,7 +358,16 @@ def _enrich_from_monitor_log(messages, target_date, report_cids):
 
 
 def _extract_report_text(m):
-    """从消息中提取日报全文。优先解析 bf (b_form JSON)，回退到 text。"""
+    """从消息中提取日报全文。
+
+    优先使用 CEF /fetch_report_content 写入的 _report_body（完整正文），
+    避免 bf/b_form 里只有模板标题行时盖住已拉取的全文。
+    否则解析 bf (b_form JSON)，最后回退 text。
+    """
+    full_body = (m.get('_report_body') or '').strip()
+    if full_body:
+        return full_body
+
     bf_raw = m.get('bf') or m.get('b_form') or ''
     if bf_raw:
         try:
@@ -411,6 +480,7 @@ def _build_analysis_prompt(report_texts, submitters, missing, target_date,
    - 内容过于笼统，无具体产出或数据（如"推进中""对齐中"无实质内容）
    - 明显敷衍（极短、复制昨天内容等）
    - 按角色标准判断（见下方角色差异化评判），不要用通用模板项去标记不适用的角色
+   - 若正文已包含多段实质描述（具体事项、产出、数据），**不要**仅因模板标题行而标记「被截断」
 3. **attention_items**: 值得制作人关注的事项，每项含 source(来源人名) 和 content(具体内容)
    - 提到阻塞、卡点、等待审批
    - 提到延期风险、排期冲突、资源不足
@@ -748,23 +818,25 @@ def _looks_like_error_page(content):
 
 
 def fetch_full_contents(messages):
-    """For messages with a report_url but short text, fetch full content via daemon.
+    """对有 report_url 的消息通过 daemon 拉取日报详情页正文（--full-content）。
 
-    Uses /fetch_report_content which loads the URL in DingTalk's browser and
-    extracts the DOM.  This is slow (~20-30s per report), so only use with
-    --full-content flag.
+    说明：
+    - 以前用 len(text)>300 跳过拉取，但钉钉卡片 biz_custom_desc 预览常 >300
+      却仍非全文，导致 LLM 误判「仅标题、被截断」。
+    - 拉取成功后写入 _report_body，_extract_report_text 优先用它，避免短 bf 覆盖。
     """
     enriched = 0
     skipped_error = 0
+    need_urls = [m for m in messages if (m.get('report_url') or '').strip()]
+    total_url = len(need_urls)
     for m in messages:
         url = m.get('report_url', '') or ''
         if not url:
             continue
-        txt = m.get('text', '') or ''
-        if len(txt) > 300:
-            continue
         sender = m.get('sender', '?')
-        print(f'[full-content] {_safe(sender)} ...', flush=True)
+        preview_len = len((_extract_report_text(m) or '').strip())
+        print(f'[full-content] {_safe(sender)} (preview ~{preview_len} chars) ...',
+              flush=True)
         result = _daemon_request('/fetch_report_content', {'url': url})
         if result.get('success') and result.get('content'):
             content = result['content']
@@ -774,13 +846,30 @@ def fetch_full_contents(messages):
                       f'{_safe(content[:60])}', flush=True)
                 skipped_error += 1
             else:
+                m['_report_body'] = content
                 m['text'] = content
                 enriched += 1
-                print(f'  -> {result.get("text_length", 0)} chars '
+                tl = result.get('text_length', 0)
+                print(f'  -> {tl} chars '
                       f'({result.get("extraction_method", "")})', flush=True)
         else:
-            print(f'  -> failed: {_safe(str(result.get("error", "")))}',
+            err = str(result.get('error', '') or '')
+            print(f'  -> failed: {_safe(err)}',
                   flush=True)
+    if _PROGRESS_WEBHOOK_URL:
+        if total_url:
+            _notify_progress(
+                '全文拉取完成',
+                [
+                    f'成功 **{enriched}** / 有 URL **{total_url}** 条',
+                    f'疑似过期/错误页跳过 **{skipped_error}**',
+                ],
+            )
+        else:
+            _notify_progress(
+                '全文拉取完成',
+                ['本轮无 **report_url**，未走 CEF 详情页'],
+            )
     print(f'[full-content] enriched {enriched}/{len(messages)} reports'
           f'{f", {skipped_error} skipped (expired URL)" if skipped_error else ""}',
           flush=True)
@@ -911,6 +1000,11 @@ def main():
                         help='Discover new members from fetched reports (use with --date)')
     parser.add_argument('--yes', action='store_true',
                         help='Auto-confirm prompts (e.g. for --discover-members)')
+    parser.add_argument(
+        '--notify-default',
+        action='store_true',
+        help='Send progress to webhook_config.json key "default" (also env REPORT_DIGEST_NOTIFY_DEFAULT=1)',
+    )
     args = parser.parse_args()
 
     if args.discover:
@@ -939,6 +1033,24 @@ def main():
     webhook_url = config.get('webhook_url', '') or ''
     report_cids = config.get('report_cids', [])
 
+    env_notify = os.environ.get('REPORT_DIGEST_NOTIFY_DEFAULT', '').strip().lower()
+    want_progress = bool(args.notify_default or env_notify in ('1', 'true', 'yes', 'on'))
+    if want_progress:
+        dw = _load_default_webhook_url()
+        if dw:
+            _set_progress_webhook(dw)
+            _notify_progress(
+                '日报进度',
+                [
+                    f'任务开始 · 统计日期 **{target_date}**',
+                    f'团队 **{len(team)}** 人，监听群 **{len(report_cids)}**',
+                    '时间窗口：当日 **18:30** → 次日 **12:00**',
+                ],
+            )
+        else:
+            print('[warn] --notify-default set but webhook_config default URL is empty',
+                  flush=True)
+
     print(f'[report-digest] date={target_date}, team={len(team)} members, '
           f'groups={len(report_cids)}', flush=True)
 
@@ -947,6 +1059,14 @@ def main():
     messages = _enrich_from_monitor_log(messages, target_date, report_cids)
     print(f'[report-digest] fetched {jsapi_count} via JSAPI, '
           f'{len(messages)} total (after monitor enrichment)', flush=True)
+    if _PROGRESS_WEBHOOK_URL:
+        _notify_progress(
+            '阶段拉取完成',
+            [
+                f'JSAPI 去重后 **{jsapi_count}** 条',
+                f'合并监控日志后 **{len(messages)}** 条',
+            ],
+        )
 
     if not messages:
         print('[report-digest] no reports found, exiting', flush=True)
@@ -954,6 +1074,9 @@ def main():
 
     if args.full_content:
         messages = fetch_full_contents(messages)
+
+    if _PROGRESS_WEBHOOK_URL:
+        _notify_progress('LLM分析', ['正在汇总日报并请求模型，请稍候…'])
 
     analysis = analyze_reports(messages, team, target_date)
     digest_text = format_digest(analysis, target_date)
@@ -966,6 +1089,15 @@ def main():
             f.write('\n\n---\nRaw analysis:\n')
             f.write(json.dumps(analysis, ensure_ascii=False, indent=2))
         print(f'[report-digest] saved to {args.output}', flush=True)
+
+    if _PROGRESS_WEBHOOK_URL:
+        extra = []
+        if args.dry_run:
+            extra.append('（dry-run，未发主摘要）')
+        _notify_progress(
+            '分析完成',
+            [f'摘要约 **{len(digest_text)}** 字'] + extra,
+        )
 
     if not args.dry_run and notify:
         result = send_digest(digest_text, notify, webhook_url=webhook_url or None)

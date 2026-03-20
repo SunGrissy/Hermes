@@ -5,18 +5,20 @@
 当前支持：
   - 监听招聘群内 ct=502（PDF 文件消息）→ 触发简历 AI 初筛
   - 监听助理群 + memo_tracker.colleague_skill_cids 白名单群 → 备忘 / 许愿 / 完成 等（他人仅白名单群入队）
-  - 文本含「许愿」→ 写入 TaskReminder，负责人为配置项 wish_assignee（默认「愿望单」）
-  - 文本含「愿望单」→ 列出未完成愿望（wish #N + 旧版 TR 条目）（日志 + webhook）
+  - 文本含「许愿」「愿望」或英文 wish（整词）→ 写入 TaskReminder，负责人为配置项 wish_assignee（默认「愿望单」）
+  - 文本含「愿望单」→ 列出未完成愿望（wish #N + 旧版 TR 条目）（日志 + webhook）；优先于「愿望」单独触发
   - 文本含「删除 wish N」「删除愿望 N」→ 删本地 wish 记录并移除 TR 中 wish:#N
   - 文本含「完成 wish N」「关闭愿望 N」→ 本地标 done，TR 中 wish:#N 标 processStatus=done
   - 助理通知群发送「上班啦」/「上班」→ 执行 MyAgents 工具状态检查，结果经 webhook（小秘书提醒）推送
+  - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
+  - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 删除/done 与本地 memo/wish/topic
   - 助理群「预审」：推送路径下优先用本进程缓存的「上一条钉钉文档链接」（与备忘同源 send 事件），避免依赖 /fetch 回溯
 
 架构：
   - 启动时由 daemon.py 调用 SkillRouter.start()
   - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各群的新消息
   - ct=502 且未处理过 → 交给 skills/resume_screen
-  - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker
+  - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望」/wish/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker；触发词后可跟标点空格，解析时会剥离
   - 通过 DB + 内存 seen_ids 实现幂等
   - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
 """
@@ -29,15 +31,12 @@ import threading
 import urllib.request
 from datetime import datetime
 
-# [AgentMemo Task] 开始时间: 2026-03-18 19:00
-# [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
-# [AgentWish Task] 开始时间: 2026-03-19
-# [AgentWish Task] 任务目标: WISH-001 群消息「许愿」/「愿望单」路由
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _THIS_DIR)
 
 from db.store import init_db, is_resume_processed, is_memo_processed, is_doc_review_processed
 from skills.resume_screen import process_resume_message
+from version_digest import run_version_digest_send
 from skills.memo_tracker import (
     process_memo,
     process_close,
@@ -52,7 +51,17 @@ from skills.memo_tracker import (
     process_wish,
     process_wish_list,
     wish_content_key,
+    strip_leading_trigger_punct,
+    process_memo_edit_description,
+    process_memo_edit_version,
+    process_memo_assign_tr,
+    process_topic_pick,
+    topic_pick_content_key,
+    process_person_lookup,
+    person_lookup_match_keyword,
+    sync_tr_state_to_local_memos_wishes,
 )
+from skills.desk_ops import process_desk_ops
 from skills.doc_review import (
     extract_doc_url,
     extract_doc_url_from_message,
@@ -66,6 +75,8 @@ from lib.utils import get_webhook_url, DATA_DIR
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 POLL_INTERVAL = int(os.environ.get('SKILL_ROUTER_INTERVAL', '20'))   # 秒（推送未接入时兜底；可设 SKILL_ROUTER_INTERVAL=60 恢复）
+_last_tr_sync_ms = 0
+_TR_SYNC_INTERVAL_MS = int(os.environ.get('SKILL_TR_SYNC_INTERVAL_MS', '120000'))  # TR↔本地对齐周期（毫秒）
 _CONFIG_PATH  = os.path.join(_THIS_DIR, 'digest_config.json')
 # 与 daemon 写入的日志路径一致，否则预审回溯时读不到「刚发的文档链接」
 _LOG_FILE     = os.path.join(DATA_DIR, '_msg_log.jsonl')
@@ -327,7 +338,9 @@ def _poll_once(cid: str, notify_cid: str, seen_ids: set,
     source_name: 来源的显示名（用于推送消息中告知来源）
     start_ts: daemon 本次启动时刻（毫秒），早于此时刻的消息跳过
     """
-    messages = _fetch_recent_messages(cid, count=20)
+    # 与 _HYDRATE_FETCH_TIMEOUT_S 一致：daemon /fetch 串行锁 + JSAPI 慢时 30s 易误判超时
+    messages = _fetch_recent_messages(
+        cid, count=20, timeout=_HYDRATE_FETCH_TIMEOUT_S)
     processed_count = 0
     now_ms = int(time.time() * 1000)
     # 截止时间 = max(启动时刻, 48小时前)，两个条件都满足才处理
@@ -464,6 +477,9 @@ _RE_PRECHECK_STOP = re.compile(
 )
 # 支持「上班啦」「上班」「上班啦！」等，整条以上班啦/上班开头且无其它实质内容即可
 _RE_MORNING = re.compile(r'^\s*(?:上班啦|上班)\s*[!！。.~\s]*$')
+# 版本状态摘要（与 py version_digest.py 同源，发向 digest 里 version_digest_webhook）
+_RE_VERSION_DIGEST = re.compile(
+    r'^\s*版本\s*(?:咋样|怎么样)了\s*[!！。.?？~\s]*$')
 
 
 def _precheck_command_flags(text: str) -> tuple:
@@ -515,6 +531,8 @@ _PRECHECK_CMD_MAX_AGE_MS = int(os.environ.get('SKILL_PRECHECK_MAX_AGE_MS', str(3
 _RECENT_CMD_MS = 15000   # 同一指令 15 秒内只响应一次，避免重复推送
 _recent_cmd_ts = {}      # (group_cid, cmd_key) -> last_run_ts_ms
 _recent_memo_ts = {}     # (group_cid, content_key) -> last_run_ts_ms，备忘按内容短时去重
+# 人员筛选等 throttle 的读改写与 push/poll 并发时加锁，避免双线程同时通过 15s 窗
+_MEMO_THROTTLE_LOCK = threading.Lock()
 
 
 def _is_stale_command_msg(msg: dict, now_ms: int, max_age_ms: int) -> bool:
@@ -547,8 +565,24 @@ def _memo_content_key(text: str) -> str:
     if not text:
         return ''
     t = re.sub(r'[\uff3b【\[]*(?:备忘|提醒我|TR)[\uff3d】\]]*', '', text).strip()
+    t = strip_leading_trigger_punct(t)
     t = ' '.join(t.split())  # 合并中间空白，避免同一句因空格差异被处理两次
     return (t[:80] or '').strip()
+
+
+def _text_triggers_new_wish(text: str) -> bool:
+    """与「许愿」等效的新愿望触发：含愿望单时只走列表，不收录。"""
+    if not text:
+        return False
+    if '愿望单' in text:
+        return False
+    if '许愿' in text:
+        return True
+    if re.search(r'愿望(?!单)', text):
+        return True
+    if re.search(r'(?i)\bwish\b', text):
+        return True
+    return False
 
 
 def _normalize_push_record(record: dict) -> dict:
@@ -707,6 +741,24 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'morning status_check error: {e}')
         return
 
+    if _RE_VERSION_DIGEST.match(text):
+        key = (msg_cid, 'version_digest')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            r = run_version_digest_send(send_webhook=True, log_to_stdout=False)
+            memo_seen_ids.add(msg_id)
+            if r.get('ok'):
+                _log('push: 版本咋样了 -> version_digest 已推送')
+            else:
+                _log(f'push: 版本咋样了 -> 未成功 ({r.get("error")})')
+        except Exception as e:
+            memo_seen_ids.add(msg_id)
+            _log(f'version_digest error: {e}')
+        return
+
     if _RE_TODAY_FOCUS.search(text):
         key = (msg_cid, 'today_focus')
         if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
@@ -769,6 +821,43 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         except Exception as e:
             _log(f'defer_memo error: {e}')
         return
+
+    for _edit_fn in (
+        process_memo_edit_description,
+        process_memo_edit_version,
+        process_memo_assign_tr,
+    ):
+        try:
+            if _edit_fn(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
+                memo_seen_ids.add(msg_id)
+                _log('push: 备忘快捷指令已处理')
+                return
+        except Exception as e:
+            _log(f'memo quick-edit {_edit_fn.__name__} error: {e}')
+
+    try:
+        if process_desk_ops(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
+            memo_seen_ids.add(msg_id)
+            _log('push: 桌面运维指令')
+            return
+    except Exception as e:
+        _log(f'desk_ops error: {e}')
+
+    with _MEMO_THROTTLE_LOCK:
+        kw_pl = person_lookup_match_keyword(text, memo_cfg)
+        if kw_pl is not None:
+            pl_key = (str(msg_cid).strip(), 'person_lookup', kw_pl)
+            if now_ms - _recent_cmd_ts.get(pl_key, 0) < _RECENT_CMD_MS:
+                memo_seen_ids.add(msg_id)
+                return
+            _recent_cmd_ts[pl_key] = now_ms
+    try:
+        if process_person_lookup(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
+            memo_seen_ids.add(msg_id)
+            _log('push: 人员关键词筛选（备忘+愿望）')
+            return
+    except Exception as e:
+        _log(f'person_lookup error: {e}')
 
     if _RE_DELETE_WISH.search(text):
         m_seq = re.search(r'删除\s*(?:wish|愿望)\s*#?\s*(\d+)', text, re.IGNORECASE)
@@ -846,8 +935,22 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'close error: {e}')
         return
 
-    # 「许愿」优先于「愿望单」：同条消息同时出现时只收录愿望，不刷列表
-    if '许愿' in text:
+    # 「愿望单」优先于「愿望」单字触发，避免误收录
+    if '愿望单' in text:
+        key = (msg_cid, 'wish_list')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            process_wish_list(memo_cfg, group_cid=msg_cid)
+            memo_seen_ids.add(msg_id)
+            _log('push: 愿望单列表已打印并推送')
+        except Exception as e:
+            _log(f'wish_list error: {e}')
+        return
+
+    if _text_triggers_new_wish(text):
         ck = wish_content_key(text)
         if ck:
             wish_dedup = 'wish_c:' + ck
@@ -865,24 +968,33 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
                 if ck:
                     memo_seen_ids.add('wish_c:' + ck)
                     _recent_memo_ts[(msg_cid, ck)] = now_ms
-                _log('push: 许愿已收录 TaskReminder')
+                _log('push: 愿望已收录 TaskReminder')
         except Exception as e:
             _log(f'wish error: {e}')
         return
 
-    if '愿望单' in text:
-        key = (msg_cid, 'wish_list')
-        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
-            memo_seen_ids.add(msg_id)
+    try:
+        memo_ts_push = int(msg.get('ts', 0) or 0)
+        tp = process_topic_pick(
+            msg_id=msg_id, text=text, context_msgs=[msg],
+            memo_ts=memo_ts_push, group_cid=msg_cid, config=memo_cfg)
+        if tp is not False:
+            if tp is None:
+                _log('push: 选题收录 TR 暂不可写')
+            else:
+                tck = topic_pick_content_key(text)
+                if tck:
+                    tid = 'topic_c:' + tck
+                    if tid in memo_seen_ids:
+                        memo_seen_ids.add(msg_id)
+                        return
+                    memo_seen_ids.add(tid)
+                    _recent_memo_ts[(msg_cid, tck)] = now_ms
+                memo_seen_ids.add(msg_id)
+                _log('push: 选题已收录')
             return
-        _recent_cmd_ts[key] = now_ms
-        try:
-            process_wish_list(memo_cfg, group_cid=msg_cid)
-            memo_seen_ids.add(msg_id)
-            _log('push: 愿望单列表已打印并推送')
-        except Exception as e:
-            _log(f'wish_list error: {e}')
-        return
+    except Exception as e:
+        _log(f'topic_pick error: {e}')
 
     if _RE_MEMO.search(text):
         if is_memo_processed(msg_id):
@@ -951,6 +1063,28 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'morning status_check error: {e}')
+            continue
+
+        if _RE_VERSION_DIGEST.match(text):
+            if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+                seen_ids.add(msg_id)
+                _log('poll: 版本咋样了 -> 跳过（超出有效时间窗或时间戳无效）')
+                continue
+            key = (str(group_cid), 'version_digest')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                r = run_version_digest_send(send_webhook=True, log_to_stdout=False)
+                seen_ids.add(msg_id)
+                if r.get('ok'):
+                    _log('poll: 版本咋样了 -> version_digest 已推送')
+                else:
+                    _log(f'poll: 版本咋样了 -> 未成功 ({r.get("error")})')
+            except Exception as e:
+                seen_ids.add(msg_id)
+                _log(f'version_digest error: {e}')
             continue
 
         if _RE_DELETE_WISH.search(text):
@@ -1039,6 +1173,47 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'defer_memo error: {e}')
             continue
 
+        _poll_edit_handled = False
+        for _edit_fn in (
+            process_memo_edit_description,
+            process_memo_edit_version,
+            process_memo_assign_tr,
+        ):
+            try:
+                if _edit_fn(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
+                    seen_ids.add(msg_id)
+                    _log('poll: 备忘快捷指令已处理')
+                    _poll_edit_handled = True
+                    break
+            except Exception as e:
+                _log(f'memo quick-edit {_edit_fn.__name__} error: {e}')
+        if _poll_edit_handled:
+            continue
+
+        try:
+            if process_desk_ops(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
+                seen_ids.add(msg_id)
+                _log('poll: 桌面运维指令')
+                continue
+        except Exception as e:
+            _log(f'desk_ops error: {e}')
+
+        with _MEMO_THROTTLE_LOCK:
+            kw_pl = person_lookup_match_keyword(text, memo_cfg)
+            if kw_pl is not None:
+                pl_key = (str(group_cid).strip(), 'person_lookup', kw_pl)
+                if now_ms - _recent_cmd_ts.get(pl_key, 0) < _RECENT_CMD_MS:
+                    seen_ids.add(msg_id)
+                    continue
+                _recent_cmd_ts[pl_key] = now_ms
+        try:
+            if process_person_lookup(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
+                seen_ids.add(msg_id)
+                _log('poll: 人员关键词筛选（备忘+愿望）')
+                continue
+        except Exception as e:
+            _log(f'person_lookup error: {e}')
+
         if _RE_CLOSE_WISH.search(text):
             m_seq = re.search(r'(?:完成|关闭)\s*(?:wish|愿望)\s*#?\s*(\d+)', text, re.IGNORECASE)
             if m_seq:
@@ -1063,7 +1238,20 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'close error: {e}')
             continue
 
-        if '许愿' in text:
+        if '愿望单' in text:
+            key = (str(group_cid), 'wish_list')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                process_wish_list(memo_cfg, group_cid=group_cid)
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'wish_list error: {e}')
+            continue
+
+        if _text_triggers_new_wish(text):
             ck = wish_content_key(text)
             if ck:
                 wish_dedup = 'wish_c:' + ck
@@ -1084,18 +1272,28 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'wish error: {e}')
             continue
 
-        if '愿望单' in text:
-            key = (str(group_cid), 'wish_list')
-            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
-                seen_ids.add(msg_id)
+        try:
+            memo_ts_poll = int(msg.get('ts', 0) or 0)
+            tp = process_topic_pick(
+                msg_id=msg_id, text=text, context_msgs=messages,
+                memo_ts=memo_ts_poll, group_cid=group_cid, config=memo_cfg)
+            if tp is not False:
+                if tp is None:
+                    _log('poll: 选题收录 TR 暂不可写')
+                else:
+                    tck = topic_pick_content_key(text)
+                    if tck:
+                        tid = 'topic_c:' + tck
+                        if tid in seen_ids:
+                            seen_ids.add(msg_id)
+                            continue
+                        seen_ids.add(tid)
+                        _recent_memo_ts[(str(group_cid), tck)] = now_ms
+                    seen_ids.add(msg_id)
+                    _log('poll: 选题已收录')
                 continue
-            _recent_cmd_ts[key] = now_ms
-            try:
-                process_wish_list(memo_cfg, group_cid=group_cid)
-                seen_ids.add(msg_id)
-            except Exception as e:
-                _log(f'wish_list error: {e}')
-            continue
+        except Exception as e:
+            _log(f'topic_pick error: {e}')
 
         if _RE_MEMO.search(text):
             if is_memo_processed(msg_id):
@@ -1125,6 +1323,23 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             except Exception as e:
                 _log(f'memo error: {e}')
             continue
+
+
+def _maybe_sync_tr_local(memo_cfg: dict) -> None:
+    global _last_tr_sync_ms
+    if not (memo_cfg or {}).get('task_reminder_base', '').strip():
+        return
+    now_ms = int(time.time() * 1000)
+    if now_ms - _last_tr_sync_ms < _TR_SYNC_INTERVAL_MS:
+        return
+    _last_tr_sync_ms = now_ms
+    try:
+        stats = sync_tr_state_to_local_memos_wishes(memo_cfg)
+        n = sum(stats.values())
+        if n:
+            _log(f'TR<->local sync {stats}')
+    except Exception as e:
+        _log(f'TR sync error: {e}')
 
 
 def _send_notify(text: str, webhook_url: str):
@@ -1339,6 +1554,8 @@ class SkillRouter:
                         )
                     except Exception as e:
                         _log(f'memo poll [{_poll_cid}] error: {e}')
+            if _memo_allowed_cids(memo_cfg):
+                _maybe_sync_tr_local(memo_cfg)
 
             if doc_review_cfg and doc_review_cfg.get('group_cid'):
                 try:

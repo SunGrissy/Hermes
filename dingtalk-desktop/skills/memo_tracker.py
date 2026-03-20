@@ -17,11 +17,6 @@ import functools
 import urllib.request
 from datetime import datetime, timedelta
 
-# [AgentMemo Task] 开始时间: 2026-03-18 19:00
-# [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
-# [AgentWish Task] 开始时间: 2026-03-19
-# [AgentWish Task] 任务目标: WISH wish 序号/列表/删除 wish N + TaskReminder 愿望单
-# [AgentWish Task] 白名单群备忘/关注等与许愿共用 wish_reply_webhook_by_cid，避免回复发到助理群
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.join(_THIS_DIR, '..')
 _TEMPLATE_PATH = os.path.join(_ROOT, 'message_templates.json')
@@ -30,13 +25,21 @@ sys.path.insert(0, _ROOT)
 from db.store import (
     find_active_memo_duplicate_body,
     find_active_wish_duplicate_body,
+    find_active_topic_duplicate_body,
     save_memo_item,
+    save_topic_item,
     get_next_memo_seq,
+    get_next_topic_seq,
     is_memo_processed,
+    is_topic_processed,
     close_memo_item,
+    close_topic_item,
     delete_memo_item,
+    delete_topic_item,
     update_memo_due,
+    update_memo_text,
     get_pending_memos,
+    get_pending_topics,
     get_memo_by_seq,
     get_next_wish_seq,
     is_wish_processed,
@@ -49,6 +52,40 @@ from db.store import (
 
 # 备忘/愿望写入与删除串行化，避免 Frida 双触发或 push+poll 交错导致同一 memo_seq 双插或双删双推
 _MEMO_PIPELINE_LOCK = threading.Lock()
+
+# 改描述/改版本/指派等同一条群消息常经 send Hook 与 push 各入队一次，全文去重避免 webhook 双发
+_EDIT_CMD_DEDUP = {}
+_EDIT_CMD_TTL_S = 25.0
+_EDIT_CMD_DEDUP_LOCK = threading.Lock()
+
+
+def _dedup_normalize_text(text: str) -> str:
+    """与 skill_router._normalize_command_text 对齐，保证 push/poll/双入队 文本键一致。"""
+    if not text:
+        return ''
+    t = text.replace('\u200b', '').replace('\ufeff', '')
+    t = t.replace('許願', '许愿')
+    return ' '.join(t.strip().split())
+
+
+def _consume_edit_cmd_dedup(group_cid, text: str) -> bool:
+    """若本群近期已处理过完全相同文本，返回 True：调用方应直接 return True 且不再推送。
+    查表与写入在同一把锁内完成，避免多线程同时误判「未重复」导致双发 webhook。
+    """
+    cid = str(group_cid or '').strip()
+    norm = _dedup_normalize_text(text or '')
+    if not norm:
+        return False
+    key = f'{cid}|{norm}'
+    now = time.time()
+    with _EDIT_CMD_DEDUP_LOCK:
+        for k in [x for x, ts in _EDIT_CMD_DEDUP.items() if now - ts > _EDIT_CMD_TTL_S]:
+            del _EDIT_CMD_DEDUP[k]
+        if key in _EDIT_CMD_DEDUP:
+            _log('edit cmd dedup skip (send+push duplicate)')
+            return True
+        _EDIT_CMD_DEDUP[key] = now
+        return False
 
 
 def _memo_serialized(fn):
@@ -103,6 +140,23 @@ _DEFAULT_TEMPLATES = {
         '#### 愿望未重复收录\n\n已有进行中的 **Wish #{existing_seq}**（内容相同）\n'
         '{summary}\n\n未新建条目。\n\n----'
     ),
+    'memo_edit_desc_ok': '已更新 **memo #{seq}** 描述：{summary}',
+    'memo_edit_version_ok': '已更新 **memo #{seq}** TR 版本：{version}',
+    'memo_assign_ok': '已将 **memo #{seq}** 在 TR 中指派给 **{who}**',
+    'topic_pick_confirm': (
+        '#### **选题已收录**（{module}）\n\n----\n\n**选题 #{seq}**（TR note: topic:#{seq}）\n{summary}\n\n----'
+    ),
+    'topic_duplicate': (
+        '#### 选题未重复收录\n\n已有进行中的 **选题 #{existing_seq}**（内容相同）\n'
+        '{summary}\n\n未新建条目。\n\n----'
+    ),
+    'person_lookup_title': '### **「{keyword}」相关待办**（备忘 + 愿望）\n\n',
+    'person_lookup_empty': '没有在进行中的备忘、愿望正文里找到「{keyword}」。\n\n',
+    'person_lookup_memo_head': '**备忘**\n',
+    'person_lookup_wish_head': '**愿望**\n',
+    'person_lookup_memo_line': '- **memo #{seq}** {text}\n',
+    'person_lookup_wish_line': '- **wish #{seq}** {text}\n',
+    'person_lookup_trunc': '\n（仅展示前 {n} 条，其余略）\n',
 }
 
 
@@ -204,6 +258,18 @@ def _http_post_json(url, data, timeout=10):
 
 # ── 文本解析 ────────────────────────────────────────────────
 
+# 备忘/愿望触发词紧跟的空白与常见标点（半角/全角）
+_STRIP_AFTER_TRIGGER = re.compile(
+    r'^[\s\u3000，,。、;；:：!！?？.·…\-—（）()\[\]【】]+')
+
+
+def strip_leading_trigger_punct(s: str) -> str:
+    """剥离字符串开头多余空白与标点（用于「备忘：」「许愿，」等）。"""
+    if not s:
+        return s
+    return _STRIP_AFTER_TRIGGER.sub('', s).strip()
+
+
 _WEEKDAY_MAP = {
     '一': 0, '二': 1, '三': 2, '四': 3, '五': 4, '六': 5, '日': 6, '天': 6,
 }
@@ -285,6 +351,7 @@ def _parse_memo_text(text):
     """
     content = re.sub(
         r'[\uff3b【\[]*(?:备忘|提醒我|TR)[\uff3d】\]]*', '', text.strip()).strip()
+    content = strip_leading_trigger_punct(content)
 
     due_date = None
     priority = 'medium'
@@ -331,8 +398,9 @@ def _build_context(messages, memo_ts, max_count=3, time_window_ms=300_000):
 
 # ── TaskReminder 集成 ───────────────────────────────────────
 
-def _create_task_in_reminder(memo_seq, content, due_date, priority,
-                             context, config):
+def _create_task_in_reminder(seq, content, due_date, priority,
+                             context, config, who_override=None,
+                             module_override=None, note_kind='memo'):
     base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
     url = base_url.rstrip('/') + '/api/storage/task_reminder'
 
@@ -345,19 +413,22 @@ def _create_task_in_reminder(memo_seq, content, due_date, priority,
         tasks = []
 
     now_ts = int(time.time() * 1000)
-    default_who = config.get('default_who', '助理大白')
-    default_module = config.get('default_module', '备忘')
+    default_who = (who_override or config.get('default_who', '助理大白') or '').strip()
+    default_module = (module_override or config.get('default_module', '备忘') or '').strip()
     default_due_days = config.get('default_due_days', 7)
 
     if not due_date:
         due_date = (datetime.now() + timedelta(days=default_due_days)).strftime('%Y-%m-%d')
 
-    # 一条 TR 只对应一条备忘，不写入上下文
+    nk = (note_kind or 'memo').strip().lower()
+    if nk not in ('memo', 'topic', 'wish'):
+        nk = 'memo'
+    # 一条 TR 一条本地记录；note 区分 memo / topic / wish
     new_task = {
         'id': now_ts,
         'who': default_who,
         'what': content,
-        'note': f'memo:#{memo_seq} source:dingtalk',
+        'note': f'{nk}:#{seq} source:dingtalk',
         'module': default_module,
         'version': '',
         'due': due_date,
@@ -377,6 +448,469 @@ def _create_task_in_reminder(memo_seq, content, due_date, priority,
     except Exception as e:
         _log(f'write TaskReminder failed: {e}')
         return None
+
+
+def _strip_trailing_cmd_noise(s: str) -> str:
+    if not s:
+        return ''
+    t = s.strip()
+    return re.sub(r'[。！？!?\s]+$', '', t).strip()
+
+
+# 支持「备忘 39」「备忘39」「memo 12」「memo12」（不用 \\b：中文「版本」前非 ASCII 词界）
+_MEMO_NUM_ONE = r'(?:备忘\s*#?\s*|memo\s*#?\s*|memo)(\d+)(?!\d)'
+
+_RE_MEMO_EDIT_DESC = re.compile(
+    r'(?:修改|改|更新)\s*' + _MEMO_NUM_ONE
+    + r'\s*(?:描述|正文)\s*(?:为|成|是|[:：])\s*(.+)',
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_MEMO_EDIT_VER = re.compile(
+    r'(?:修改|改|更新)\s*' + _MEMO_NUM_ONE
+    + r'\s*版本\s*(?:为|成|是|[:：])?\s*(.+)',
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_MEMO_ASSIGN = re.compile(
+    r'(?:把\s*)?' + _MEMO_NUM_ONE
+    + r'\s*(?:指派给|分给|转给|指派|给)\s*(.+)',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _parse_memo_edit_desc_command(text: str):
+    """解析「改描述」指令，返回 (seq, body) 或 None。
+    支持：改备忘39描述为x / 38描述改成：x / memo38改描述：x / #38描述改为x
+    """
+    t = (text or '').strip()
+    m = _RE_MEMO_EDIT_DESC.search(t)
+    if m:
+        return int(m.group(1)), m.group(2)
+    m = re.match(
+        r'^\s*#?\s*(\d+)(?!\d)\s*描述\s*(?:改成|改为|变更为|为|成)\s*[:：]?\s*(.+)',
+        t,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return int(m.group(1)), m.group(2)
+    m = re.match(
+        r'^\s*' + _MEMO_NUM_ONE + r'\s*改描述\s*[:：]?\s*(.+)',
+        t,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return int(m.group(1)), m.group(2)
+    return None
+
+
+def _find_tr_task_for_memo(tasks, memo_seq: int):
+    if not isinstance(tasks, list):
+        return None
+    marker = f'memo:#{memo_seq}'
+    for t in tasks:
+        if marker in (t.get('note') or ''):
+            return t
+    return None
+
+
+def _update_memo_task_in_tr(memo_seq: int, config: dict, *,
+                            what=None, version=None, who=None) -> bool:
+    """更新 TR 中带 memo:#N 的任务字段（存在则写回）。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return False
+    except Exception as e:
+        _log(f'read TaskReminder failed (memo patch): {e}')
+        return False
+    marker = f'memo:#{memo_seq}'
+    found = False
+    for task in tasks:
+        if marker not in (task.get('note') or ''):
+            continue
+        found = True
+        if what is not None:
+            task['what'] = str(what).strip()
+        if version is not None:
+            task['version'] = str(version).strip()
+        if who is not None:
+            task['who'] = str(who).strip()
+        break
+    if not found:
+        return False
+    try:
+        _http_post_json(url, tasks)
+        return True
+    except Exception as e:
+        _log(f'write TaskReminder failed (memo patch): {e}')
+        return False
+
+
+def sync_tr_state_to_local_memos_wishes(config: dict) -> dict:
+    """TR 侧删除任务或标记 done 时，对齐本地 memo_items / wish_items / topic_items。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    out = {
+        'memo_deleted': 0, 'memo_closed': 0,
+        'wish_deleted': 0, 'wish_closed': 0,
+        'topic_deleted': 0, 'topic_closed': 0,
+    }
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return out
+    except Exception as e:
+        _log(f'sync TR: read failed {e}')
+        return out
+
+    memo_state = {}
+    wish_state = {}
+    topic_state = {}
+    for t in tasks:
+        note = t.get('note') or ''
+        st = (t.get('processStatus') or '').lower()
+        done = st == 'done'
+        mm = re.search(r'memo:#(\d+)', note)
+        if mm:
+            seq = int(mm.group(1))
+            if not done:
+                memo_state[seq] = 'active'
+            elif memo_state.get(seq) != 'active':
+                memo_state[seq] = 'done'
+        wm = re.search(r'wish:#(\d+)', note)
+        if wm:
+            seq = int(wm.group(1))
+            if not done:
+                wish_state[seq] = 'active'
+            elif wish_state.get(seq) != 'active':
+                wish_state[seq] = 'done'
+        tgm = re.search(r'topic:#(\d+)', note)
+        if tgm:
+            seq = int(tgm.group(1))
+            if not done:
+                topic_state[seq] = 'active'
+            elif topic_state.get(seq) != 'active':
+                topic_state[seq] = 'done'
+
+    for m in list(get_pending_memos()):
+        seq = int(m['memo_seq'])
+        st = memo_state.get(seq)
+        if st is None:
+            delete_memo_item(seq)
+            out['memo_deleted'] += 1
+            _log(f'sync: TR 已无 memo #{seq}，已删本地')
+        elif st == 'done':
+            close_memo_item(seq)
+            out['memo_closed'] += 1
+            _log(f'sync: TR 已 done memo #{seq}，本地已闭环')
+
+    for w in list(get_pending_wishes()):
+        seq = int(w['wish_seq'])
+        st = wish_state.get(seq)
+        if st is None:
+            delete_wish_item(seq)
+            out['wish_deleted'] += 1
+            _log(f'sync: TR 已无 wish #{seq}，已删本地')
+        elif st == 'done':
+            close_wish_item(seq)
+            out['wish_closed'] += 1
+            _log(f'sync: TR 已 done wish #{seq}，本地已闭环')
+
+    for m in list(get_pending_topics()):
+        seq = int(m['topic_seq'])
+        st = topic_state.get(seq)
+        if st is None:
+            delete_topic_item(seq)
+            out['topic_deleted'] += 1
+            _log(f'sync: TR 已无 topic #{seq}，已删本地')
+        elif st == 'done':
+            close_topic_item(seq)
+            out['topic_closed'] += 1
+            _log(f'sync: TR 已 done topic #{seq}，本地已闭环')
+
+    return out
+
+
+def _parse_topic_pick_body(text: str) -> tuple:
+    """【选题】/ 选题： 开头；可选 提报人：xxx。返回 (展示正文, 提报人或 None)。"""
+    if not text:
+        return '', None
+    t = text.strip()
+    t = re.sub(
+        r'[\uff3b【\[]+\s*选题\s*[\uff3d】\]]+',
+        '',
+        t,
+    ).strip()
+    t = re.sub(r'^\s*选题\s*', '', t).strip()
+    t = strip_leading_trigger_punct(t)
+    reporter = None
+    rm = re.search(r'提报人\s*[:：]\s*(\S+)', t)
+    if rm:
+        reporter = rm.group(1).strip()
+        t = (t[:rm.start()] + t[rm.end():]).strip()
+        t = ' '.join(t.split())
+    title = t.strip()
+    if reporter and title:
+        display = f'{title}（提报：{reporter}）'
+    elif reporter:
+        display = f'（提报：{reporter}）'
+    else:
+        display = title
+    return display, reporter
+
+
+def _text_triggers_topic_pick(text: str) -> bool:
+    if not text:
+        return False
+    if re.search(r'[\uff3b【\[]\s*选题\s*[\uff3d】\]]', text):
+        return True
+    return bool(re.match(r'^\s*选题(?:\s*[:：，,]|\s+\S)', text))
+
+
+@_memo_serialized
+def process_memo_edit_description(msg_id, text, group_cid, config) -> bool:
+    parsed = _parse_memo_edit_desc_command(text or '')
+    if not parsed:
+        return False
+    if _consume_edit_cmd_dedup(group_cid, text):
+        return True
+    seq, raw_body = parsed
+    body = _strip_trailing_cmd_noise(raw_body)
+    if not body:
+        _send_webhook('未解析到新描述内容。', config, group_cid=group_cid)
+        return True
+    memo = get_memo_by_seq(seq)
+    if not memo or memo.get('status') != 'active':
+        _send_webhook(_render_template('not_found', seq=seq, summary=''), config, group_cid=group_cid)
+        return True
+    update_memo_text(seq, body)
+    ok = _update_memo_task_in_tr(seq, config, what=body)
+    msg = _render_template('memo_edit_desc_ok', seq=seq, summary=body[:80])
+    if not msg:
+        msg = f'已更新 memo #{seq} 描述'
+    if not ok:
+        msg += f'\n（TR 未找到 memo:#{seq}，仅本地已改）'
+    _send_webhook(msg, config, group_cid=group_cid)
+    _log(f'memo #{seq} description updated, tr={ok}')
+    return True
+
+
+@_memo_serialized
+def process_memo_edit_version(msg_id, text, group_cid, config) -> bool:
+    m = _RE_MEMO_EDIT_VER.search((text or '').strip())
+    if not m:
+        return False
+    if _consume_edit_cmd_dedup(group_cid, text):
+        return True
+    seq = int(m.group(1))
+    ver = _strip_trailing_cmd_noise(m.group(2))
+    if not ver:
+        _send_webhook('未解析到版本号。', config, group_cid=group_cid)
+        return True
+    memo = get_memo_by_seq(seq)
+    if not memo or memo.get('status') != 'active':
+        _send_webhook(_render_template('not_found', seq=seq, summary=''), config, group_cid=group_cid)
+        return True
+    ok = _update_memo_task_in_tr(seq, config, version=ver)
+    msg = _render_template('memo_edit_version_ok', seq=seq, version=ver)
+    if not msg:
+        msg = f'已更新 memo #{seq} 版本 {ver}'
+    if not ok:
+        msg += f'\n（TR 未找到 memo:#{seq}）'
+    _send_webhook(msg, config, group_cid=group_cid)
+    _log(f'memo #{seq} version -> {ver}, tr={ok}')
+    return True
+
+
+@_memo_serialized
+def process_memo_assign_tr(msg_id, text, group_cid, config) -> bool:
+    m = _RE_MEMO_ASSIGN.search((text or '').strip())
+    if not m:
+        return False
+    if _consume_edit_cmd_dedup(group_cid, text):
+        return True
+    seq = int(m.group(1))
+    who = _strip_trailing_cmd_noise(m.group(2))
+    who = re.sub(r'^给\s*', '', who).strip()
+    if not who:
+        _send_webhook('未解析到指派人。', config, group_cid=group_cid)
+        return True
+    memo = get_memo_by_seq(seq)
+    if not memo or memo.get('status') != 'active':
+        _send_webhook(_render_template('not_found', seq=seq, summary=''), config, group_cid=group_cid)
+        return True
+    ok = _update_memo_task_in_tr(seq, config, who=who)
+    msg = _render_template('memo_assign_ok', seq=seq, who=who)
+    if not msg:
+        msg = f'memo #{seq} 已指派 {who}'
+    if not ok:
+        msg += f'\n（TR 未找到 memo:#{seq}）'
+    _send_webhook(msg, config, group_cid=group_cid)
+    _log(f'memo #{seq} assign -> {who}, tr={ok}')
+    return True
+
+
+def topic_pick_content_key(text: str) -> str:
+    c, _ = _parse_topic_pick_body(text or '')
+    t = ' '.join((c or '').split())
+    return (t[:80] or '').strip()
+
+
+@_memo_serialized
+def process_topic_pick(msg_id, text, context_msgs, memo_ts, group_cid, config):
+    """群选题收录：写入 topic_items（独立 topic_seq）+ TR（note: topic:#N）。"""
+    if not _text_triggers_topic_pick(text or ''):
+        return False
+    if is_topic_processed(msg_id):
+        return True
+
+    content, _rep = _parse_topic_pick_body(text)
+    if not (content or '').strip():
+        _send_webhook('选题内容为空，请写「选题：标题」或「【选题】标题」，可选「提报人：姓名」。', config, group_cid=group_cid)
+        return True
+
+    context = _build_context(context_msgs, memo_ts)
+    dup_m = find_active_topic_duplicate_body(content)
+    if dup_m:
+        es = dup_m.get('topic_seq', '')
+        sm = ((dup_m.get('text') or '')[:80] + (
+            '...' if len(dup_m.get('text') or '') > 80 else ''))
+        body = _render_template('topic_duplicate', existing_seq=es, summary=sm)
+        _send_webhook(body, config, group_cid=group_cid)
+        return True
+
+    topic_who = (config.get('topic_pick_who') or '选题库').strip() or '选题库'
+    topic_mod = (config.get('topic_pick_module') or topic_who).strip() or topic_who
+
+    topic_seq = get_next_topic_seq()
+    due_date = (datetime.now() + timedelta(days=int(config.get('default_due_days', 7)))).strftime('%Y-%m-%d')
+    tr_id = _create_task_in_reminder(
+        topic_seq, content, due_date, 'medium', context, config,
+        who_override=topic_who, module_override=topic_mod,
+        note_kind='topic',
+    )
+    if tr_id is None:
+        _log(f'TaskReminder unreachable, topic #{topic_seq} deferred')
+        return None
+
+    save_topic_item(
+        topic_seq=topic_seq,
+        msg_id=msg_id,
+        text=content,
+        who=topic_who,
+        due=due_date,
+        priority='medium',
+        context=json.dumps(context, ensure_ascii=False) if context else None,
+        task_reminder_id=tr_id,
+    )
+    summary = content[:40] + ('...' if len(content) > 40 else '')
+    confirm = _render_template('topic_pick_confirm', seq=topic_seq, summary=summary, module=topic_mod)
+    _send_webhook(confirm, config, group_cid=group_cid)
+    _log(f'topic pick #{topic_seq} -> TR module={topic_mod}')
+    return True
+
+
+def _parse_person_lookup_keyword(text: str, aliases) -> str | None:
+    """匹配「洋哥」「找洋哥」等；aliases 来自配置 person_lookup_aliases。"""
+    if not text or not aliases:
+        return None
+    raw = [str(a).strip() for a in aliases if str(a).strip()]
+    if not raw:
+        return None
+    t = re.sub(r'[!！.。…]+$', '', (text or '').strip())
+    for a in sorted(set(raw), key=len, reverse=True):
+        esc = re.escape(a)
+        if t == a or re.match(rf'^找\s*{esc}$', t):
+            return a
+    return None
+
+
+def person_lookup_match_keyword(text: str, config: dict) -> str | None:
+    """若 text 命中人员筛选指令，返回关键词；供路由层按关键词节流（双通道不同 msg_id）。"""
+    aliases = config.get('person_lookup_aliases')
+    if not isinstance(aliases, list) or not aliases:
+        aliases = ['洋哥', '崔哥']
+    return _parse_person_lookup_keyword(text or '', aliases)
+
+
+def _clip_lookup_line(s: str, n: int = 120) -> str:
+    s = ' '.join((s or '').split())
+    if len(s) <= n:
+        return s
+    return s[: n - 1] + '…'
+
+
+@_memo_serialized
+def process_person_lookup(msg_id, text, group_cid, config) -> bool:
+    """快捷指令：找洋哥 / 洋哥 — 列出正文中含该关键词的进行中备忘与愿望。"""
+    aliases = config.get('person_lookup_aliases')
+    if not isinstance(aliases, list) or not aliases:
+        aliases = ['洋哥', '崔哥']
+    kw = _parse_person_lookup_keyword(text or '', aliases)
+    if not kw:
+        return False
+    if _consume_edit_cmd_dedup(group_cid, text):
+        return True
+    memos = [m for m in get_pending_memos() if kw in (m.get('text') or '')]
+    wishes = [w for w in get_pending_wishes() if kw in (w.get('text') or '')]
+    try:
+        cap_m = int(config.get('person_lookup_max_memos', 20) or 20)
+        cap_w = int(config.get('person_lookup_max_wishes', 20) or 20)
+    except (TypeError, ValueError):
+        cap_m, cap_w = 20, 20
+    cap_m = max(1, min(cap_m, 80))
+    cap_w = max(1, min(cap_w, 80))
+
+    title = _render_template('person_lookup_title', keyword=kw)
+    if not title:
+        title = f'### **「{kw}」相关待办**（备忘 + 愿望）\n\n'
+    parts = [title]
+    if not memos and not wishes:
+        empty = _render_template('person_lookup_empty', keyword=kw)
+        parts.append(empty or f'没有在进行中的备忘、愿望正文里找到「{kw}」。\n\n----')
+    else:
+        if memos:
+            head = _render_template('person_lookup_memo_head') or '**备忘**\n'
+            parts.append(head)
+            n_mem = 0
+            for m in memos:
+                if n_mem >= cap_m:
+                    break
+                line = _render_template(
+                    'person_lookup_memo_line',
+                    seq=m['memo_seq'],
+                    text=_clip_lookup_line(m.get('text') or ''),
+                )
+                parts.append(line or f"- **memo #{m['memo_seq']}** {_clip_lookup_line(m.get('text') or '')}\n")
+                n_mem += 1
+            if len(memos) > cap_m:
+                parts.append(
+                    _render_template('person_lookup_trunc', n=cap_m)
+                    or f'\n（备忘仅展示前 {cap_m} 条）\n',
+                )
+        if wishes:
+            head = _render_template('person_lookup_wish_head') or '**愿望**\n'
+            parts.append(head)
+            n_w = 0
+            for w in wishes:
+                if n_w >= cap_w:
+                    break
+                line = _render_template(
+                    'person_lookup_wish_line',
+                    seq=w['wish_seq'],
+                    text=_clip_lookup_line(w.get('text') or ''),
+                )
+                parts.append(line or f"- **wish #{w['wish_seq']}** {_clip_lookup_line(w.get('text') or '')}\n")
+                n_w += 1
+            if len(wishes) > cap_w:
+                parts.append(
+                    _render_template('person_lookup_trunc', n=cap_w)
+                    or f'\n（愿望仅展示前 {cap_w} 条）\n',
+                )
+    _send_webhook(''.join(parts), config, group_cid=group_cid)
+    _log(f'person lookup kw={kw!r} memos={len(memos)} wishes={len(wishes)}')
+    return True
 
 
 def _get_pending_memos_from_tr(config):
@@ -444,15 +978,29 @@ def _wish_assignee(config: dict) -> str:
 
 
 def _parse_wish_text(text: str) -> str:
-    """去掉触发词「许愿」及常见括号标记，剩余作为任务标题。"""
+    """去掉触发词「许愿」「愿望」「wish」及常见括号；触发词后的标点空格一并去掉。"""
     if not text:
         return ''
     t = text.strip()
-    t = re.sub(r'[\uff3b【\[]+许愿[\uff3d】\]]+', ' ', t)
-    t = re.sub(r'^\s*许愿\s*', '', t)
-    t = re.sub(r'\s+许愿\s+', ' ', t)
+    # 【许愿】/【愿望】/【wish】，愿望单不参与
+    t = re.sub(
+        r'[\uff3b【\[]+(?:许愿|愿望(?!单)|wish)[\uff3d】\]]+',
+        ' ', t, flags=re.IGNORECASE)
+    t = re.sub(
+        r'^\s*(?:许愿|愿望(?!单)|wish)\s*',
+        '',
+        t,
+        flags=re.IGNORECASE,
+    )
+    t = re.sub(
+        r'\s+(?:许愿|愿望(?!单)|wish)\s+',
+        ' ',
+        t,
+        flags=re.IGNORECASE,
+    )
+    t = strip_leading_trigger_punct(t)
     t = ' '.join(t.split())
-    return (t or text.strip()).strip()
+    return (t or '').strip()
 
 
 def wish_content_key(text: str) -> str:
@@ -589,7 +1137,7 @@ def _close_task_in_reminder_wish(wish_seq: int, config: dict) -> bool:
 @_memo_serialized
 def process_wish(msg_id, text, group_cid, config):
     """
-    群消息含「许愿」时：分配 wish_seq，写本地库 + TaskReminder（负责人 wish_assignee）。
+    群消息含「许愿」「愿望」或英文 wish（整词）时：分配 wish_seq，写本地库 + TaskReminder（负责人 wish_assignee）。
     返回 True 成功 / None 表示 TaskReminder 不可用需重试。
     """
     if is_wish_processed(msg_id):

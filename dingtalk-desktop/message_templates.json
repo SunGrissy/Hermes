@@ -72,8 +72,8 @@
     },
 
     "llm": {
-      "_note": "每人日报发给 LLM 的最大字符数，写长日报的人（如崔正钦）建议 2500+",
-      "text_limit_per_person": 2500
+      "_note": "每人日报发给 LLM 的最大字符数；CEF 全文拉取后长日报增多，可酌情调大",
+      "text_limit_per_person": 6000
     }
   },
 
@@ -81,7 +81,7 @@
     "_note": "TaskReminder 任务到期/待关注自动推送，通过 memo_tracker webhook 发送，正文须含关键词「小秘书提醒」",
     "keyword": "小秘书提醒",
     "webhook_keyword": "小秘书提醒",
-    "confirm": "#### 备忘已收录\n\n----\n\nMemo #{seq}\n{summary}\n\n",
+    "confirm": "#### **备忘已收录**\n\n----\n\nMemo #{seq}\n{summary}\n\n",
     "close": "✅ done: memo #{seq} {summary}",
     "delete": "❌ 备忘 #{seq} 已删除：{summary}",
     "already_deleted": "⚠️ 备忘 #{seq} 已是删除状态",
@@ -93,7 +93,7 @@
     "tomorrow_focus_empty": "明天没有到期的备忘。",
     "week_focus_title": "### **本周关注** {date}～{end_date}",
     "week_focus_empty": "本周没有到期或超期的备忘。",
-    "wish_confirm": "#### 愿望已收录\n\n----\n\nWish #{seq}\n{summary}\n\n",
+    "wish_confirm": "#### ##愿望已收录\n\n----\n\nWish #{seq}\n{summary}\n\n",
     "wish_list_title": "### **愿望单** 未完成任务",
     "wish_list_empty": "当前没有分配给「{assignee}」的未完成任务。",
     "wish_list_item": "**wish #{seq}** {title}",
@@ -111,8 +111,20 @@
     "defer_line_tr_only": "- **#{seq}** → {due}（仅 TR，本地无进行中备忘）",
     "defer_line_missing": "- **#{seq}** 未找到（本地与 TR 均无 memo:#{seq}）",
     "defer_need_date": "未能从指令里解析目标日期，请写明「推到明天」「延到下周一」等。",
+    "memo_edit_desc_ok": "已更新 **memo #{seq}** 描述：{summary}",
+    "memo_edit_version_ok": "已更新 **memo #{seq}** TR 版本：{version}",
+    "memo_assign_ok": "已将 **memo #{seq}** 在 TR 中指派给 **{who}**",
+    "topic_pick_confirm": "#### **选题已收录**（{module}）\n\n----\n\n**选题 #{seq}**（TR: topic:#{seq}）\n{summary}\n\n----",
+    "topic_duplicate": "#### 选题未重复收录\n\n已有进行中的 **选题 #{existing_seq}**（内容相同）\n{summary}\n\n未新建条目。\n\n----",
     "memo_duplicate": "#### 备忘未重复收录\n\n已有进行中的 **Memo #{existing_seq}**（内容相同）\n{summary}\n\n未新建条目。\n\n----",
     "wish_duplicate": "#### 愿望未重复收录\n\n已有进行中的 **Wish #{existing_seq}**（内容相同）\n{summary}\n\n未新建条目。\n\n----",
+    "person_lookup_title": "### **「{keyword}」相关待办**（备忘 + 愿望）\n\n",
+    "person_lookup_empty": "没有在进行中的备忘、愿望正文里找到「{keyword}」。\n\n",
+    "person_lookup_memo_head": "**备忘**\n",
+    "person_lookup_wish_head": "**愿望**\n",
+    "person_lookup_memo_line": "- **memo #{seq}** {text}\n",
+    "person_lookup_wish_line": "- **wish #{seq}** {text}\n",
+    "person_lookup_trunc": "\n（仅展示前 {n} 条，其余略）\n",
     "task_due_digest_title": "## 任务到期与待关注 [{date}]",
     "reminder_subtitle": "**待跟进 {count} 项**",
     "section_urgent": "### ⚠️ 紧急 / 超期（{count}）",
