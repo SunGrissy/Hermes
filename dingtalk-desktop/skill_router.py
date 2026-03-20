@@ -555,6 +555,8 @@ _recent_cmd_ts = {}      # (group_cid, cmd_key) -> last_run_ts_ms
 _recent_memo_ts = {}     # (group_cid, content_key) -> last_run_ts_ms，备忘按内容短时去重
 # 人员筛选等 throttle 的读改写与 push/poll 并发时加锁，避免双线程同时通过 15s 窗
 _MEMO_THROTTLE_LOCK = threading.Lock()
+# 备忘「内容键 + 短时窗」登记与 push/poll 并发时加锁，避免双线程同时通过去重导致双收录
+_MEMO_INGEST_LOCK = threading.Lock()
 
 
 def _is_stale_command_msg(msg: dict, now_ms: int, max_age_ms: int) -> bool:
@@ -1039,19 +1041,20 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         if is_memo_processed(msg_id):
             memo_seen_ids.add(msg_id)
             return
-        content_key = _memo_content_key(text)
-        if content_key:
-            # 按内容去重：同一条备忘若被 Hook 触发两次（不同 msg_id），只处理一次
-            content_dedup_id = 'memo_c:' + content_key
-            if content_dedup_id in memo_seen_ids:
-                memo_seen_ids.add(msg_id)
-                return
-            memo_seen_ids.add(content_dedup_id)
-            key = (msg_cid, content_key)
-            if now_ms - _recent_memo_ts.get(key, 0) < _RECENT_CMD_MS:
-                memo_seen_ids.add(msg_id)
-                return
-            _recent_memo_ts[key] = now_ms
+        with _MEMO_INGEST_LOCK:
+            content_key = _memo_content_key(text)
+            if content_key:
+                # 按内容去重：同一条备忘若被 Hook/轮询各触发一次（不同 msg_id），只处理一次
+                content_dedup_id = 'memo_c:' + content_key
+                if content_dedup_id in memo_seen_ids:
+                    memo_seen_ids.add(msg_id)
+                    return
+                memo_seen_ids.add(content_dedup_id)
+                key = (msg_cid, content_key)
+                if now_ms - _recent_memo_ts.get(key, 0) < _RECENT_CMD_MS:
+                    memo_seen_ids.add(msg_id)
+                    return
+                _recent_memo_ts[key] = now_ms
         try:
             memo_ts = int(msg.get('ts', 0))
             result = process_memo(
@@ -1352,18 +1355,19 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             if is_memo_processed(msg_id):
                 seen_ids.add(msg_id)
                 continue
-            content_key = _memo_content_key(text)
-            if content_key:
-                content_dedup_id = 'memo_c:' + content_key
-                if content_dedup_id in seen_ids:
-                    seen_ids.add(msg_id)
-                    continue
-                seen_ids.add(content_dedup_id)
-                key = (str(group_cid), content_key)
-                if now_ms - _recent_memo_ts.get(key, 0) < _RECENT_CMD_MS:
-                    seen_ids.add(msg_id)
-                    continue
-                _recent_memo_ts[key] = now_ms
+            with _MEMO_INGEST_LOCK:
+                content_key = _memo_content_key(text)
+                if content_key:
+                    content_dedup_id = 'memo_c:' + content_key
+                    if content_dedup_id in seen_ids:
+                        seen_ids.add(msg_id)
+                        continue
+                    seen_ids.add(content_dedup_id)
+                    key = (str(group_cid), content_key)
+                    if now_ms - _recent_memo_ts.get(key, 0) < _RECENT_CMD_MS:
+                        seen_ids.add(msg_id)
+                        continue
+                    _recent_memo_ts[key] = now_ms
             try:
                 memo_ts = int(msg.get('ts', 0))
                 result = process_memo(

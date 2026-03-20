@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-20] 备忘提醒任务脚本、status_check、monitor/utils/skill_router 调整
+
+### 状态：已提交推送（父仓）
+
+### 本次工作内容
+
+- `lib/monitor.py`、`lib/utils.py`：通道/监控相关调整
+- `skill_router.py`：路由逻辑调整
+- `memo_reminder.py`、`register_memo_reminder_task.ps1`、`run_memo_reminder.ps1`：备忘提醒定时任务
+- `skills/status_check.py`：状态检查 skill
+
+---
+
 ## [2026-03-21] 日报拉取、定时任务、通道自检、简历 fetch 超时
 
 ### 状态：验收通过

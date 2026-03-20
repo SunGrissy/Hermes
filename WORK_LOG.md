@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## 2026-03-20 - dingtalk-desktop 通道/路由与备忘提醒脚本；ue-review 规则；子模块推送
+
+**状态**: 已提交推送 tygit
+
+**内容**:
+- 父仓：`dingtalk-desktop/lib/monitor.py`、`utils.py`、`skill_router.py`；`memo_reminder.py`、`register_memo_reminder_task.ps1`、`run_memo_reminder.ps1`、`skills/status_check.py`；`.cursor/rules/ue-review.mdc`
+- `md-reader` 子模块：`index.html`、`server.py` 大块更新已提交并推 tygit
+- `performeval`：将未推送的 `master` 提交推至 tygit `origin`
+
+---
+
 ## 2026-03-20 - Git：默认仅推 tygit；novel 独立 GitHub 仓；规范与 Skill 同步
 
 **状态**: 已完成（已 `git push origin main` → tygit）

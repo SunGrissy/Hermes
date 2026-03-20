@@ -276,14 +276,23 @@ def _process_push(data, source, dedup, my_uid, log_path, enable_toast, memo_call
                 )
                 if memo_callback and callable(memo_callback):
                     try:
-                        # 本人消息：电脑发会先有 send Hook 再收到 push 回显，skill_router 按备忘/愿望
-                        # 内容键去重（memo_c: / wish_c:），避免双收录；手机发只有 push、无 send，必须入队。
-                        rec = {
-                            'cid': cid, 'uid': sender, 'ts': ts, 'msg_id': msg_id,
-                            'content_type': ct, 'text': (text or '')[:500], 'raw': '',
-                            'md_extra': md_extra,
-                        }
-                        memo_callback(rec)
+                        # 本人消息：电脑发会先有 send Hook 再收到 push 回显。send 侧已用
+                        # ('send',cid,norm) 入 dedup 并入队时，若此处再入队会导致双份 webhook。
+                        # 手机发只有 push、无 send，dedup 中无该键，必须照常入队。
+                        norm = ' '.join((text or '').strip().split())[:80]
+                        if (
+                            norm
+                            and str(sender).strip() == str(my_uid).strip()
+                            and dedup.contains(('send', cid, norm))
+                        ):
+                            pass
+                        else:
+                            rec = {
+                                'cid': cid, 'uid': sender, 'ts': ts, 'msg_id': msg_id,
+                                'content_type': ct, 'text': (text or '')[:500], 'raw': '',
+                                'md_extra': md_extra,
+                            }
+                            memo_callback(rec)
                     except Exception:
                         pass
     except Exception as e:
