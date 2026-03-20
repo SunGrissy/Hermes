@@ -25,7 +25,8 @@ py -c "import ast; ast.parse(open(r'文件名.py', encoding='utf-8').read()); pr
 | 用户说 | Agent 执行 |
 |---|---|
 | "更新" | 执行下方「全量更新流程」 |
-| "推送" / "push" | 执行下方「推送流程」 |
+| "推送" / "push" | 执行下方「推送流程」（**仅** `git push origin`，tygit） |
+| "推 GitHub" / "push github" | pre-push 门禁通过后，在父仓及有改动的子模块内依次 `git push github <当前分支>`（子模块先于父仓），**不**推 `origin` 除非用户同时要求 |
 
 ### 推送流程（用户说"推送"时触发）
 
@@ -45,9 +46,9 @@ py -c "import ast; ast.parse(open(r'文件名.py', encoding='utf-8').read()); pr
    b. 回根仓库 → git add <子模块> → git commit "chore: update submodule pointers" → git push
    c. 完成判定：子模块远端 + 根仓库指针 + 根仓库远端 三者同步
 
-4. 无子模块变更 → 直接 git push
+4. 无子模块变更 → 直接 `git push origin`（**不要** `git push github`，除非用户本次明确说了「推 GitHub」）
 
-5. rejected → git pull --rebase → 重试一次 → 仍失败报告用户
+5. rejected → `git pull --rebase`（对 `origin`）→ 重试一次 → 仍失败报告用户
 ```
 
 ### 全量更新流程（用户说"更新"时触发）
@@ -92,10 +93,11 @@ py -c "import ast; ast.parse(open(r'文件名.py', encoding='utf-8').read()); pr
      报告哪些子模块指针变了
      询问是否提交指针更新
 
-5. 同步回推（仅当合入了 GitHub 内容时）
-   询问 "是否 push origin 同步回 GitLab？"
+5. 同步回推 tygit（仅当合入了 GitHub 内容时）
+   询问 "是否 push origin 将合并结果同步回 tygit？"
    ├─ 是 → git push origin main
    └─ 否 → 跳过
+   （**不**在此步骤自动 `git push github`；镜像 GitHub 仅当用户明确说「推 GitHub」时执行）
 
 6. 回到原目录 (cd saved_dir)，静默恢复
 

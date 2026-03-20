@@ -1,59 +1,60 @@
 ---
 name: dual-git-sync
-description: Dual-remote Git workflow for syncing between internal GitLab and GitHub. Covers remote configuration, dual push URL setup, bidirectional sync, submodule mirroring, and mobile Cursor Agent collaboration. Use when setting up GitHub mirrors, syncing repos between GitLab and GitHub, configuring dual push URLs, or coordinating mobile Agent development on GitHub.
+description: TyGit（内网主仓）与 GitHub（可选镜像）双 remote：默认只推 origin(tygit)；仅在用户明确要求时推 GitHub。含 remote 配置、子模块、移动端 Agent、novel 独立仓说明。
 ---
 
-# 双 Git Remote 同步工作流
+# 双 Git Remote 工作流（TyGit 主仓 + GitHub 可选）
 
-本 Skill 覆盖 MyAgents 工作空间的 GitLab（内网主仓）+ GitHub（外网开发镜像）双 remote 协作流程。
+本 Skill 覆盖 MyAgents 工作空间的 **GitLab(tygit) 主仓** 与 **GitHub 外网镜像** 的配合方式。
 
 > 提交时机、message 格式见 `git-workflow.mdc`；多会话分支安全见 `git-branch-guard.mdc`。本 Skill 不重复这些内容。
 
 ## 架构
 
 ```
-GitLab (内网, 主仓)  ←─ 你的电脑 ─→  GitHub (外网, 开发镜像)
-       ↑                                      ↑
-    内网开发 push                        移动端 Agent push
-       ↑                                      ↑
-       └─── git push origin → 自动推两边 ─────┘
-       └─── git pull github ← 拉取 Agent 成果 ┘
+GitLab tygit (主仓)  ←── 默认 git push origin ──┐
+       ↑                                        │
+  内网日常开发                                    │ 你的电脑
+       ↑                                        │
+GitHub (镜像)  ←── 仅当用户明确要求时 git push github ──┘
+       ↑
+  移动端 Agent：mobile/* + PR
 ```
 
-**核心设计**：`origin` 的 fetch 指向内网 GitLab，push 同时推 GitLab + GitHub。`github` remote 仅用于 pull Agent 改动。
+**核心设计**：
+
+- `origin`：**fetch 与 push 均仅指向 tygit**（单 push URL）。日常 `git push` / `git push origin` **只更新内网主仓**。
+- `github` remote：用于 `fetch` / `pull`（拉 Agent 成果），以及 **显式** `git push github` 更新镜像。
+- **禁止**再给 `origin` 配置第二个 push URL（避免误双推）。
 
 ## Remote 配置
 
-### 父仓库 + 每个子模块都执行：
+### 父仓库 + 各子模块（已与 GitHub 建镜像的仓）
 
 ```powershell
-# 添加 github remote
-git remote add github https://github.com/<user>/<repo>.git
+# 内网主仓（fetch + 唯一 push）
+git remote add origin http://tygit.tuyoo.com/ue4_pm_group/<repo>.git
+# 若 origin 已存在，确保 push 只有 tygit：
+git remote set-url --push --delete origin https://github.com/SunGrissy/<repo>.git
+# 若上一步报「无此 URL」，用下面确认仅剩一条 push：
+git remote get-url --push --all origin
 
-# 给 origin 配双 push URL
-git remote set-url --add --push origin <gitlab-url>
-git remote set-url --add --push origin <github-url>
+# GitHub：单独 remote，仅用于 pull / 显式 push
+git remote add github https://github.com/SunGrissy/<repo>.git
 ```
 
-### 验证（两步）
-
-**第一步：检查 remote 列表**
+### 验证
 
 ```powershell
 git remote -v
 # 期望：
-# origin  <gitlab>  (fetch)
-# origin  <gitlab>  (push)
-# origin  <github>  (push)     ← 双 push
-# github  <github>  (fetch)
-# github  <github>  (push)
-```
+# origin   <tygit>   (fetch)
+# origin   <tygit>   (push)    ← 仅一条 push
+# github   <github>  (fetch)
+# github   <github>  (push)
 
-**第二步：dry-run 确认双推送生效**
-
-```powershell
 git push origin main --dry-run
-# 应看到两段输出，分别指向 GitLab 和 GitHub
+# 应只看到 tygit 目标，不应再出现 GitHub
 ```
 
 ### 仓库清单
@@ -66,6 +67,7 @@ git push origin main --dry-run
 | cci_system | `http://tygit.tuyoo.com/ue4_pm_group/cci_system.git` | `https://github.com/SunGrissy/cci_system.git` |
 | task_reminder | `http://tygit.tuyoo.com/ue4_pm_group/task_reminder.git` | `https://github.com/SunGrissy/task_reminder.git` |
 | teamscore | `http://tygit.tuyoo.com/ue4_pm_group/teamscore.git` | `https://github.com/SunGrissy/teamscore.git` |
+| **novel**（独立仓，见下） | — | `https://github.com/SunGrissy/novel.git` |
 
 ### `.gitmodules` 使用相对路径
 
@@ -77,33 +79,50 @@ git push origin main --dry-run
 
 相对路径让 Git 根据父仓库 clone 来源自动拼接子模块 URL：内网 clone 走内网，GitHub clone 走 GitHub。
 
+## novel/（仅 GitHub 维护）
+
+- 父仓库 **不跟踪** `novel/`（根目录 `.gitignore` 已忽略）。
+- `novel/` 为 **独立 Git 仓库**，远端仅 GitHub：`https://github.com/SunGrissy/novel.git`。
+- 克隆 MyAgents（tygit）后若需要小说目录：`cd novel` → 按仓库根目录 `novel/README.md` 初始化或 `git pull origin main`。
+
 ## 日常工作流
 
-### A. 内网开发完，同步到 GitHub
+### A. 内网开发完（默认）
 
 ```powershell
 git push origin main
-# origin 双 push URL → GitLab + GitHub 同时更新
+# 仅 tygit
 ```
 
-**首次推送顺序**：子模块必须先于父仓库推送，否则 GitHub 上 gitlink 指向不存在的 commit，clone --recursive 会失败。日常增量 push 无此限制（commit 已存在）。
+**子模块先于父仓库推送**的规则不变（见 `acceptance-checklist.mdc` 第 7 步）。
 
-### B. 移动端 Agent 在 GitHub 开发
+### B. 需要更新 GitHub 镜像时（显式）
+
+用户口令：**「推 GitHub」** / `push github`（见 `shell-git.mdc`）。
+
+```powershell
+# 父仓或子模块内
+git push github main
+```
+
+有多级子模块时：先在各子模块 `git push github main`，再父仓库 `git push github main`。
+
+### C. 移动端 Agent 在 GitHub 开发
 
 Agent 创建分支 `mobile/<任务名>` → 提交 → 创建 PR → Review 后 Merge 到 GitHub main。
 
-GitHub main 分支配置保护规则：
-- Require pull request before merging: **开启**
-- Allow force pushes: **关闭**
+GitHub `main` 分支保护：`Require pull request` 开启，`Allow force pushes` 关闭。
 
-### C. 回到内网，拉取 Agent 成果
+### D. 回到内网，拉取 Agent 成果
 
 ```powershell
 git pull github main
-git push origin main    # 同步回 GitLab
+git push origin main    # 同步回 tygit（默认不必再推 GitHub）
 ```
 
-### D. Agent 改了子模块代码
+若希望镜像与内网一致，再执行：`git push github main`。
+
+### E. Agent 改了子模块代码
 
 ```powershell
 cd pm-system
@@ -113,19 +132,14 @@ cd ..
 git add pm-system
 git commit -m "chore: sync pm-system submodule"
 git push origin main
+# 需要 GitHub 镜像时再：git push github main（在子模块与父仓分别执行）
 ```
 
-## 双 push 部分失败处理
+## 推送失败补推
 
-内网推 GitLab 成功但外网推 GitHub 失败（网络问题）是最常见的异常场景。`git push origin` 其中一端失败时，另一端仍会成功。
+仅 tygit 失败：排查内网后重试 `git push origin`。
 
-```powershell
-# 待网络恢复后，单独补推 GitHub
-git push github main
-
-# 如果是子模块，也需要进入子模块目录单独补推
-cd pm-system ; git push github main ; cd ..
-```
+仅需要补 GitHub：`git push github main`（在对应仓库目录内）。
 
 ## 冲突预防
 
@@ -136,35 +150,29 @@ cd pm-system ; git push github main ; cd ..
 
 ## GitHub 认证
 
-GitHub 不支持密码推送，需要以下任一方式：
-- **Personal Access Token (PAT)**：`https://<token>@github.com/<user>/<repo>.git`
-- **SSH Key**：`git@github.com:<user>/<repo>.git`
-
-PAT 方式可用 `gh auth setup-git` 自动配置 credential helper。
+- **PAT**：`https://<token>@github.com/<user>/<repo>.git`
+- **SSH**：`git@github.com:<user>/<repo>.git`
+- `gh auth setup-git` 可配置 credential helper
 
 ## 环境自动识别
 
-Agent 通过 `git remote get-url origin` 判断当前 clone 来源，决定工作模式：
-
 | origin URL 包含 | 环境 | 工作模式 |
 |---|---|---|
-| `tygit.tuyoo.com` | 内网（本地开发） | `git push origin` 双推，正常开发流程 |
-| `github.com` | 外网（云端 Agent） | 走 `mobile/` 分支 + PR，不直接推 main |
+| `tygit.tuyoo.com` | 内网（本地开发） | `git push origin` → 仅 tygit；GitHub 仅显式 `git push github` |
+| `github.com` | 外网（云端 Agent） | `mobile/` 分支 + PR，不直接推 main |
 
 ## Cursor 云端 Agent 环境
 
-云端 Agent 从 GitHub clone，无 `.env` 文件：
-- 后端应用需 `DEV_MODE=true` 或 config 有 dev-safe 默认值
-- 确保 `dev_mode=True` 时应用可无 `.env` 启动
-- OIDC 等认证功能在 dev_mode 下自动跳过
+云端 Agent 从 GitHub clone，无 `.env`：
 
-## 首次推送检查清单
+- 后端需 `DEV_MODE=true` 或 dev-safe 默认配置
+- `dev_mode=True` 时可无 `.env` 启动
+- OIDC 等在 dev_mode 下跳过
 
-- [ ] `.gitignore` 完善（Python/Node 通用忽略项）
-- [ ] 无硬编码密钥（config.py 密钥外置化完成）
-- [ ] GitHub 6 个 Private 仓库已创建
-- [ ] 父仓库 + 5 个子模块 remote 配置完成
-- [ ] `.gitmodules` 改为相对路径
-- [ ] 首次 `git push origin main`（触发双推送）
-- [ ] GitHub main 分支保护规则已配置
-- [ ] 验证：Cursor 云端 clone + dev_mode 启动正常
+## 检查清单（新建机器 / 复查）
+
+- [ ] `origin` push **仅** tygit（`git remote get-url --push --all origin` 只有一条）
+- [ ] 存在 `github` remote
+- [ ] `.gitignore` 含 `novel/`；小说在独立仓 `SunGrissy/novel` 推送
+- [ ] `.gitmodules` 相对路径（子模块）
+- [ ] GitHub `main` 分支保护已配置（若使用移动端 Agent）

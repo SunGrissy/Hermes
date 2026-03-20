@@ -84,3 +84,6 @@ assets/
 # Local-only directories
 # ========================
 workspace-docs/
+
+# 小说正文独立仓库（仅 GitHub 维护，见 novel/README.md）
+novel/

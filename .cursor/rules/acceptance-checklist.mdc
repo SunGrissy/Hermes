@@ -97,7 +97,7 @@ git branch --show-current
 
 ## 第 7 步：推送（默认执行）
 
-**策略：验收通过即推送，不再询问。**
+**策略：验收通过即推送到 tygit，不再询问。** 使用 **`git push origin`**（或等价地仅指向 tygit 的 `git push`），**不**推 `github`，除非用户在说「验收」时**同时明确要求**「推 GitHub」/「同步 GitHub 镜像」。
 
 ### 7a. 检测变更范围
 
@@ -116,7 +116,7 @@ git status
 步骤 A：子模块内
   1. cd 进子模块目录
   2. pre-push 门禁（agent-core.mdc P2：敏感路径检查）
-  3. git push
+  3. git push origin
   4. 如果 rejected → git pull --rebase → 重试一次
   5. 仍失败 → 停下来报告用户，不强制
   6. 记录 push 成功的 commit hash
@@ -131,14 +131,18 @@ git status
   3. git add <子模块名>（逐个 add 有变更的子模块）
   4. git commit -m "chore: update submodule pointers"
   5. pre-push 门禁（agent-core.mdc P1-P3）
-  6. git push
+  6. git push origin
   7. 如果 rejected → git pull --rebase → 重试一次
   8. 仍失败 → 停下来报告用户
 ```
 
 ### 7d. 无子模块变更时
 
-直接在当前仓库执行 pre-push 门禁 → `git push`（rejected 同理处理）。
+直接在当前仓库执行 pre-push 门禁 → `git push origin`（rejected 同理处理）。
+
+### 7e. 用户明确要求推 GitHub 时（可选）
+
+在 7b→7d 完成后，若用户本次验收口令包含「推 GitHub」：在已推送过的同一批仓库内，再对**相同分支**执行 `git push github`（子模块先于父仓，顺序与 7b 一致）。
 
 ### 完成判定
 

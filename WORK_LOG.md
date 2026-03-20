@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## 2026-03-20 - Git：默认仅推 tygit；novel 独立 GitHub 仓；规范与 Skill 同步
+
+**状态**: 已完成（待用户按需 `git push origin`）
+
+**内容**:
+- 父仓及 pm-system / performeval / cci_system / task_reminder / teamscore：`origin` 去掉 GitHub 双 push，仅 tygit；保留 `github` remote
+- `novel/`：独立仓库 `https://github.com/SunGrissy/novel.git`，父仓 `.gitignore` 忽略并从索引移除跟踪
+- 更新：`dual-git-sync` Skill、`shell-git.mdc`、`acceptance-checklist.mdc`、`git-workflow.mdc`、`github-ops` Skill、`workspace-map.mdc`、`.cursor/skills/README.md`
+
+---
+
 ## 2026-03-20 - performeval 子模块：陈子豪面试材料（简历 PDF + 初试清单 + 初审报告）
 
 **状态**: 已提交推送 tygit（显式 URL，未推 GitHub）

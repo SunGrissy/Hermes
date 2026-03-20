@@ -10,7 +10,7 @@ alwaysApply: true
 ## 何时提交（铁律）
 - 只在用户明确说**"请提交"**或**"验收通过"**时才执行 git commit
 - 功能做完、Bug 修完、重构完 → 都**不要自动提交**，等用户指令
-- 验收时默认推送（见 `acceptance-checklist.mdc` 第 7 步），其他场景不要未经许可执行 `git push`
+- 验收时默认推送 **tygit**（`git push origin`，见 `acceptance-checklist.mdc` 第 7 步）；推 GitHub 仅当用户明确说「推 GitHub」或验收时一并要求；其他场景不要未经许可执行 `git push`
 
 ## Commit Message 格式
 ```
@@ -34,7 +34,7 @@ type: feat / fix / docs / style / refactor / perf / test / chore / revert
    - 如果有冲突 → 见下方「合并冲突处理流程」
    - 合并完成后 → 见下方「合并后测试流程」
    - 测试通过后：`git checkout main && git merge <branch>`（此时应为 fast-forward）
-4. 推送（默认执行，含子模块顺序处理，见 `acceptance-checklist.mdc` 第 7 步）
+4. 推送（默认执行 **origin(tygit)**，含子模块顺序处理，见 `acceptance-checklist.mdc` 第 7 步；GitHub 镜像见该步 7e）
 
 ### 合并冲突处理流程
 当 `git merge` 产生冲突时：

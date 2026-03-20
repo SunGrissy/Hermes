@@ -7,7 +7,7 @@
 | Skill | 用途 |
 |-------|------|
 | cursor-to-dingtalk | 会话结束把结果发钉钉（daemon /send 或 Webhook，footer 小秘书提醒） |
-| dual-git-sync | GitLab ↔ GitHub 双远端同步、子模块镜像 |
+| dual-git-sync | tygit 主仓 + GitHub 可选镜像、子模块、novel 独立仓 |
 | fastapi-router | FastAPI 路由与 CRUD、鉴权、Pydantic 模型 |
 | frontend-design | 高区分度前端/落地页/组件设计 |
 | github-ops | GitHub 仓库、分支保护、PR、gh CLI |

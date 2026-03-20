@@ -5,9 +5,9 @@ description: GitHub platform operations for MyAgents workspace. Covers gh CLI us
 
 # GitHub 操作规范
 
-MyAgents 使用 GitHub 作为外网开发镜像，供 Cursor 云端/移动端 Agent 协作。本 Skill 覆盖 GitHub 平台侧的操作标准。
+MyAgents 使用 GitHub 作为外网开发镜像，供 Cursor 云端/移动端 Agent 协作。日常 **`git push origin` 只推 tygit**；更新 GitHub 镜像需用户明确说「推 GitHub」后对 `github` remote 执行 `git push github`（见 `dual-git-sync` Skill）。
 
-> 双 remote 同步机制见 `dual-git-sync` Skill；提交规范见 `git-workflow.mdc`。
+> Remote 策略与口令见 `dual-git-sync` Skill、`shell-git.mdc`；提交规范见 `git-workflow.mdc`。
 
 ## gh CLI 速查
 
@@ -166,5 +166,5 @@ git push origin main
 | `git push` 到 GitHub 认证失败 | 运行 `gh auth setup-git` 刷新 credential |
 | PR 无法 Merge（branch protection） | 确认 PR base 是 main，且从功能分支发起 |
 | 子模块 clone 为空目录 | 确认 `.gitmodules` 用相对路径且子模块仓库已推送 |
-| 双 push 其中一端失败 | 另一端仍会成功；修复失败端后单独 `git push github main` 补推 |
+| 仅推 tygit 后需要补镜像 | 网络或策略需要时，单独 `git push github main`（在对应仓库目录） |
 | Cursor 云端 Agent 启动后端报错 | 确认 dev_mode 默认值或 `.env` 配置；参见 `dual-git-sync` Skill |

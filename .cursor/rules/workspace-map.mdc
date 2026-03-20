@@ -18,6 +18,7 @@ alwaysApply: true
 | **FileCleanerTool** | 文件扫描清理桌面工具 | Python + customtkinter | `gui.py` |
 | **TeamScore** | 团队评分数据处理 | Python 脚本集（M12、雷达图） | 各子目录下的 `.py` 脚本 |
 | **dingtalk-desktop** | 钉钉桌面端消息通道（基础设施） | Python + Frida + msgpack | `daemon.py`（端口 19200） |
+| **novel** | 小说正文与设定（**独立 Git 仓，仅 GitHub**） | Markdown | 仓库根 `novel/`，远端 `SunGrissy/novel`；父仓 `.gitignore` 忽略 |
 | **workspace-docs** | 管理规范文档库 | Markdown | `README.md` |
 
 ## 关键约定
