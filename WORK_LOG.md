@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-20 - performeval 子模块：陈子豪面试材料（简历 PDF + 初试清单 + 初审报告）
+
+**状态**: 已提交推送 tygit（显式 URL，未推 GitHub）
+
+**内容**:
+- 同步 `performeval` 子模块指针：`面试/陈子豪_运营策划/`（含 `陈子豪_简历.pdf`）、`面试/简历初筛/初审报告_陈子豪_运营策划.md`，子模块内 `WORK_LOG.md` 已记一笔
+
+---
+
 ## 2026-03-21 - dingtalk-desktop：日报拉取/定时/自检与简历轮询超时
 
 **状态**: 验收通过（已提交推送 tygit origin）
