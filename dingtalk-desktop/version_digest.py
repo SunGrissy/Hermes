@@ -10,8 +10,10 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 from datetime import datetime, date, timedelta
+from typing import Any, Dict, List, Optional, Tuple
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_PATH = os.path.join(_DIR, 'digest_config.json')
@@ -19,29 +21,13 @@ _TEMPLATE_PATH = os.path.join(_DIR, 'message_templates.json')
 
 _DEFAULT_TEMPLATE = {
     'title': '## 版本状态 [{timestamp}]',
-    'version': {
-        'header': '**{name}** | {phase}',
-        'countdown': {
-            'overdue': '**[超期]** 已到/超过发版日',
-            'urgent': '**[紧]** {days}天后发版',
-            'normal': '{days}天后发版',
-            'urgent_threshold_days': 7,
-        },
-        'feature_line': 'Feature: {summary}',
-        'capacity_line': '容量: {pct}%',
-        'milestone_line': '里程碑: {ms_name} ({ms_date})',
-        'pipeline_line': '管线节点: {node_name} ({node_date})',
-        'overdue_line': '**[超期节点]** {nodes}',
-        'risk_line': '[风险] {text}',
-    },
+    'top_separator': '---',
     'show': {
-        'capacity': True,
         'milestone': True,
-        'pipeline_current': True,
         'overdue_nodes': True,
         'risks': True,
     },
-    'limits': {'risks': 3},
+    'limits': {'risks': 3, 'overdue_nodes': 5},
     'separator': '---',
     'footer': '<font color="#999999">小秘书提醒</font>',
 }
@@ -74,18 +60,81 @@ PIPELINE_STAGES = [
     ('retro', '复盘'),
 ]
 
-PHASE_LABELS = {
-    'planning': '规划中',
-    'estimation': '任务拆解',
-    'dev': '开发期',
-    'released': '已发布',
-}
+# 与 pm-system 前端 PIPELINE_STAGES 偏移一致，用于推算「按时间应处于」的节点
+STAGE_SCHEDULE_SPEC: List[Tuple[str, str, str, int]] = [
+    ('planning', '规划', 'start', -7),
+    ('feasibility', '可行性初评', 'start', -3),
+    ('capacity', '容量评估', 'start', -2),
+    ('scoping', '规格锁定', 'start', -1),
+    ('dev', '开发', 'release', -10),
+    ('acceptance', '验收', 'release', -7),
+    ('goLiveReview', '上线评审', 'release', -5),
+    ('freezeConfirm', '封版确认', 'release', -3),
+    ('releaseTesting', '发布测试', 'release', -1),
+    ('release', '发版', 'release', 0),
+]
 
+# 钉钉 Markdown 对「emoji + **」粘连解析易错位，容量告警仅用文字标记
 ALERT_ICONS = {
-    'critical': '[红]',
-    'warning': '[黄]',
+    'critical': '（容量透支）',
+    'warning': '（容量偏高）',
     'normal': '',
 }
+
+# 钉钉机器人 Markdown 需用 <font color="#RRGGBB"> 才有颜色，纯中文「红/黄」不会着色
+_DT_COLOR_RED = '#dc2626'
+_DT_COLOR_AMBER = '#d97706'
+_DT_COLOR_BLUE = '#2563eb'
+_DT_COLOR_GRAY = '#64748b'
+_DT_COLOR_GREEN = '#16a34a'
+# 数据快照 #### 标题默认色（容量正常时），比浅灰更易辨认
+_DT_COLOR_SNAPSHOT_NAVY = '#1e3a8a'
+
+
+def _parse_iso_date(val: Any) -> Optional[date]:
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _dt_font(color_hex: str, inner: str) -> str:
+    """为钉钉 Markdown 包一层字体颜色（避免与 ** 混用 emoji 导致错位）。"""
+    if not inner:
+        return inner
+    return f'<font color="{color_hex}">{inner}</font>'
+
+
+def _dt_font_bold(color_hex: str, inner: str) -> str:
+    """着色行同时加粗（标题类更易扫读）。"""
+    if not inner:
+        return inner
+    t = inner.strip()
+    if not (t.startswith('**') and t.endswith('**')):
+        t = f'**{t}**'
+    return _dt_font(color_hex, t)
+
+
+def _dt_heading4(color_hex: str, title: str) -> str:
+    """四级标题：#### + 着色 + 加粗。"""
+    return f'#### {_dt_font_bold(color_hex, title)}'
+
+
+# 列表前缀（U+2022 实心圆点，比「·」更易辨认）
+_VD_BULLET = '\u2022 '
+
+
+class FetchAuthError(Exception):
+    """Raised when PM API authentication fails."""
 
 
 def _load_config():
@@ -94,6 +143,61 @@ def _load_config():
             return json.load(f)
     except Exception:
         return {}
+
+
+def _collect_version_digest_webhooks(config: dict) -> List[str]:
+    """版本状态推送目标：优先 version_digest_webhooks；否则主 URL + version_digest_webhook_extra；再无则 webhook_url。"""
+    raw = config.get('version_digest_webhooks')
+    urls: List[str] = []
+    if isinstance(raw, list):
+        for u in raw:
+            s = str(u).strip()
+            if s:
+                urls.append(s)
+    if urls:
+        seen = set()
+        out: List[str] = []
+        for u in urls:
+            if u not in seen:
+                seen.add(u)
+                out.append(u)
+        return out
+    main = (config.get('version_digest_webhook') or '').strip()
+    if main:
+        urls.append(main)
+    extra = config.get('version_digest_webhook_extra') or []
+    if isinstance(extra, list):
+        for u in extra:
+            s = str(u).strip()
+            if s:
+                urls.append(s)
+    if not urls:
+        fb = (config.get('webhook_url') or '').strip()
+        if fb:
+            urls.append(fb)
+    seen = set()
+    out = []
+    for u in urls:
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def _send_digest_to_webhooks(text: str, webhook_urls: List[str], *, quiet: bool) -> dict:
+    """同一正文依次 POST；全部成功才算 success。"""
+    if not webhook_urls:
+        return {'success': False, 'error': 'no_webhook'}
+    last_err = None
+    for idx, url in enumerate(webhook_urls):
+        r = send_via_webhook(text, url, quiet=quiet)
+        if not r.get('success'):
+            last_err = r.get('error') or 'send failed'
+            if not quiet:
+                print(f'[send] webhook #{idx + 1} failed: {last_err}', flush=True)
+    if last_err is None:
+        return {'success': True}
+    return {'success': False, 'error': last_err}
 
 
 def _api_get(url, timeout=10, api_key=None):
@@ -111,9 +215,85 @@ def fetch_dashboard(pm_url, api_key=None):
         versions = data.get('data', {}).get('activeVersions', [])
         if versions:
             return versions
+        return []
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise FetchAuthError(f'HTTP {e.code}: Unauthorized')
+        print(f'[warn] dashboard API failed: {e}', flush=True)
     except Exception as e:
         print(f'[warn] dashboard API failed: {e}', flush=True)
-    return _fallback_from_json(pm_url)
+    return []
+
+
+def _render_auth_fail_notice(pm_url, err_text):
+    now_str = datetime.now().strftime('%m/%d %H:%M')
+    lines = [
+        f'## 版本状态拉取失败 [{now_str}]',
+        '',
+        f'- 数据源：`{pm_url}/api/dashboard`',
+        f'- 结果：鉴权失败（{err_text}）',
+        '- 处理：本次已跳过版本摘要推送，避免发送旧数据',
+        '',
+        '### 行动建议',
+        '1. 在 PM 后端 `backend/.env` 设置 `SERVICE_API_KEY`，须与 `dingtalk-desktop/digest_config.json` 的 `pm_system_api_key` 一致',
+        f'2. 确认本通知中的数据源地址 `{pm_url}` 可达，且进程已重启使 `.env` 生效',
+        '3. 访问 `GET /api/health`，若 `service_api_key_configured` 为 false，说明服务端未读到密钥（常见原因：`.env` 不在 `backend/` 或启动方式导致旧版相对路径未加载）',
+        '4. 本机执行 `py version_digest.py --dry-run` 复测，确认不再出现 401',
+        '5. 若 key 已更新，重跑一次定时脚本或手动触发「版本咋样了」',
+        '',
+        '<font color="#999999">小秘书提醒</font>',
+    ]
+    return '\n'.join(lines)
+
+
+def _notify_fetch_failed(webhook_urls, pm_url, err_text, log_to_stdout=True):
+    if not webhook_urls:
+        if log_to_stdout:
+            print('[version-digest] no webhook configured, skip failure notice', flush=True)
+        return {'success': False, 'error': 'no_webhook'}
+    notice = _render_auth_fail_notice(pm_url, err_text)
+    result = _send_digest_to_webhooks(notice, webhook_urls, quiet=not log_to_stdout)
+    if log_to_stdout:
+        if result.get('success'):
+            print('[version-digest] auth-failure notice sent (all webhooks)', flush=True)
+        else:
+            print(f"[version-digest] auth-failure notice failed: {result.get('error')}", flush=True)
+    return result
+
+
+def _render_empty_data_notice(pm_url):
+    now_str = datetime.now().strftime('%m/%d %H:%M')
+    lines = [
+        f'## 版本状态数据异常 [{now_str}]',
+        '',
+        f'- 数据源：`{pm_url}/api/dashboard`',
+        '- 结果：接口鉴权通过，但返回 0 条活跃版本',
+        '- 处理：本次已跳过正常版本摘要推送，避免误导',
+        '',
+        '### 行动建议',
+        f'1. 核对 PM 实例 `{pm_url}` 当前连接的数据库路径（`backend/data/gamedev_pm.db`）是否为正确环境',
+        '2. 直接检查 `/api/versions` 是否也为 0（若为 0，优先排查后端实例数据）',
+        '3. 如刚重启/重部署，确认 `backend/.env` 与数据目录未被换到空环境',
+        '4. 修复后手动重跑 `py version_digest.py` 验证推送恢复',
+        '',
+        '<font color="#999999">小秘书提醒</font>',
+    ]
+    return '\n'.join(lines)
+
+
+def _notify_empty_data(webhook_urls, pm_url, log_to_stdout=True):
+    if not webhook_urls:
+        if log_to_stdout:
+            print('[version-digest] no webhook configured, skip empty-data notice', flush=True)
+        return {'success': False, 'error': 'no_webhook'}
+    notice = _render_empty_data_notice(pm_url)
+    result = _send_digest_to_webhooks(notice, webhook_urls, quiet=not log_to_stdout)
+    if log_to_stdout:
+        if result.get('success'):
+            print('[version-digest] empty-data notice sent (all webhooks)', flush=True)
+        else:
+            print(f"[version-digest] empty-data notice failed: {result.get('error')}", flush=True)
+    return result
 
 
 def _fallback_from_json(pm_url):
@@ -142,9 +322,16 @@ def _fallback_from_json(pm_url):
             except ValueError:
                 pass
         vf = v.get('features', [])
-        done = sum(1 for f in vf if f.get('stage') in ('done', 'released'))
+        def _json_feat_done(f):
+            st = (f.get('status') or '').strip()
+            return f.get('stage') in ('done', 'released') or st == 'done'
+
+        done = sum(1 for f in vf if _json_feat_done(f))
         blocked = sum(1 for f in vf if f.get('isBlocked') or f.get('stage') == 'blocked')
-        in_prog = sum(1 for f in vf if f.get('stage') in ('dev', 'qa', 'testing', 'in_progress'))
+        in_prog = sum(
+            1 for f in vf
+            if (not _json_feat_done(f)) and f.get('stage') in ('dev', 'qa', 'testing', 'in_progress')
+        )
         not_started = len(vf) - done - blocked - in_prog
         total_cap = v.get('capacity') or 0
         allocated = sum(f.get('estimate') or 0 for f in vf)
@@ -189,111 +376,242 @@ def filter_active(versions, limit=3):
 
 
 def enrich_pipeline(pm_url, version):
-    """Add pipeline overdue info from version detail."""
-    ddls = version.get('_pipeline_ddls') or {}
-    status = version.get('_pipeline_status') or {}
-
-    if not ddls and not status:
-        vid = version.get('id')
-        if not vid:
-            return
-        api_key = version.get('_api_key')
+    """拉版本详情，解析管线超期、当前节点、时间进度与「按日程应处于」节点。"""
+    vid = version.get('id')
+    api_key = version.get('_api_key')
+    detail: Dict[str, Any] = {}
+    if vid:
         try:
-            detail = fetch_version_detail(pm_url, vid, api_key=api_key)
+            detail = fetch_version_detail(pm_url, vid, api_key=api_key) or {}
         except Exception as e:
             print(f'[warn] cannot fetch version {vid}: {e}', flush=True)
-            return
-        ddls = detail.get('pipeline_ddls') or {}
-        status = detail.get('pipeline_status') or {}
-        version.setdefault('_pld', detail.get('pld_user_id', ''))
-        version.setdefault('_ple', detail.get('ple_user_id', ''))
-        version.setdefault('_plt', detail.get('plt_user_id', ''))
+
+    ddls = version.get('_pipeline_ddls') or detail.get('pipeline_ddls') or {}
+    status = version.get('_pipeline_status') or detail.get('pipeline_status') or {}
+    version['_pipeline_ddls'] = ddls
+    version['_pipeline_status'] = status
+    version.setdefault('_pld', detail.get('pld_user_id') or detail.get('pldUserId', ''))
+    version.setdefault('_ple', detail.get('ple_user_id') or detail.get('pleUserId', ''))
+    version.setdefault('_plt', detail.get('plt_user_id') or detail.get('pltUserId', ''))
 
     today = date.today()
-    overdue = []
+    overdue: List[str] = []
+    overdue_max_days = 0
     current_node = None
 
     for stage_id, label in PIPELINE_STAGES:
         if stage_id == 'retro':
             continue
-        done = status.get(stage_id, False)
+        done = bool(status.get(stage_id, False))
         if done:
             continue
         ddl_str = ddls.get(stage_id)
         if ddl_str:
             try:
-                ddl_date = datetime.strptime(ddl_str[:10], '%Y-%m-%d').date()
+                ddl_date = datetime.strptime(str(ddl_str)[:10], '%Y-%m-%d').date()
                 if ddl_date < today:
                     days_over = (today - ddl_date).days
+                    overdue_max_days = max(overdue_max_days, days_over)
                     overdue.append(f'{label} (超{days_over}天)')
                 elif current_node is None:
                     days_until = (ddl_date - today).days
-                    current_node = (label, ddl_str[:10], days_until)
+                    current_node = (label, str(ddl_str)[:10], days_until)
             except ValueError:
                 pass
         if current_node is None and not done:
-            current_node = (label, ddl_str[:10] if ddl_str else '?', None)
+            current_node = (label, str(ddl_str)[:10] if ddl_str else '?', None)
 
     version['_pipeline_overdue'] = overdue
     version['_pipeline_current'] = current_node
 
+    start_d = _parse_iso_date(detail.get('start_date')) or _parse_iso_date(
+        version.get('startDate')
+    )
+    release_d = _parse_iso_date(version.get('releaseDate')) or _parse_iso_date(
+        detail.get('release_date')
+    )
+    if not start_d and release_d:
+        start_d = release_d - timedelta(days=90)
+
+    eff: Dict[str, Optional[date]] = {}
+    for sid, _label, base, off in STAGE_SCHEDULE_SPEC:
+        raw = ddls.get(sid)
+        if raw:
+            eff[sid] = _parse_iso_date(raw)
+        elif base == 'start' and start_d:
+            eff[sid] = start_d + timedelta(days=off)
+        elif base == 'release' and release_d:
+            eff[sid] = release_d + timedelta(days=off)
+        else:
+            eff[sid] = None
+
+    max_behind = overdue_max_days
+    for sid, _label, *_ in STAGE_SCHEDULE_SPEC:
+        if bool(status.get(sid, False)):
+            continue
+        ddl = eff.get(sid)
+        if ddl and today > ddl:
+            max_behind = max(max_behind, (today - ddl).days)
+
+    expected_label = '—'
+    for sid, label, *_ in STAGE_SCHEDULE_SPEC:
+        if bool(status.get(sid, False)):
+            continue
+        ddl = eff.get(sid)
+        if ddl is None:
+            expected_label = label
+            break
+        if today <= ddl:
+            expected_label = label
+            break
+    if expected_label == '—':
+        for sid, label, *_ in STAGE_SCHEDULE_SPEC:
+            if not bool(status.get(sid, False)):
+                expected_label = label
+                break
+
+    actual_label = '—'
+    if current_node:
+        actual_label = current_node[0]
+
+    schedule_state = 'ok'
+    if max_behind > 0:
+        schedule_state = 'behind'
+    else:
+        if current_node and current_node[2] is not None and current_node[2] >= 14:
+            schedule_state = 'ahead'
+
+    version['_schedule_max_behind_days'] = max_behind
+    version['_schedule_state'] = schedule_state
+    version['_expected_stage_label'] = expected_label
+    version['_actual_stage_label'] = actual_label
+
 
 def _render_version(v, tmpl=None):
+    """按产品约定结构输出：### 状态emoji 版本|剩余天 → #### 建议 → #### 时间进度 → 超期 → 数据快照等。"""
     if tmpl is None:
         tmpl = _load_template()
-    vt = tmpl.get('version', {})
     show = tmpl.get('show', {})
     limits = tmpl.get('limits', {})
-    cd_tmpl = vt.get('countdown', {})
-    urgent_days = cd_tmpl.get('urgent_threshold_days', 7)
 
     name = v.get('name', '?')
-    phase = PHASE_LABELS.get(v.get('phase', ''), v.get('phase', '?'))
     days_rem = v.get('daysRemaining')
-
-    if days_rem is not None and days_rem <= 0:
-        countdown = cd_tmpl.get('overdue', '**[超期]** 已到/超过发版日')
-    elif days_rem is not None and days_rem <= urgent_days:
-        countdown = cd_tmpl.get('urgent', '**[紧]** {days}天后发版').format(days=days_rem)
-    elif days_rem is not None:
-        countdown = cd_tmpl.get('normal', '{days}天后发版').format(days=days_rem)
+    if days_rem is None:
+        sub = '发版日未定'
+    elif days_rem <= 0:
+        sub = '已到期或超发版日'
     else:
-        countdown = ''
+        sub = f'剩余{days_rem}天'
 
-    lines = [vt.get('header', '**{name}** | {phase}').format(name=name, phase=phase)]
-    if countdown:
-        lines.append(countdown)
+    pipeline_overdue = v.get('_pipeline_overdue') or []
+    cs = v.get('capacitySummary') or {}
+    risks_early = v.get('risks') or []
+    al_early = cs.get('alertLevel', 'normal')
+    fs = v.get('featureSummary') or {}
+    tot_e = fs.get('total') or 0
+    done_e = fs.get('done') or 0
+    max_bd = int(v.get('_schedule_max_behind_days') or 0)
 
-    fs = v.get('featureSummary', {})
+    health_bits: List[str] = []
+    if pipeline_overdue:
+        health_bits.append('管线超期')
+    if al_early == 'critical':
+        health_bits.append('容量透支')
+    elif al_early == 'warning':
+        health_bits.append('容量偏高')
+    if risks_early:
+        health_bits.append('阻塞或里程碑风险')
+    if tot_e > 0 and days_rem is not None and days_rem <= 14 and done_e == 0:
+        health_bits.append('Feature 完成度仍低')
+
+    is_red = bool(pipeline_overdue or al_early == 'critical' or risks_early)
+    if days_rem is not None and days_rem <= 0:
+        v_emoji = '❌'
+    elif pipeline_overdue or max_bd > 0 or is_red:
+        v_emoji = '❌'
+    elif health_bits:
+        v_emoji = '⚠️'
+    else:
+        v_emoji = '✅'
+
+    lines: List[str] = [f'### {v_emoji} {name}|{sub}']
+
+    if is_red:
+        action = '优先处理管线超期、解除阻塞与容量透支'
+        hcolor = _DT_COLOR_RED
+    elif health_bits:
+        action = '跟进容量与 Feature 完成度'
+        hcolor = _DT_COLOR_AMBER
+    else:
+        action = '维持节奏，继续按管线推进'
+        hcolor = _DT_COLOR_GREEN
+
+    overview = '、'.join(health_bits) if health_bits else '未发现上述预警项'
+    lines.append(_dt_heading4(hcolor, f'[{action}]'))
+    lines.append(f'{_VD_BULLET}{overview}')
+
+    sched = v.get('_schedule_state', 'ok')
+    if days_rem is not None and days_rem <= 0:
+        sched_title = '发版日已过，请立即评估补救'
+        scolor = _DT_COLOR_RED
+    elif sched == 'behind' and max_bd > 0:
+        sched_title = f'落后时间进度{max_bd}天'
+        scolor = _DT_COLOR_RED
+    elif pipeline_overdue and max_bd <= 0:
+        sched_title = '落后时间进度（管线已超期）'
+        scolor = _DT_COLOR_RED
+    elif sched == 'ahead':
+        sched_title = '高于时间进度'
+        scolor = _DT_COLOR_GREEN
+    else:
+        sched_title = '符合时间进度'
+        scolor = _DT_COLOR_BLUE
+
+    lines.append(_dt_heading4(scolor, sched_title))
+    exp = v.get('_expected_stage_label') or '—'
+    act = v.get('_actual_stage_label') or '—'
+    lines.append(f'{_VD_BULLET}当前应处于 **{exp}**')
+    lines.append(f'{_VD_BULLET}系统实际处于 **{act}**')
+
+    if show.get('overdue_nodes', True) and pipeline_overdue:
+        max_od = int(limits.get('overdue_nodes', 5) or 5)
+        max_od = max(1, min(max_od, 20))
+        shown = pipeline_overdue[:max_od]
+        lines.append(_dt_heading4(_DT_COLOR_RED, '超期节点'))
+        for item in shown:
+            lines.append(f'{_VD_BULLET}{item}')
+        if len(pipeline_overdue) > max_od:
+            lines.append(f'{_VD_BULLET}… 等 {len(pipeline_overdue) - max_od} 项')
+
     total = fs.get('total', 0)
     done = fs.get('done', 0)
     in_prog = fs.get('inProgress', 0)
     blocked = fs.get('blocked', 0)
     not_started = fs.get('notStarted', 0)
-
-    parts = [f'{total}总']
+    parts = [f'{total}个']
     if done:
         parts.append(f'{done}完成')
     if in_prog:
-        parts.append(f'{in_prog}开发')
+        parts.append(f'{in_prog}开发中')
     if blocked:
         parts.append(f'{blocked}阻塞')
     if not_started:
         parts.append(f'{not_started}未开始')
-    feature_summary = ' / '.join(parts)
+    feat_snap = ' · '.join(parts) if parts else '0个'
     if total > 0:
-        pct = round(done / total * 100)
-        feature_summary += f' ({pct}%完成)'
-    lines.append(vt.get('feature_line', 'Feature: {summary}').format(summary=feature_summary))
-
-    if show.get('capacity', True):
-        cs = v.get('capacitySummary', {})
-        usage = cs.get('usagePct', 0)
-        alert = ALERT_ICONS.get(cs.get('alertLevel', ''), '')
-        cap_text = vt.get('capacity_line', '容量: {pct}%').format(pct=usage)
-        if alert:
-            cap_text += f' {alert}'
-        lines.append(cap_text)
+        feat_snap += f' · 完成 {round(done / total * 100)}%'
+    usage = cs.get('usagePct', 0)
+    cap_al = cs.get('alertLevel', 'normal')
+    alert = ALERT_ICONS.get(cap_al, '')
+    cap_part = f'容量 {usage}%{alert}'
+    snap_color = (
+        _DT_COLOR_RED
+        if cap_al == 'critical'
+        else (_DT_COLOR_AMBER if cap_al == 'warning' else _DT_COLOR_SNAPSHOT_NAVY)
+    )
+    lines.append(_dt_heading4(snap_color, '数据快照'))
+    lines.append(f'{_VD_BULLET}Feature：**{feat_snap}**')
+    lines.append(f'{_VD_BULLET}{cap_part}')
 
     if show.get('milestone', True):
         ms = v.get('nextMilestone')
@@ -301,35 +619,16 @@ def _render_version(v, tmpl=None):
             ms_name = ms.get('name', '?')
             ms_date = ms.get('date', '?')
             ms_days = ms.get('daysUntil')
-            ms_str = vt.get('milestone_line', '里程碑: {ms_name} ({ms_date})').format(
-                ms_name=ms_name, ms_date=ms_date)
+            suf = ''
             if ms_days is not None:
-                suffix = f', {ms_days}天后' if ms_days > 0 else ', 已到期'
-                ms_str = ms_str.rstrip(')') + suffix + ')'
-            lines.append(ms_str)
+                suf = f'，{ms_days}天后到期' if ms_days > 0 else '，已到期'
+            lines.append(f'{_VD_BULLET}下一里程碑：**{ms_name}**（{ms_date}）{suf}')
 
-    if show.get('pipeline_current', True):
-        current = v.get('_pipeline_current')
-        if current:
-            node_label, node_ddl, node_days = current
-            node_str = vt.get('pipeline_line', '管线节点: {node_name} ({node_date})').format(
-                node_name=node_label, node_date=node_ddl)
-            if node_days is not None:
-                suffix = f', {node_days}天后' if node_days > 0 else ', 已到期'
-                node_str = node_str.rstrip(')') + suffix + ')'
-            lines.append(node_str)
-
-    if show.get('overdue_nodes', True):
-        overdue = v.get('_pipeline_overdue', [])
-        if overdue:
-            lines.append(vt.get('overdue_line', '**[超期节点]** {nodes}').format(
-                nodes=', '.join(overdue)))
-
-    if show.get('risks', True):
-        risks = v.get('risks', [])
-        max_risks = limits.get('risks', 3)
-        for r in risks[:max_risks]:
-            lines.append(vt.get('risk_line', '[风险] {text}').format(text=r))
+    if show.get('risks', True) and risks_early:
+        max_risks = int(limits.get('risks', 3) or 3)
+        lines.append(_dt_heading4(_DT_COLOR_AMBER, '其它风险'))
+        for r in risks_early[:max_risks]:
+            lines.append(f'{_VD_BULLET}{r}')
 
     return '\n\n'.join(lines)
 
@@ -338,19 +637,21 @@ def render_digest(versions):
     tmpl = _load_template()
     now_str = datetime.now().strftime('%m/%d %H:%M')
     title = tmpl.get('title', '## 版本状态 [{timestamp}]').format(timestamp=now_str)
-    separator = '\n\n' + tmpl.get('separator', '---') + '\n\n'
+    top_sep = tmpl.get('top_separator', '---')
+    block_sep = '\n\n' + tmpl.get('separator', '---') + '\n\n'
     footer = '\n\n' + tmpl.get('separator', '---') + '\n\n' + tmpl.get(
         'footer', '<font color="#999999">小秘书提醒</font>')
 
     blocks = [_render_version(v, tmpl) for v in versions] or ['（无活跃版本）']
-    return title + '\n\n' + separator.join(blocks) + footer
+    return title + '\n\n' + top_sep + '\n\n' + block_sep.join(blocks) + footer
 
 
 def send_via_webhook(text, webhook_url, *, quiet=False):
+    # title 须含自定义关键词「小秘书提醒」，与多群机器人配置一致
     body = json.dumps({
         'msgtype': 'markdown',
         'markdown': {
-            'title': '版本状态',
+            'title': '小秘书提醒 · 版本状态',
             'text': text,
         },
     }).encode('utf-8')
@@ -383,17 +684,49 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
     pm_url = config.get('pm_system_url', 'http://127.0.0.1:8000').rstrip('/')
     api_key = config.get('pm_system_api_key', '')
     limit = config.get('version_digest_limit', 3)
-    webhook_url = config.get('version_digest_webhook', '') or config.get('webhook_url', '')
+    webhook_urls = _collect_version_digest_webhooks(config)
 
     if log_to_stdout:
         print(f'[version-digest] fetching from {pm_url}', flush=True)
 
     try:
         all_versions = fetch_dashboard(pm_url, api_key=api_key or None)
+    except FetchAuthError as e:
+        err = str(e)
+        if log_to_stdout:
+            print(f'[error] PM API auth failed: {err}', flush=True)
+        notice_ok = False
+        if send_webhook:
+            notice_ret = _notify_fetch_failed(
+                webhook_urls, pm_url, err, log_to_stdout=log_to_stdout
+            )
+            notice_ok = bool(notice_ret and notice_ret.get('success'))
+        return {
+            'ok': False,
+            'versions_count': 0,
+            'digest': '',
+            'error': f'auth_failed: {err}',
+            'sent_failure_notice': notice_ok,
+        }
     except Exception as e:
         if log_to_stdout:
             print(f'[error] cannot reach PmSystem: {e}', flush=True)
         return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+
+    if not all_versions:
+        if log_to_stdout:
+            print('[error] dashboard returned 0 active versions', flush=True)
+        notice_ok = False
+        if send_webhook:
+            notice_ret = _notify_empty_data(webhook_urls, pm_url, log_to_stdout=log_to_stdout)
+            notice_ok = bool(notice_ret and notice_ret.get('success'))
+        return {
+            'ok': False,
+            'versions_count': 0,
+            'digest': '',
+            'error': 'empty_active_versions',
+            'sent_empty_notice': notice_ok,
+        }
 
     versions = filter_active(all_versions, limit)
     if log_to_stdout:
@@ -415,20 +748,20 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
     if not send_webhook:
         return {'ok': True, 'versions_count': len(versions), 'digest': digest, 'error': None}
 
-    if not webhook_url:
+    if not webhook_urls:
         if log_to_stdout:
             print('[version-digest] no webhook configured, skipping send', flush=True)
         return {'ok': False, 'versions_count': len(versions), 'digest': digest,
                 'error': 'no_webhook'}
 
     quiet = not log_to_stdout
-    result = send_via_webhook(digest, webhook_url, quiet=quiet)
+    result = _send_digest_to_webhooks(digest, webhook_urls, quiet=quiet)
     ok = bool(result and result.get('success'))
     if log_to_stdout:
         if ok:
-            print('[version-digest] sent via webhook', flush=True)
+            print(f'[version-digest] sent via {len(webhook_urls)} webhook(s)', flush=True)
         else:
-            print('[version-digest] send failed', flush=True)
+            print('[version-digest] send failed (one or more webhooks)', flush=True)
     err = None if ok else (result or {}).get('error', 'send failed')
     return {'ok': ok, 'versions_count': len(versions), 'digest': digest, 'error': err}
 
@@ -448,6 +781,11 @@ def main():
         with open(args.output, 'w', encoding='utf-8') as f:
             f.write(digest)
         print(f'[version-digest] saved to {args.output}', flush=True)
+
+    if r.get('error'):
+        raise SystemExit(2)
+    if not args.dry_run and not r.get('ok', False):
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

@@ -78,6 +78,10 @@
     {
       "cid": "61952667675",
       "name": "数值小分队"
+    },
+    {
+      "cid": "47857575121",
+      "name": "4S"
     }
   ],
   "member_roles": {
@@ -114,20 +118,26 @@
       "focus": "战斗方向，可能成为APM和主美的卡点，关注工作内容与管线PM/主美日报的关联度"
     }
   },
-  "pm_system_url": "http://192.168.20.160:8112",
+  "pm_system_url": "http://172.16.3.197:8000",
   "pm_system_api_key": "jluAsEdnr40fHjg7E88t",
   "version_digest_limit": 3,
-  "version_digest_webhook": "https://oapi.dingtalk.com/robot/send?access_token=bbfd047b27aa532ffb63efd05c9db6a7dd38d646a6c07f2009e78c93bc7f8057",
+  "_note_version_digest_webhooks": "版本状态同一 Markdown 依次推送到下列群；机器人自定义关键词均为「小秘书提醒」。也可用 version_digest_webhook + version_digest_webhook_extra 代替本数组。",
+  "version_digest_webhooks": [
+    "https://oapi.dingtalk.com/robot/send?access_token=bbfd047b27aa532ffb63efd05c9db6a7dd38d646a6c07f2009e78c93bc7f8057",
+    "https://oapi.dingtalk.com/robot/send?access_token=454440d2f30976530212cfe9dd3b0d6906a58d06467b61eb9eee2602124e8ba1",
+    "https://oapi.dingtalk.com/robot/send?access_token=2278ad1dc202c3fc6b9c0b030656a27d97b70570ec136400e66c6cbb6e8b07fc"
+  ],
   "discover_marker": "#日报收集",
   "resume_notify_webhook": "https://oapi.dingtalk.com/robot/send?access_token=2816ab39197d77e816fa943c358fea510752bb27d5041725b87b345288b76bae",
   "memo_tracker": {
     "group_cid": "73216314617",
-    "colleague_skill_cids": ["73472166912"],
+    "colleague_skill_cids": ["73472166912", "47857575121"],
     "_note_colleague_skill_cids": "他人发言仅白名单群入队（例：杨琳汇报直通车）；本人仍可在 group_cid 或白名单群发指令。助理群内同事发言默认忽略。",
     "_note_wish_reply_webhook_by_cid": "备忘/TR/完成/删除 memo、今日/明日/本周关注、许愿/愿望单/删除或完成 wish 等技能回复均按「发言群」选 Webhook：wish_reply_webhook_by_cid 键为群 CID，值为该群机器人 URL；未映射的群用下方 webhook_url（或 webhook_config.json 的 memo_tracker）。",
     "_note_wish_reply_keyword": "B 群等自定义机器人的「自定义关键词」若开启，须与 A/助理一致：小秘书提醒。发送侧由 memo_tracker 模板控制：Markdown 的 title=webhook_keyword，正文末尾 footer 含该词（见 message_templates.json memo_tracker）。",
     "wish_reply_webhook_by_cid": {
-      "73472166912": "https://oapi.dingtalk.com/robot/send?access_token=319a628acc1bfe427c39ae119f60383cbe08d08265e6914f4fc56ffbc05acdea"
+      "73472166912": "https://oapi.dingtalk.com/robot/send?access_token=319a628acc1bfe427c39ae119f60383cbe08d08265e6914f4fc56ffbc05acdea",
+      "47857575121": "https://oapi.dingtalk.com/robot/send?access_token=7549de6acd9e9afdb92080f65b6a83bdf8b1c659c46c8b7fef3ecb534bb13776"
     },
     "default_who": "助理大白",
     "default_due_days": 7,
@@ -135,9 +145,10 @@
     "topic_pick_who": "选题库",
     "topic_pick_module": "选题库",
     "_note_topic_pick": "群消息「【选题】/选题：」收录到 TR 选题库模块；本地 topic_items 独立编号 topic:#N，与 memo 队列无关",
-    "topic_skill_group_cid": "",
+    "topic_skill_group_name": "4S",
+    "topic_skill_group_cid": "47857575121",
     "topic_skill_webhook_key": "memo_tracker_topic_room",
-    "_note_topic_skill_room": "选题/选题库专用群：在此填写该群 conversationId（topic_skill_group_cid）。机器人 URL 在 webhook_config.json 的 memo_tracker_topic_room；关键词与其它机器人一致（小秘书提醒）。启动时会自动把该 cid 加入 colleague_skill_cids 并写入 wish_reply_webhook_by_cid。无按人白名单，群内任一人发选题/选题库均会处理。注意：白名单群内同样会触发备忘、愿望等其它 memo_tracker 指令。",
+    "_note_topic_skill_room": "选题专用群：可填 topic_skill_group_cid；若为空则按 topic_skill_group_name 在根配置 report_cids 里匹配群名（全等或子串，如 4S）。匹配到后仍会并入 colleague_skill_cids。机器人 URL 在 webhook_config.json 的 memo_tracker_topic_room（有 URL 时写入 wish_reply_webhook_by_cid；无则回退助理群机器人）。无按人白名单。注意：白名单群内同样会触发备忘、愿望等指令；请在 report_cids 中为 4S 群填写真实 cid。",
     "person_lookup_aliases": ["洋哥", "崔哥", "UX", "战斗","崔忠仁","刘泊霆","张旭哲","王翕然","赵宇驰","车君怡","张颖","张梦君","郑杉","李振源","穆建博","吕佳悦","毛永林","程家叙","孙悦","龚锦","杨琳"],
     "_note_person_lookup": "群内仅发「洋哥」「找洋哥」等（须与列表完全一致）→ 列出正文含该词的进行中备忘与愿望",
     "desk_ops_enabled": true,

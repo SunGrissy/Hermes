@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-23 - dingtalk-desktop：版本状态多群 webhook（PMO/PLD）
+
+**状态**: 验收通过
+
+**内容**:
+- `version_digest.py`：`version_digest_webhooks` 多地址广播；Markdown title 含「小秘书提醒」；失败/空数据通知同步多群
+- `digest_config.json`：配置三群机器人 URL
+
+---
+
 ## 2026-03-23 - pm-system 子模块：数据源/dashboard/配置修复推 tygit
 
 **状态**: 已推送 tygit（子模块 `origin main` + 父仓同步子模块指针）
