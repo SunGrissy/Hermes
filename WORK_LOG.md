@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-23 - pm-system 子模块：数据源/dashboard/配置修复推 tygit
+
+**状态**: 已推送 tygit（子模块 `origin main` + 父仓同步子模块指针）
+
+**内容**:
+- `pm-system`：`feat(pm-system): 数据源统一、dashboard 与版本摘要对齐、配置加载修复`（commit `46ffc1d` 起）
+
+---
+
 ## 2026-03-20 - dingtalk-desktop 通道/路由与备忘提醒脚本；ue-review 规则；子模块推送
 
 **状态**: 已提交推送 tygit
