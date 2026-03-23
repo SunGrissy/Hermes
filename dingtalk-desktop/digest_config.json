@@ -138,7 +138,7 @@
     "topic_skill_group_cid": "",
     "topic_skill_webhook_key": "memo_tracker_topic_room",
     "_note_topic_skill_room": "选题/选题库专用群：在此填写该群 conversationId（topic_skill_group_cid）。机器人 URL 在 webhook_config.json 的 memo_tracker_topic_room；关键词与其它机器人一致（小秘书提醒）。启动时会自动把该 cid 加入 colleague_skill_cids 并写入 wish_reply_webhook_by_cid。无按人白名单，群内任一人发选题/选题库均会处理。注意：白名单群内同样会触发备忘、愿望等其它 memo_tracker 指令。",
-    "person_lookup_aliases": ["洋哥", "崔哥", "UX", "战斗","崔忠仁","刘泊霆","张旭哲","王翕然","赵宇驰","车君怡","张颖","张梦君","郑杉","李振源","穆建博","吕佳悦","毛永林","程家叙","孙悦","龚锦"],
+    "person_lookup_aliases": ["洋哥", "崔哥", "UX", "战斗","崔忠仁","刘泊霆","张旭哲","王翕然","赵宇驰","车君怡","张颖","张梦君","郑杉","李振源","穆建博","吕佳悦","毛永林","程家叙","孙悦","龚锦","杨琳"],
     "_note_person_lookup": "群内仅发「洋哥」「找洋哥」等（须与列表完全一致）→ 列出正文含该词的进行中备忘与愿望",
     "desk_ops_enabled": true,
     "_note_desk_ops": "检查大门|大门检查；重启大门|大门重启；拉今天/昨天/260319/20260319/N天日报 → report_digest 带 --full-content --notify-default（过程通知走 webhook default）；开始/完成仍走 memo webhook（设 desk_ops_enabled false 关闭）",

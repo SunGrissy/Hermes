@@ -230,10 +230,6 @@ class DedupTracker:
             self._seen.popitem(last=False)
         return False
 
-    def contains(self, key) -> bool:
-        """是否已有该键（不写入）。用于判断 send 已入队后跳过本人 push 回显。"""
-        return key in self._seen
-
     def clear(self):
         self._seen.clear()
 

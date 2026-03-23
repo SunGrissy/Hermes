@@ -204,6 +204,7 @@ _HYDRATE_FETCH_TIMEOUT_S = 75
 
 def _try_hydrate_push_message_from_fetch(msg: dict) -> None:
     """push 记录 text 为空时，调 /fetch 按时间戳对齐最近一条有正文的群消息。"""
+    t0 = int(time.time() * 1000)
     cid = str(msg.get('cid') or '').strip()
     push_ts = int(msg.get('ts') or 0)
     if not cid or push_ts <= 0:
@@ -557,6 +558,17 @@ _recent_memo_ts = {}     # (group_cid, content_key) -> last_run_ts_ms，备忘�
 _MEMO_THROTTLE_LOCK = threading.Lock()
 # 备忘「内容键 + 短时窗」登记与 push/poll 并发时加锁，避免双线程同时通过去重导致双收录
 _MEMO_INGEST_LOCK = threading.Lock()
+# msg_id 去重需要原子“查+写”，否则并发 push 可能同一 msg_id 双处理
+_MEMO_SEEN_LOCK = threading.Lock()
+
+
+def _reserve_msg_id_once(seen_set: set, msg_id: str) -> bool:
+    """原子预占 msg_id。True=本次首次占用，可继续处理；False=已处理过。"""
+    with _MEMO_SEEN_LOCK:
+        if msg_id in seen_set:
+            return False
+        seen_set.add(msg_id)
+        return True
 
 
 def _is_stale_command_msg(msg: dict, now_ms: int, max_age_ms: int) -> bool:
@@ -746,7 +758,8 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'push doc_review error: {e}')
         return
 
-    if msg_id in memo_seen_ids:
+    reserved = _reserve_msg_id_once(memo_seen_ids, msg_id)
+    if not reserved:
         return
 
     now_ms = int(time.time() * 1000)

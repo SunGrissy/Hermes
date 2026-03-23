@@ -558,3 +558,17 @@
 
 **备注**: 
 - 分组展示的横向泳道过长的情况未测试
+
+## [2026-03-19] - [dingtalk-desktop 指令去重修复与调试清理]
+
+**状态**: 验收通过
+
+**内容**:
+- `skill_router.py`：新增 `msg_id` 原子预占（`_reserve_msg_id_once` + `_MEMO_SEEN_LOCK`），避免并发下同一消息被重复处理
+- `lib/monitor.py`：去除 send/push 回显侧的实验性抑制分支，统一交由路由层内容键去重
+- `lib/utils.py`：移除仅用于实验分支的 `DedupTracker.contains` 接口
+- 清理本轮调试埋点代码，保留已验证生效的修复逻辑
+- `digest_config.json`：补充人员别名 `杨琳`
+
+**备注**:
+- 本次仅提交 dingtalk-desktop 相关改动，不包含工作区其他项目与未跟踪文件
