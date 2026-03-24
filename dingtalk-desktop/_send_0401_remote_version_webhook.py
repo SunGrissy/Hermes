@@ -23,8 +23,11 @@ from app.services.pipeline_node_checklist_render import (
 )
 from app.services.version_progress_notify import enrich_pipeline_for_version, render_version_status_markdown
 
-LOCK_FILE = os.path.join(_ROOT, "dingtalk-desktop", ".tmp_send_0401_remote.lock")
-LOCK_TTL_SEC = 300
+# 互斥：防止计划任务/多实例叠跑
+_RUNNING_LOCK = os.path.join(_ROOT, "dingtalk-desktop", ".send_0401_remote.running")
+# 冷却：上次成功推送后 N 秒内不再发（计划任务误配成每分钟时不会刷屏）
+_COOLDOWN_FILE = os.path.join(_ROOT, "dingtalk-desktop", ".send_0401_remote.last_ok")
+_DEFAULT_COOLDOWN_SEC = 3600
 
 
 def _load_cfg() -> dict:
@@ -43,26 +46,58 @@ def _api_get_json(url: str, api_key: str | None) -> dict:
 
 
 @contextmanager
-def _single_run_lock():
-    now = int(time.time())
+def _running_exclusive():
+    """本机单实例互斥；异常退出时由 finally 删除 .running。"""
     try:
-        if os.path.isfile(LOCK_FILE):
-            try:
-                old = int(open(LOCK_FILE, "r", encoding="utf-8").read().strip() or "0")
-            except Exception:
-                old = 0
-            if old and now - old < LOCK_TTL_SEC:
-                print("SKIP: lock active, avoid duplicate send", flush=True)
+        fd = os.open(_RUNNING_LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.close(fd)
+    except FileExistsError:
+        try:
+            age = time.time() - os.path.getmtime(_RUNNING_LOCK)
+            if age > 600:
+                os.remove(_RUNNING_LOCK)
+                fd = os.open(_RUNNING_LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(fd)
+            else:
+                print("SKIP: another instance is running", flush=True)
                 raise SystemExit(0)
-        with open(LOCK_FILE, "w", encoding="utf-8") as f:
-            f.write(str(now))
+        except FileExistsError:
+            print("SKIP: another instance is running", flush=True)
+            raise SystemExit(0)
+        except OSError:
+            print("SKIP: another instance is running", flush=True)
+            raise SystemExit(0)
+    try:
         yield
     finally:
         try:
-            if os.path.isfile(LOCK_FILE):
-                os.remove(LOCK_FILE)
-        except Exception:
+            if os.path.isfile(_RUNNING_LOCK):
+                os.remove(_RUNNING_LOCK)
+        except OSError:
             pass
+
+
+def _cooldown_remaining(force: bool) -> int:
+    if force:
+        return 0
+    if not os.path.isfile(_COOLDOWN_FILE):
+        return 0
+    try:
+        last = int(open(_COOLDOWN_FILE, "r", encoding="utf-8").read().strip() or "0")
+    except Exception:
+        return 0
+    elapsed = int(time.time()) - last
+    if elapsed < _DEFAULT_COOLDOWN_SEC:
+        return _DEFAULT_COOLDOWN_SEC - elapsed
+    return 0
+
+
+def _mark_send_ok() -> None:
+    try:
+        with open(_COOLDOWN_FILE, "w", encoding="utf-8") as f:
+            f.write(str(int(time.time())))
+    except OSError:
+        pass
 
 
 def _extract_data(payload: dict) -> dict:
@@ -207,9 +242,19 @@ def main() -> None:
         help="发到 digest_config.webhook_url（🐱助理通知群，与 notify_target 配套）",
     )
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="忽略冷却（仍受单实例互斥保护）；用于手工复验",
+    )
     args = ap.parse_args()
 
-    with _single_run_lock():
+    wait = _cooldown_remaining(args.force)
+    if wait > 0:
+        print(f"SKIP: cooldown active, next allowed in ~{wait}s (use --force to override)", flush=True)
+        raise SystemExit(0)
+
+    with _running_exclusive():
         cfg = _load_cfg()
         pm_url = (cfg.get("pm_system_url") or "").rstrip("/")
         api_key = cfg.get("pm_system_api_key") or None
@@ -249,6 +294,7 @@ def main() -> None:
                 ok += 1
         if ok != len(urls):
             raise SystemExit(6)
+        _mark_send_ok()
         print(f"DONE sent {ok}/{len(urls)}", flush=True)
 
 

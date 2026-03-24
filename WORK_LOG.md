@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - pm-system 去掉保存/定时钉钉推送；0401 脚本防刷屏
+
+**状态**: 已推送 tygit
+
+**内容**:
+- 子模块 `pm-system`：服务端不再主动推专项进度（见子模块 `WORK_LOG`）
+- `dingtalk-desktop/_send_0401_remote_version_webhook.py`：运行互斥 + 成功发送后冷却；`.gitignore` 忽略本地状态文件
+
+---
+
 ## 2026-03-24 - pm-system 管线钉钉块 + 远端 0401 推送脚本
 
 **状态**: 已推送 tygit（子模块 `origin main` + 父仓同步指针）
