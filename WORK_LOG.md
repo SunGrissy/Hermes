@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - Palace：import_report（引擎 JSON 导入 Web）
+
+**状态**: 已提交（父仓 main，待推送；commit 见 `git log -1`）
+
+**内容**:
+- `palace/palace_web/import_report.py`：命令行将 Palace 引擎输出的报告 JSON 写入 `palace_web/data/reports` 供 Web 标注使用
+- 说明：`palace_engine`、静态页、场景与文档等已与当前 `HEAD` 一致，本次仅新增上述脚本；`palace_stderr.txt` / `palace_stdout.txt` 未纳入版本库
+
+---
+
 ## 2026-03-24 - 面试清单（张凌）、md-reader 深链与钉钉 Skill；子模块同步
 
 **状态**: 已推送 tygit（父仓 `7164bcb`；子模块 `md-reader ec30c91`、`pm-system 3a8ea8f`）
