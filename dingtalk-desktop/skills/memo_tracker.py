@@ -39,6 +39,7 @@ from db.store import (
     upsert_topic_from_tr_sync,
     update_memo_due,
     update_memo_text,
+    update_topic_text,
     get_pending_memos,
     get_pending_topics,
     get_memo_by_seq,
@@ -51,6 +52,25 @@ from db.store import (
     get_wish_by_seq,
     get_pending_wishes,
 )
+
+# region agent log
+def _agent_dbg_memo(hypothesis_id: str, location: str, message: str, **data):
+    try:
+        import json
+        _p = os.path.normpath(os.path.join(_ROOT, '..', 'debug-5a049e.log'))
+        rec = {
+            'sessionId': '5a049e',
+            'hypothesisId': hypothesis_id,
+            'location': location,
+            'message': message,
+            'timestamp': int(time.time() * 1000),
+            'data': data,
+        }
+        with open(_p, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+# endregion
 
 # 备忘/愿望写入与删除串行化，避免 Frida 双触发或 push+poll 交错导致同一 memo_seq 双插或双删双推
 _MEMO_PIPELINE_LOCK = threading.Lock()
@@ -167,6 +187,10 @@ _DEFAULT_TEMPLATES = {
     'person_lookup_memo_line': '- **memo #{seq}** {text}\n',
     'person_lookup_wish_line': '- **wish #{seq}** {text}\n',
     'person_lookup_trunc': '\n（仅展示前 {n} 条，其余略）\n',
+    'topic_delete': 'topic #{seq} 已删除：{summary}',
+    'topic_edit_desc_ok': '已更新 **topic #{seq}** 描述：{summary}',
+    'topic_delete_need_ids': '请写明要删除的选题编号，例如：删除选题 3 或 删除 topic 24、25、26',
+    'memo_delete_need_ids': '请写明要删除的备忘编号，例如：删除备忘 3 或 删除 memo 24、25、26',
 }
 
 
@@ -486,6 +510,14 @@ _RE_MEMO_ASSIGN = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 
+_TOPIC_NUM_ONE = r'(?:选题\s*#?\s*|topic\s*#?\s*|topic)(\d+)(?!\d)'
+
+_RE_TOPIC_EDIT_DESC = re.compile(
+    r'(?:修改|改|更新)\s*' + _TOPIC_NUM_ONE
+    + r'\s*(?:描述|正文)\s*(?:为|成|是|[:：])\s*(.+)',
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def _parse_memo_edit_desc_command(text: str):
     """解析「改描述」指令，返回 (seq, body) 或 None。
@@ -504,6 +536,29 @@ def _parse_memo_edit_desc_command(text: str):
         return int(m.group(1)), m.group(2)
     m = re.match(
         r'^\s*' + _MEMO_NUM_ONE + r'\s*改描述\s*[:：]?\s*(.+)',
+        t,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return int(m.group(1)), m.group(2)
+    return None
+
+
+def _parse_topic_edit_desc_command(text: str):
+    """解析选题「改描述」指令，返回 (topic_seq, body) 或 None（须含 选题/topic 前缀，避免与备忘 #N 歧义）。"""
+    t = (text or '').strip()
+    m = _RE_TOPIC_EDIT_DESC.search(t)
+    if m:
+        return int(m.group(1)), m.group(2)
+    m = re.match(
+        r'^\s*' + _TOPIC_NUM_ONE + r'\s*改描述\s*[:：]?\s*(.+)',
+        t,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if m:
+        return int(m.group(1)), m.group(2)
+    m = re.match(
+        r'^\s*选题\s*#?\s*(\d+)(?!\d)\s*描述\s*(?:改成|改为|变更为|为|成)\s*[:：]?\s*(.+)',
         t,
         re.IGNORECASE | re.DOTALL,
     )
@@ -554,6 +609,59 @@ def _update_memo_task_in_tr(memo_seq: int, config: dict, *,
         return True
     except Exception as e:
         _log(f'write TaskReminder failed (memo patch): {e}')
+        return False
+
+
+def _update_topic_task_in_tr(topic_seq: int, config: dict, *, what=None) -> bool:
+    """更新 TR 中带 topic:#N 的任务字段（存在则写回）。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return False
+    except Exception as e:
+        _log(f'read TaskReminder failed (topic patch): {e}')
+        return False
+    marker = f'topic:#{topic_seq}'
+    found = False
+    for task in tasks:
+        if marker not in (task.get('note') or ''):
+            continue
+        found = True
+        if what is not None:
+            task['what'] = str(what).strip()
+        break
+    if not found:
+        return False
+    try:
+        _http_post_json(url, tasks)
+        return True
+    except Exception as e:
+        _log(f'write TaskReminder failed (topic patch): {e}')
+        return False
+
+
+def _delete_task_in_reminder_topic(topic_seq: int, config: dict) -> bool:
+    """从 TaskReminder 移除 note 含 topic:#N 的任务。"""
+    base_url = config.get('task_reminder_base', 'http://192.168.20.114:8111')
+    url = base_url.rstrip('/') + '/api/storage/task_reminder'
+    try:
+        tasks = _http_get_json(url)
+        if not isinstance(tasks, list):
+            return False
+    except Exception as e:
+        _log(f'read TaskReminder failed (topic delete): {e}')
+        return False
+    marker = f'topic:#{topic_seq}'
+    new_tasks = [t for t in tasks if marker not in (t.get('note') or '')]
+    if len(new_tasks) == len(tasks):
+        return False
+    try:
+        _http_post_json(url, new_tasks)
+        return True
+    except Exception as e:
+        _log(f'write TaskReminder failed (topic delete): {e}')
         return False
 
 
@@ -944,6 +1052,34 @@ def process_memo_assign_tr(msg_id, text, group_cid, config) -> bool:
     return True
 
 
+@_memo_serialized
+def process_topic_edit_description(msg_id, text, group_cid, config) -> bool:
+    parsed = _parse_topic_edit_desc_command(text or '')
+    if not parsed:
+        return False
+    if _consume_edit_cmd_dedup(group_cid, text):
+        return True
+    seq, raw_body = parsed
+    body = _strip_trailing_cmd_noise(raw_body)
+    if not body:
+        _send_webhook('未解析到新描述内容。', config, group_cid=group_cid)
+        return True
+    row = get_topic_by_seq(seq)
+    if not row or row.get('status') != 'active':
+        _send_webhook(_render_template('not_found', seq=seq, summary=''), config, group_cid=group_cid)
+        return True
+    update_topic_text(seq, body)
+    ok = _update_topic_task_in_tr(seq, config, what=body)
+    msg = _render_template('topic_edit_desc_ok', seq=seq, summary=body[:80])
+    if not msg:
+        msg = f'已更新 topic #{seq} 描述'
+    if not ok:
+        msg += f'\n（TR 未找到 topic:#{seq}，仅本地已改）'
+    _send_webhook(msg, config, group_cid=group_cid)
+    _log(f'topic #{seq} description updated, tr={ok}')
+    return True
+
+
 def topic_pick_content_key(text: str) -> str:
     c, _ = _parse_topic_pick_body(text or '')
     t = ' '.join((c or '').split())
@@ -956,6 +1092,10 @@ def process_topic_pick(msg_id, text, context_msgs, memo_ts, group_cid, config):
     if not _text_triggers_topic_pick(text or '', config):
         return False
     if is_topic_processed(msg_id):
+        _agent_dbg_memo(
+            'H1', 'memo_tracker.process_topic_pick', 'skip_already_processed',
+            msg_id=str(msg_id), text_preview=(text or '')[:80],
+        )
         return True
 
     content, _rep = _parse_topic_pick_body(text)
@@ -999,6 +1139,10 @@ def process_topic_pick(msg_id, text, context_msgs, memo_ts, group_cid, config):
     )
     summary = content[:40] + ('...' if len(content) > 40 else '')
     confirm = _render_template('topic_pick_confirm', seq=topic_seq, summary=summary, module=topic_mod)
+    _agent_dbg_memo(
+        'H3', 'memo_tracker.process_topic_pick', 'before_send_webhook_confirm',
+        msg_id=str(msg_id), topic_seq=topic_seq, group_cid=str(group_cid or ''),
+    )
     _send_webhook(confirm, config, group_cid=group_cid)
     _log(f'topic pick #{topic_seq} -> TR module={topic_mod}')
     return True
@@ -1748,33 +1892,97 @@ def process_close(msg_id, text, group_cid, config):
     return True
 
 
+def parse_delete_memo_seqs(text: str) -> list | None:
+    """识别「删除 memo/备忘 …」并解析其中全部编号；非该指令返回 None。"""
+    t = (text or '').strip()
+    if not re.search(r'删除\s*(?:memo|备忘)\s*#?', t, re.IGNORECASE):
+        return None
+    m = re.search(r'删除\s*(?:memo|备忘)\s*#?\s*(.*)$', t, re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    tail = re.sub(r'[。！？!?\s]+$', '', m.group(1).strip())
+    return [int(x) for x in re.findall(r'\d+', tail)]
+
+
+def parse_delete_topic_seqs(text: str) -> list | None:
+    """识别「删除 topic/选题 …」并解析其中全部编号；非该指令返回 None。"""
+    t = (text or '').strip()
+    if not re.search(r'删除\s*(?:topic|选题)\s*#?', t, re.IGNORECASE):
+        return None
+    m = re.search(r'删除\s*(?:topic|选题)\s*#?\s*(.*)$', t, re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    tail = re.sub(r'[。！？!?\s]+$', '', m.group(1).strip())
+    return [int(x) for x in re.findall(r'\d+', tail)]
+
+
+@_memo_serialized
+def process_delete_topic(msg_id, text, group_cid, config):
+    """删除选题（本地 topic_items + TR topic:#N）；支持顿号/逗号分隔多编号。"""
+    seqs = parse_delete_topic_seqs(text or '')
+    if seqs is None:
+        return False
+    if not seqs:
+        hint = (
+            _render_template('topic_delete_need_ids')
+            or _DEFAULT_TEMPLATES.get('topic_delete_need_ids', '')
+        )
+        _send_webhook(hint, config, group_cid=group_cid)
+        return True
+    lines = []
+    for seq in seqs:
+        row = get_topic_by_seq(seq)
+        if not row:
+            _log(f'delete: topic #{seq} not found')
+            lines.append(_render_template('not_found', seq=seq, summary='') or f'not found: topic #{seq}')
+            continue
+        delete_topic_item(seq)
+        tr_removed = _delete_task_in_reminder_topic(seq, config)
+        summary = (row.get('text') or '')[:30] + ('...' if len(row.get('text') or '') > 30 else '')
+        delete_text = _render_template('topic_delete', seq=seq, summary=summary)
+        if not delete_text:
+            delete_text = f'topic #{seq} 已删除：{summary}'
+        delete_text += '\n（TR 已同步删除）' if tr_removed else '\n（TR 中未找到对应任务或已删除）'
+        lines.append(delete_text)
+        _log(f'topic #{seq} deleted, TR removed={tr_removed}')
+    _send_webhook('\n\n'.join(lines), config, group_cid=group_cid)
+    return True
+
+
 @_memo_serialized
 def process_delete(msg_id, text, group_cid, config):
     """
-    处理「删除 memo N」指令。
+    处理「删除 memo N」指令；支持 24、25、26 或逗号分隔多编号。
     返回: True 已处理 / False 未匹配
     """
-    text = (text or '').strip()
-    m = re.search(r'删除\s*(?:memo|备忘)\s*#?\s*(\d+)', text, re.IGNORECASE)
-    if not m:
+    seqs = parse_delete_memo_seqs(text or '')
+    if seqs is None:
         return False
-    seq = int(m.group(1))
-    memo = get_memo_by_seq(seq)
-    if not memo:
-        _log(f'delete: memo #{seq} not found')
-        not_found_text = _render_template('not_found', seq=seq, summary='')
-        _send_webhook(not_found_text, config, group_cid=group_cid)
+    if not seqs:
+        hint = (
+            _render_template('memo_delete_need_ids')
+            or _DEFAULT_TEMPLATES.get('memo_delete_need_ids', '')
+        )
+        _send_webhook(hint, config, group_cid=group_cid)
         return True
-    delete_memo_item(seq)
-    tr_removed = _delete_task_in_reminder(seq, config)
-    summary = (memo.get('text') or '')[:30] + ('...' if len(memo.get('text') or '') > 30 else '')
-    delete_text = _render_template('delete', seq=seq, summary=summary)
-    if tr_removed:
-        delete_text += '\n（TR 已同步删除）'
-    else:
-        delete_text += '\n（TR 中未找到对应任务或已删除）'
-    _send_webhook(delete_text, config, group_cid=group_cid)
-    _log(f'memo #{seq} deleted: {summary}, TR removed={tr_removed}')
+    lines = []
+    for seq in seqs:
+        memo = get_memo_by_seq(seq)
+        if not memo:
+            _log(f'delete: memo #{seq} not found')
+            lines.append(_render_template('not_found', seq=seq, summary='') or f'not found: memo #{seq}')
+            continue
+        delete_memo_item(seq)
+        tr_removed = _delete_task_in_reminder(seq, config)
+        summary = (memo.get('text') or '')[:30] + ('...' if len(memo.get('text') or '') > 30 else '')
+        delete_text = _render_template('delete', seq=seq, summary=summary)
+        if tr_removed:
+            delete_text += '\n（TR 已同步删除）'
+        else:
+            delete_text += '\n（TR 中未找到对应任务或已删除）'
+        lines.append(delete_text)
+        _log(f'memo #{seq} deleted: {summary}, TR removed={tr_removed}')
+    _send_webhook('\n\n'.join(lines), config, group_cid=group_cid)
     return True
 
 

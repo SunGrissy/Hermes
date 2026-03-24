@@ -2259,6 +2259,13 @@ class FridaDaemon:
 _daemon = FridaDaemon()
 
 class DaemonHandler(BaseHTTPRequestHandler):
+    def send_error(self, code, message=None, explain=None):
+        """???????????? send_error ? wfile ?? ConnectionAbortedError ????"""
+        try:
+            super().send_error(code, message, explain)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+            pass
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
@@ -2363,6 +2370,11 @@ class DaemonHandler(BaseHTTPRequestHandler):
             count = int(body.get('count', 20))
             before = body.get('before')
             after = body.get('after')
+            try:
+                fetch_timeout = int(body.get('timeout', 45))
+            except (TypeError, ValueError):
+                fetch_timeout = 45
+            fetch_timeout = max(5, min(fetch_timeout, 120))
             if not cid and name:
                 cid, resolved = _daemon.resolve_cid(name)
                 if not cid:
@@ -2371,7 +2383,8 @@ class DaemonHandler(BaseHTTPRequestHandler):
             if not cid:
                 self._json_response({'error': 'cid or name required'}, 400)
                 return
-            result = _daemon.fetch_history(cid, count, before=before, after=after)
+            result = _daemon.fetch_history(
+                cid, count, before=before, after=after, timeout=fetch_timeout)
             self._json_response(result)
 
         elif parsed.path == '/monitor/start':

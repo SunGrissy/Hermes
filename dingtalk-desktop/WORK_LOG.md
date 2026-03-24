@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-25] skill_router：助理群白名单、手机消息轮询、/fetch 超时与 daemon HTTP
+
+### 状态：验收通过（已推送 tygit）
+
+### 本次工作内容
+
+- **skill_router**：助理主群 `assistant_group_skill_uids` + `assistant_group_skill_aliases` 与显示名/通讯录归一；`_message_sender_identity`（uid / is_self / sender / `?`→本人）；Frida 有 `memo_queue` 时仍周期 `_poll_memo_once`（手机消息）；今日/明日/本周关注 `_RECENT_FOCUS_CMD_MS`；`/fetch` POST 带 `timeout`、默认备忘拉取约 95s；可选 `SKILL_ROUTER_MEMO_POLL_TRACE`、`SKILL_ROUTER_POLL_HEARTBEAT_MS`
+- **daemon**：`POST /fetch` 解析 `timeout` 传入 `fetch_history`；`DaemonHandler.send_error` 捕获对端已断开，避免 WinError 10053 刷屏
+- **digest_config**：`assistant_group_skill_uids`、`assistant_group_skill_aliases` 与说明
+- **同期已纳入本提交**：`db/store.py`、`lib/utils.py`、`skills/doc_review.py`、`skills/memo_tracker.py`、`version_digest.py`（当期本地修改）
+
+---
+
 ## [2026-03-24] 专项推送：默认数据源 digest（192 PM）+ 0401 并入 _push
 
 ### 状态：验收通过

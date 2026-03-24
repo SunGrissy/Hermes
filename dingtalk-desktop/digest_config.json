@@ -135,7 +135,12 @@
     "assistant_group_skill_uids": [
       "316550726"
     ],
-    "_note_assistant_group_skill_uids": "助理通知主群(group_cid)内仅列表中的钉钉 UID 可触发备忘/完成/愿望/运维/上班啦/版本摘要/预审等；白名单 colleague_skill_cids 与选题群不受限。[] 表示不限制。删除本字段时回退为环境变量 DINGTALK_MY_UID（未设则 lib.utils.DEFAULT_MY_UID）。",
+    "assistant_group_skill_aliases": [
+      "孙懿",
+      "孙懿（猫姐）"
+    ],
+    "_note_assistant_group_skill_aliases": "群聊 /fetch 常把发送者标成显示名而非数字 UID；在此列出你的群名片/备注名。会与 assistant_group_skill_uids 及通讯录反查一并用于比对。",
+    "_note_assistant_group_skill_uids": "与钉钉机器人「自定义关键词」无关：关键词仍在 webhook 的 title/footer（小秘书提醒）。此处仅限制「谁发的群消息能当指令」。数字 UID + 上列 aliases + 通讯录姓名（归一化）任一匹配即通过。Frida 推送缺 uid 时默认放行。DINGTALK_ASSISTANT_DENY_EMPTY_UID=1 可拒绝空 uid。[] 表示不限制任何人。",
     "colleague_skill_cids": [
       "73472166912",
       "47857575121",

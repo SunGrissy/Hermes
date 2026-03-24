@@ -512,6 +512,25 @@ def upsert_topic_from_tr_sync(topic_seq, text, who='', due=None,
         c.close()
 
 
+def update_topic_text(topic_seq, text):
+    """更新进行中选题正文（与 TR what 对齐）。返回影响行数。"""
+    if text is None:
+        return 0
+    text = str(text).strip()
+    if not text:
+        return 0
+    with _lock:
+        c = _conn()
+        cur = c.execute(
+            "UPDATE topic_items SET text=? WHERE topic_seq=? AND status='active'",
+            (text, topic_seq),
+        )
+        n = cur.rowcount
+        c.commit()
+        c.close()
+    return int(n or 0)
+
+
 def delete_topic_item(topic_seq):
     with _lock:
         c = _conn()

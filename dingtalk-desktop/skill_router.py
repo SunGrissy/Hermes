@@ -5,13 +5,15 @@
 当前支持：
   - 监听招聘群内 ct=502（PDF 文件消息）→ 触发简历 AI 初筛
   - 监听助理群 + memo_tracker.colleague_skill_cids 白名单群（及可选 topic_skill_group_cid 选题群）→ 备忘 / 许愿 / 完成 等（他人仅白名单群入队）
+  - 助理通知主群 memo_tracker.group_cid：仅 memo_tracker.assistant_group_skill_uids 中的钉钉 UID 可触发技能（缺省该字段时用 DINGTALK_MY_UID / DEFAULT_MY_UID）；设为 [] 则群内所有人可触发。白名单群不受此限。
+  - 手机发指令依赖桌面 /fetch：备忘轮询 JSAPI 超时默认约 95s（SKILL_MEMO_FETCH_TIMEOUT_S），须盖住 daemon _fetch_lock 排队 + beacon；POST body 带 timeout 与 fetch_history 对齐。发送者身份用 uid / is_self / sender 综合解析。
   - 文本含「许愿」「愿望」或英文 wish（整词）→ 写入 TaskReminder，负责人为配置项 wish_assignee（默认「愿望单」）
   - 文本含「愿望单」→ 列出未完成愿望（wish #N + 旧版 TR 条目）（日志 + webhook）；优先于「愿望」单独触发
   - 文本含「删除 wish N」「删除愿望 N」→ 删本地 wish 记录并移除 TR 中 wish:#N
   - 文本含「完成 wish N」「关闭愿望 N」→ 本地标 done，TR 中 wish:#N 标 processStatus=done
   - 助理通知群发送「上班啦」/「上班」→ 执行 MyAgents 工具状态检查，结果经 webhook（小秘书提醒）推送
   - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
-  - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；「选题库」从 TR 列出全部 topic:#N 并先做一次本地同步；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 与本地 memo/wish/topic（选题以 TR 文案/删改/完成为准）
+  - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；选题改描述/删除 topic（与备忘同类指令，支持多编号顿号分隔）；「选题库」从 TR 列出全部 topic:#N 并先做一次本地同步；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 与本地 memo/wish/topic（选题以 TR 文案/删改/完成为准）；选题专用群 cid 可由 topic_skill_group_name 在 report_cids 中按群名解析
   - 助理群「预审」：推送路径下优先用本进程缓存的「上一条钉钉文档链接」（与备忘同源 send 事件），避免依赖 /fetch 回溯
 
 架构：
@@ -21,6 +23,7 @@
   - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望」/wish/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker；触发词后可跟标点空格，解析时会剥离
   - 通过 DB + 内存 seen_ids 实现幂等
   - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
+  - Frida 备忘推送队列开启时仍执行 _poll_memo_once：否则手机发的消息不会入队、永远无法触发技能
 """
 import os
 import re
@@ -46,9 +49,12 @@ from skills.memo_tracker import (
     process_close,
     process_close_wish,
     process_delete,
+    process_delete_topic,
     process_delete_wish,
     process_defer_memo,
     parse_defer_memo_command,
+    parse_delete_memo_seqs,
+    parse_delete_topic_seqs,
     process_today_focus,
     process_tomorrow_focus,
     process_week_focus,
@@ -59,6 +65,7 @@ from skills.memo_tracker import (
     process_memo_edit_description,
     process_memo_edit_version,
     process_memo_assign_tr,
+    process_topic_edit_description,
     process_topic_pick,
     topic_pick_content_key,
     _text_triggers_topic_pick,
@@ -78,7 +85,7 @@ from skills.doc_review import (
     send_no_active_doc_review_stop_reply,
 )
 from skills.status_check import run_and_send as run_status_check_and_send
-from lib.utils import get_webhook_url, DATA_DIR
+from lib.utils import get_webhook_url, DATA_DIR, DEFAULT_MY_UID, ContactsDB
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 POLL_INTERVAL = int(os.environ.get('SKILL_ROUTER_INTERVAL', '20'))   # 秒（推送未接入时兜底；可设 SKILL_ROUTER_INTERVAL=60 恢复）
@@ -87,6 +94,26 @@ _TR_SYNC_INTERVAL_MS = int(os.environ.get('SKILL_TR_SYNC_INTERVAL_MS', '120000')
 _CONFIG_PATH  = os.path.join(_THIS_DIR, 'digest_config.json')
 # 与 daemon 写入的日志路径一致，否则预审回溯时读不到「刚发的文档链接」
 _LOG_FILE     = os.path.join(DATA_DIR, '_msg_log.jsonl')
+
+# region agent log
+_AGENT_DEBUG_LOG = os.path.normpath(os.path.join(_THIS_DIR, '..', 'debug-5a049e.log'))
+
+
+def _agent_dbg(hypothesis_id: str, location: str, message: str, **data):
+    try:
+        rec = {
+            'sessionId': '5a049e',
+            'hypothesisId': hypothesis_id,
+            'location': location,
+            'message': message,
+            'timestamp': int(time.time() * 1000),
+            'data': data,
+        }
+        with open(_AGENT_DEBUG_LOG, 'a', encoding='utf-8') as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+# endregion
 
 
 def _memo_allowed_cids(memo_cfg: dict) -> set:
@@ -100,6 +127,133 @@ def _memo_allowed_cids(memo_cfg: dict) -> set:
         if xs:
             s.add(xs)
     return s
+
+
+# 备忘轮询优先走 JSAPI；须 >= daemon 侧 _fetch_lock 排队 + JSAPI 等待；过短则客户端先断连 → daemon 写响应 WinError 10053
+_MEMO_FETCH_JSAPI_TIMEOUT_S = int(os.environ.get('SKILL_MEMO_FETCH_TIMEOUT_S', '95'))
+
+
+def _message_sender_identity(msg: dict) -> str:
+    """供助理群白名单比对：优先 uid；JSAPI 标 is_self 或 sender='?'（本人）时映射为我的数字 UID；否则用 sender（常为手机端 sn）。"""
+    u = str(msg.get('uid') or '').strip()
+    if u:
+        return u
+    if msg.get('is_self') is True:
+        return str(os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)).strip()
+    s = str(msg.get('sender') or '').strip()
+    if s == '?':
+        return str(os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)).strip()
+    return s
+
+
+def _normalize_person_display(s: str) -> str:
+    """群聊 /fetch 有时把发送者放在 uid 字段里且为「张三」或「张三（备注）」；取主名做比对。"""
+    t = (s or '').strip()
+    if not t:
+        return ''
+    for sep in ('（', '('):
+        if sep in t:
+            t = t.split(sep, 1)[0].strip()
+    return t
+
+
+def _assistant_group_allowed_sender_labels(memo_cfg: dict, allowed_ids: set) -> set:
+    """数字 UID + 配置的别名 + 通讯录里这些 UID 对应的显示名（群消息里可能是名而不是数字）。"""
+    lab = set(allowed_ids)
+    raw = memo_cfg.get('assistant_group_skill_aliases')
+    if raw is None:
+        extra = []
+    elif isinstance(raw, list):
+        extra = raw
+    else:
+        extra = [raw]
+    for x in extra:
+        xs = str(x).strip()
+        if not xs:
+            continue
+        lab.add(xs)
+        lab.add(_normalize_person_display(xs))
+    for uid in allowed_ids:
+        if not uid.isdigit():
+            continue
+        try:
+            nm = ContactsDB._resolve_name(uid)
+            if nm:
+                lab.add(nm)
+                lab.add(_normalize_person_display(nm))
+        except Exception:
+            pass
+        try:
+            for ent in ContactsDB.get_all():
+                eu = str(ent.get('uid') or '')
+                if eu == uid and ent.get('name'):
+                    lab.add(ent['name'])
+                    lab.add(_normalize_person_display(ent['name']))
+        except Exception:
+            pass
+    lab.discard('')
+    return lab
+
+
+def _sender_matches_assistant_labels(sender: str, labels: set) -> bool:
+    s = (sender or '').strip()
+    if not s:
+        return False
+    if s in labels:
+        return True
+    sn = _normalize_person_display(s)
+    if sn and sn in labels:
+        return True
+    for L in labels:
+        if not L:
+            continue
+        if s == L:
+            return True
+        ln = _normalize_person_display(L)
+        if sn and ln and sn == ln:
+            return True
+    return False
+
+
+def _assistant_group_skill_sender_allowed(memo_cfg: dict, msg_cid: str, sender_uid: str) -> bool:
+    """仅助理通知主群 memo_tracker.group_cid 校验发送者；白名单 colleague 群、选题群始终放行。
+
+    - assistant_group_skill_uids 为 []：不限制（兼容旧行为）。
+    - 缺省该字段：仅允许 DINGTALK_MY_UID（未设则用 DEFAULT_MY_UID）。
+    - 群聊 /fetch 可能把发送者标成显示名（如「孙懿」）而非数字 UID：用 assistant_group_skill_aliases +
+      通讯录反查数字 UID 的姓名，与主名归一化后比对。
+    - 发送者 uid 为空时放行：Frida 推送记录常不带 uid；环境变量 DINGTALK_ASSISTANT_DENY_EMPTY_UID=1 可拒绝。
+    """
+    g = str(memo_cfg.get('group_cid') or '').strip()
+    if not g or str(msg_cid).strip() != g:
+        return True
+    raw = memo_cfg.get('assistant_group_skill_uids')
+    if isinstance(raw, list) and len(raw) == 0:
+        return True
+    if raw is None:
+        uids = [os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)]
+    elif not isinstance(raw, list):
+        uids = [raw]
+    else:
+        uids = raw
+    allowed = {str(x).strip() for x in uids if str(x).strip()}
+    if not allowed:
+        return True
+    labels = _assistant_group_allowed_sender_labels(memo_cfg, allowed)
+    su = str(sender_uid or '').strip()
+    if not su:
+        if os.environ.get('DINGTALK_ASSISTANT_DENY_EMPTY_UID', '').strip().lower() in (
+                '1', 'true', 'yes', 'on'):
+            _log('助理群指令已忽略：发送者 uid 为空（Frida 推送常缺 uid；勿与钉钉机器人关键词混淆）')
+            return False
+        return True
+    ok = _sender_matches_assistant_labels(su, labels)
+    if not ok:
+        _log(
+            '助理群指令已忽略：发送者标识=%r 不在白名单（数字 UID + assistant_group_skill_aliases + 通讯录姓名）'
+            % (su,)
+        )
+    return ok
 
 
 def _log(msg: str):
@@ -150,20 +304,35 @@ def _load_config() -> dict:
         elif not isinstance(_col, list):
             memo_cfg['colleague_skill_cids'] = [str(_col).strip()] if str(_col).strip() else []
 
-        # 选题 / 选题库专用群：填 topic_skill_group_cid + webhook（URL 或 webhook_config 键），自动并入白名单与按群回复
+        # 选题 / 选题库专用群：cid 优先；否则按 topic_skill_group_name 在 report_cids 中匹配群名
         tgc = str(memo_cfg.get('topic_skill_group_cid') or '').strip()
+        tname = str(memo_cfg.get('topic_skill_group_name') or '').strip()
+        if not tgc and tname:
+            for c in cfg.get('report_cids', []):
+                if not isinstance(c, dict):
+                    continue
+                nm = (c.get('name') or '').strip()
+                cid = str(c.get('cid') or '').strip()
+                if not cid or not nm:
+                    continue
+                if nm == tname or tname in nm:
+                    tgc = cid
+                    break
+        if tgc:
+            memo_cfg['topic_skill_group_cid'] = tgc
         tkey = str(memo_cfg.get('topic_skill_webhook_key') or '').strip()
         raw_tw = str(memo_cfg.get('topic_skill_webhook_url') or '').strip()
         tw = (get_webhook_url(tkey, raw_tw) if tkey else raw_tw).strip()
-        if tgc and tw:
+        if tgc:
             cols = memo_cfg['colleague_skill_cids']
             if tgc not in cols:
                 cols.append(tgc)
-            br = memo_cfg.get('wish_reply_webhook_by_cid')
-            if not isinstance(br, dict):
-                br = {}
-                memo_cfg['wish_reply_webhook_by_cid'] = br
-            br[tgc] = tw
+            if tw:
+                br = memo_cfg.get('wish_reply_webhook_by_cid')
+                if not isinstance(br, dict):
+                    br = {}
+                    memo_cfg['wish_reply_webhook_by_cid'] = br
+                br[tgc] = tw
 
         return {
             'recruit_cids': cids,
@@ -178,9 +347,12 @@ def _load_config() -> dict:
                 'memo_tracker': {}}
 
 
-def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 30) -> list:
-    """调 daemon /fetch 获取群内最近消息"""
-    payload = json.dumps({'cid': cid, 'count': count}).encode('utf-8')
+def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 75) -> list:
+    """调 daemon /fetch 获取群内最近消息（timeout 与 daemon fetch_history 内 beacon 等待一致，需随 POST 传入）。"""
+    payload = json.dumps({
+        'cid': cid, 'count': count,
+        'timeout': int(timeout),
+    }).encode('utf-8')
     req = urllib.request.Request(
         DAEMON_URL.rstrip('/') + '/fetch',
         data=payload,
@@ -310,7 +482,7 @@ def _read_log_messages(cid: str, max_count: int = 50,
 
 def _fetch_memo_messages(cid: str, max_age_ms: int) -> list:
     """备忘/文档指令专用拉取：优先 JSAPI，不可用时自动降级到 beacon 日志。"""
-    messages = _fetch_recent_messages(cid, count=20, timeout=5)
+    messages = _fetch_recent_messages(cid, count=20, timeout=_MEMO_FETCH_JSAPI_TIMEOUT_S)
     if messages:
         return messages
     msgs = _read_log_messages(cid, max_count=50, max_age_ms=max_age_ms)
@@ -475,7 +647,6 @@ def _normalize_command_text(text: str) -> str:
 _RE_MEMO   = re.compile(r'[\uff3b【\[]*(?:备忘|提醒我|TR)[\uff3d】\]]*')
 _RE_CLOSE  = re.compile(r'(?:完成|关闭)\s*#?\d+')
 _RE_CLOSE_WISH = re.compile(r'(?:完成|关闭)\s*(?:wish|愿望)\s*#?\s*\d+', re.IGNORECASE)
-_RE_DELETE = re.compile(r'删除\s*(?:memo|备忘)\s*#?\s*\d+', re.IGNORECASE)
 _RE_DELETE_WISH = re.compile(r'删除\s*(?:wish|愿望)\s*#?\s*\d+', re.IGNORECASE)
 _RE_TODAY_FOCUS = re.compile(
     r'今天\s*(?:我要?)?\s*关注\s*啥|今天\s*有啥\s*(?:要做的|要关注)|今天\s*关注\s*啥'
@@ -552,6 +723,11 @@ def _cached_push_doc_url(msg_cid: str, doc_group_cid: str, now_ms: int, max_age_
 _MORNING_CMD_MAX_AGE_MS = int(os.environ.get('SKILL_MORNING_MAX_AGE_MS', str(15 * 60 * 1000)))   # 默认 15 分钟
 _PRECHECK_CMD_MAX_AGE_MS = int(os.environ.get('SKILL_PRECHECK_MAX_AGE_MS', str(30 * 60 * 1000)))  # 默认 30 分钟
 _RECENT_CMD_MS = 15000   # 同一指令 15 秒内只响应一次，避免重复推送
+# 今日/明日/本周关注：Hook 推送与 /fetch 轮询对同一条消息可能生成不同 msg_id，15s 挡不住「下一轮 poll」；窗口须盖住 POLL_INTERVAL
+_RECENT_FOCUS_CMD_MS = max(
+    _RECENT_CMD_MS,
+    int(os.environ.get('SKILL_FOCUS_THROTTLE_MS', str(POLL_INTERVAL * 1000 + 5000))),
+)
 _recent_cmd_ts = {}      # (group_cid, cmd_key) -> last_run_ts_ms
 _recent_memo_ts = {}     # (group_cid, content_key) -> last_run_ts_ms，备忘按内容短时去重
 # 人员筛选等 throttle 的读改写与 push/poll 并发时加锁，避免双线程同时通过 15s 窗
@@ -662,6 +838,9 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
     msg_cid = str(msg.get('cid', '') or '')
     if msg_cid not in _memo_allowed_cids(memo_cfg):
         return
+    _sender_uid = _message_sender_identity(msg)
+    if not _assistant_group_skill_sender_allowed(memo_cfg, msg_cid, _sender_uid):
+        return
     _doc_g = str((doc_review_cfg or {}).get('group_cid') or '').strip()
     if _doc_g:
         _remember_push_doc_url_if_any(msg_cid, msg, _doc_g)
@@ -759,6 +938,11 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         return
 
     reserved = _reserve_msg_id_once(memo_seen_ids, msg_id)
+    _agent_dbg(
+        'H2', 'skill_router._dispatch', 'after_reserve',
+        reserved=reserved, msg_id=msg_id, cid=msg_cid,
+        text_preview=(text or '')[:120],
+    )
     if not reserved:
         return
 
@@ -801,7 +985,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
 
     if _RE_TODAY_FOCUS.search(text):
         key = (msg_cid, 'today_focus')
-        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_FOCUS_CMD_MS:
             memo_seen_ids.add(msg_id)
             return
         _recent_cmd_ts[key] = now_ms
@@ -815,7 +999,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
 
     if _RE_TOMORROW_FOCUS.search(text):
         key = (msg_cid, 'tomorrow_focus')
-        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_FOCUS_CMD_MS:
             memo_seen_ids.add(msg_id)
             return
         _recent_cmd_ts[key] = now_ms
@@ -829,7 +1013,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
 
     if _RE_WEEK_FOCUS.search(text):
         key = (msg_cid, 'week_focus')
-        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_FOCUS_CMD_MS:
             memo_seen_ids.add(msg_id)
             return
         _recent_cmd_ts[key] = now_ms
@@ -863,6 +1047,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         return
 
     for _edit_fn in (
+        process_topic_edit_description,
         process_memo_edit_description,
         process_memo_edit_version,
         process_memo_assign_tr,
@@ -870,7 +1055,7 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         try:
             if _edit_fn(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
                 memo_seen_ids.add(msg_id)
-                _log('push: 备忘快捷指令已处理')
+                _log('push: 备忘/选题快捷指令已处理')
                 return
         except Exception as e:
             _log(f'memo quick-edit {_edit_fn.__name__} error: {e}')
@@ -921,25 +1106,52 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'delete_wish error: {e}')
         return
 
-    if _RE_DELETE.search(text):
-        m_seq = re.search(r'删除\s*(?:memo|备忘)\s*#?\s*(\d+)', text, re.IGNORECASE)
-        if m_seq:
-            seq = m_seq.group(1)
-            # 按「删除 #N」内容去重，同一条删除被 Hook 触发两次时只处理一次
-            delete_dedup_id = f'del:{msg_cid}:{seq}'
-            if delete_dedup_id in memo_seen_ids:
+        pk_topic = parse_delete_topic_seqs(text)
+        if pk_topic is not None:
+            _agent_dbg(
+                'H4', 'skill_router.push', 'delete_topic_branch',
+                msg_id=msg_id, cid=msg_cid, seqs=pk_topic, text_preview=(text or '')[:80],
+            )
+            seq_key = '|'.join(sorted(map(str, pk_topic))) if pk_topic else ''
+        delete_dedup_id = f'deltopic:{msg_cid}:{seq_key}'
+        if delete_dedup_id in memo_seen_ids:
+            memo_seen_ids.add(msg_id)
+            return
+        memo_seen_ids.add(delete_dedup_id)
+        key = (msg_cid, 'delete_topic', seq_key)
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            if process_delete_topic(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
                 memo_seen_ids.add(msg_id)
-                return
-            memo_seen_ids.add(delete_dedup_id)
-            key = (msg_cid, 'delete', seq)
-            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
-                memo_seen_ids.add(msg_id)
-                return
-            _recent_cmd_ts[key] = now_ms
+                _log('push: 删除选题指令已处理')
+        except Exception as e:
+            _log(f'delete_topic error: {e}')
+        return
+
+    pk_memo = parse_delete_memo_seqs(text)
+    if pk_memo is not None:
+        _agent_dbg(
+            'H4', 'skill_router.push', 'delete_memo_branch',
+            msg_id=msg_id, cid=msg_cid, seqs=pk_memo, text_preview=(text or '')[:80],
+        )
+        seq_key = '|'.join(sorted(map(str, pk_memo))) if pk_memo else ''
+        delete_dedup_id = f'del:{msg_cid}:{seq_key}'
+        if delete_dedup_id in memo_seen_ids:
+            memo_seen_ids.add(msg_id)
+            return
+        memo_seen_ids.add(delete_dedup_id)
+        key = (msg_cid, 'delete', seq_key)
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
         try:
             if process_delete(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
                 memo_seen_ids.add(msg_id)
-                _log('push: 删除指令已处理')
+                _log('push: 删除备忘指令已处理')
         except Exception as e:
             _log(f'delete error: {e}')
         return
@@ -1028,6 +1240,14 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         return
 
     try:
+        if _text_triggers_topic_pick(text, memo_cfg):
+            _tck_dbg = topic_pick_content_key(text)
+            _tid_dbg = ('topic_c:' + _tck_dbg) if _tck_dbg else ''
+            _agent_dbg(
+                'H1', 'skill_router.push', 'before_process_topic_pick',
+                msg_id=msg_id, cid=msg_cid, tck=_tck_dbg,
+                topic_c_in_seen=(_tid_dbg in memo_seen_ids) if _tid_dbg else None,
+            )
         memo_ts_push = int(msg.get('ts', 0) or 0)
         tp = process_topic_pick(
             msg_id=msg_id, text=text, context_msgs=[msg],
@@ -1089,6 +1309,8 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
     router_start_ms：仅处理不早于本次 router 启动的消息（重启后不追溯）。
     """
     messages = _fetch_memo_messages(group_cid, max_age_ms=_MEMO_MAX_AGE_MS)
+    if os.environ.get('SKILL_ROUTER_MEMO_POLL_TRACE', '').strip() == '1':
+        _log(f'memo poll trace cid={group_cid} fetched_messages={len(messages)}')
     now_ms = int(time.time() * 1000)
 
     for msg in messages:
@@ -1104,6 +1326,10 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
 
         msg_id = _make_msg_id(msg)
         if not msg_id or msg_id in seen_ids:
+            continue
+
+        if not _assistant_group_skill_sender_allowed(memo_cfg, group_cid, _message_sender_identity(msg)):
+            seen_ids.add(msg_id)
             continue
 
         if _RE_MORNING.match(text):
@@ -1163,20 +1389,49 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'delete_wish error: {e}')
             continue
 
-        if _RE_DELETE.search(text):
-            m_seq = re.search(r'删除\s*(?:memo|备忘)\s*#?\s*(\d+)', text, re.IGNORECASE)
-            if m_seq:
-                seq = m_seq.group(1)
-                delete_dedup_id = f'del:{str(group_cid).strip()}:{seq}'
-                if delete_dedup_id in seen_ids:
+        pk_topic = parse_delete_topic_seqs(text)
+        if pk_topic is not None:
+            _agent_dbg(
+                'H4', 'skill_router.poll', 'delete_topic_branch',
+                msg_id=msg_id, cid=str(group_cid), seqs=pk_topic, text_preview=(text or '')[:80],
+            )
+            gc = str(group_cid).strip()
+            seq_key = '|'.join(sorted(map(str, pk_topic))) if pk_topic else ''
+            delete_dedup_id = f'deltopic:{gc}:{seq_key}'
+            if delete_dedup_id in seen_ids:
+                seen_ids.add(msg_id)
+                continue
+            seen_ids.add(delete_dedup_id)
+            key = (gc, 'delete_topic', seq_key)
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                if process_delete_topic(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
                     seen_ids.add(msg_id)
-                    continue
-                seen_ids.add(delete_dedup_id)
-                key = (str(group_cid), 'delete', seq)
-                if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
-                    seen_ids.add(msg_id)
-                    continue
-                _recent_cmd_ts[key] = now_ms
+            except Exception as e:
+                _log(f'delete_topic error: {e}')
+            continue
+
+        pk_memo = parse_delete_memo_seqs(text)
+        if pk_memo is not None:
+            _agent_dbg(
+                'H4', 'skill_router.poll', 'delete_memo_branch',
+                msg_id=msg_id, cid=str(group_cid), seqs=pk_memo, text_preview=(text or '')[:80],
+            )
+            gc = str(group_cid).strip()
+            seq_key = '|'.join(sorted(map(str, pk_memo))) if pk_memo else ''
+            delete_dedup_id = f'del:{gc}:{seq_key}'
+            if delete_dedup_id in seen_ids:
+                seen_ids.add(msg_id)
+                continue
+            seen_ids.add(delete_dedup_id)
+            key = (gc, 'delete', seq_key)
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
             try:
                 if process_delete(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
                     seen_ids.add(msg_id)
@@ -1185,6 +1440,12 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             continue
 
         if _RE_TODAY_FOCUS.search(text):
+            gc = str(group_cid).strip()
+            key = (gc, 'today_focus')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_FOCUS_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
             try:
                 process_today_focus(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
@@ -1193,6 +1454,12 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             continue
 
         if _RE_TOMORROW_FOCUS.search(text):
+            gc = str(group_cid).strip()
+            key = (gc, 'tomorrow_focus')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_FOCUS_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
             try:
                 process_tomorrow_focus(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
@@ -1201,6 +1468,12 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             continue
 
         if _RE_WEEK_FOCUS.search(text):
+            gc = str(group_cid).strip()
+            key = (gc, 'week_focus')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_FOCUS_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
             try:
                 process_week_focus(memo_cfg, group_cid=group_cid)
                 seen_ids.add(msg_id)
@@ -1230,6 +1503,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
 
         _poll_edit_handled = False
         for _edit_fn in (
+            process_topic_edit_description,
             process_memo_edit_description,
             process_memo_edit_version,
             process_memo_assign_tr,
@@ -1237,7 +1511,7 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             try:
                 if _edit_fn(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
                     seen_ids.add(msg_id)
-                    _log('poll: 备忘快捷指令已处理')
+                    _log('poll: 备忘/选题快捷指令已处理')
                     _poll_edit_handled = True
                     break
             except Exception as e:
@@ -1342,6 +1616,14 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             continue
 
         try:
+            if _text_triggers_topic_pick(text, memo_cfg):
+                _tck_p = topic_pick_content_key(text)
+                _tid_p = ('topic_c:' + _tck_p) if _tck_p else ''
+                _agent_dbg(
+                    'H1', 'skill_router.poll', 'before_process_topic_pick',
+                    msg_id=msg_id, cid=str(group_cid), tck=_tck_p,
+                    topic_c_in_seen=(_tid_p in seen_ids) if _tid_p else None,
+                )
             memo_ts_poll = int(msg.get('ts', 0) or 0)
             tp = process_topic_pick(
                 msg_id=msg_id, text=text, context_msgs=messages,
@@ -1433,7 +1715,7 @@ def _send_notify(text: str, webhook_url: str):
 
 
 def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set,
-                          router_start_ms: int = 0):
+                          router_start_ms: int = 0, memo_cfg: dict = None):
     """轮询助理通知群，检测'预审'指令，回溯找最近的文档链接后启动预审。
 
     触发条件：用户先发文档链接（消息A），再发'预审'（消息B）。
@@ -1459,6 +1741,11 @@ def _poll_doc_review_once(group_cid: str, doc_cfg: dict, seen_ids: set,
 
         msg_id = _make_msg_id(msg)
         if not msg_id or msg_id in seen_ids:
+            continue
+
+        _mc = memo_cfg if memo_cfg is not None else {}
+        if not _assistant_group_skill_sender_allowed(_mc, group_cid, _message_sender_identity(msg)):
+            seen_ids.add(msg_id)
             continue
 
         if _RE_PRECHECK_STOP.match(text):
@@ -1522,9 +1809,14 @@ class SkillRouter:
         self._doc_seen_ids: set = set()
         # 在 start() 首行赋值；轮询与推送均不处理早于此时刻的消息
         self._start_ts: int = 0
+        self._memo_poll_heartbeat_ms: int = 0
 
     def start(self, memo_event_queue=None):
-        """启动后台轮询线程（由 daemon.py 调用）。memo_event_queue 非空时备忘/完成走推送立刻响应，不再轮询。"""
+        """启动后台轮询线程（由 daemon.py 调用）。
+
+        memo_event_queue 非空时额外消费 Frida 推送（桌面会话内消息可立刻处理）。
+        手机发的消息通常不会进该队列，仍依赖下方周期性的 _poll_memo_once(/fetch)，故**有队列时也继续轮询**。
+        """
         self._start_ts = int(time.time() * 1000)
         init_db()
         _log('DB initialized')
@@ -1548,7 +1840,14 @@ class SkillRouter:
             _log(
                 f'memo watch: assistant={memo_cfg.get("group_cid") or "?"} '
                 f'colleague_whitelist={_col or "(empty)"}'
-                + (' (push)' if memo_event_queue else '')
+                + (' (push+poll)' if memo_event_queue else '')
+            )
+            _log(
+                '说明: daemon 里「群聊←/→接收」是 Monitor 日志；备忘是否处理要看本线程每 '
+                f'{POLL_INTERVAL}s 的 POST /fetch，无新指令时通常不再打日志。'
+            )
+            _log(
+                '可选: 环境变量 SKILL_ROUTER_MEMO_POLL_TRACE=1 每次备忘拉取后打一行条数。'
             )
         if has_doc_review:
             _log(f'doc_review watch: {doc_review_cfg["group_cid"]}')
@@ -1615,16 +1914,31 @@ class SkillRouter:
                 except Exception as e:
                     _log(f'resume poll [{source_name or cid}] error: {e}')
 
-            if not getattr(self, '_memo_queue', None):
-                for _poll_cid in sorted(_memo_allowed_cids(memo_cfg)):
-                    try:
-                        _poll_memo_once(
-                            _poll_cid, memo_cfg, self._memo_seen_ids,
-                            router_start_ms=self._start_ts,
+            # 有 Frida 推送队列时也必须轮询：手机/其他端发的消息往往只经 JSAPI 历史出现，不会入队
+            _memo_cids = sorted(_memo_allowed_cids(memo_cfg))
+            for _poll_cid in _memo_cids:
+                try:
+                    _poll_memo_once(
+                        _poll_cid, memo_cfg, self._memo_seen_ids,
+                        router_start_ms=self._start_ts,
+                    )
+                except Exception as e:
+                    _log(f'memo poll [{_poll_cid}] error: {e}')
+            if _memo_cids:
+                try:
+                    _hb_ms = int(os.environ.get('SKILL_ROUTER_POLL_HEARTBEAT_MS', '45000'))
+                except ValueError:
+                    _hb_ms = 45000
+                if _hb_ms > 0:
+                    _now_ms = int(time.time() * 1000)
+                    if _now_ms - self._memo_poll_heartbeat_ms >= _hb_ms:
+                        self._memo_poll_heartbeat_ms = _now_ms
+                        _log(
+                            'memo /fetch poll alive: cids=%s (每 %ds 一轮；'
+                            '仅心跳日志；设 SKILL_ROUTER_POLL_HEARTBEAT_MS=0 可关闭)'
+                            % (_memo_cids, POLL_INTERVAL)
                         )
-                    except Exception as e:
-                        _log(f'memo poll [{_poll_cid}] error: {e}')
-            if _memo_allowed_cids(memo_cfg):
+            if _memo_cids:
                 _maybe_sync_tr_local(memo_cfg)
 
             if doc_review_cfg and doc_review_cfg.get('group_cid'):
@@ -1633,6 +1947,7 @@ class SkillRouter:
                         doc_review_cfg['group_cid'],
                         doc_review_cfg, self._doc_seen_ids,
                         router_start_ms=self._start_ts,
+                        memo_cfg=memo_cfg,
                     )
                 except Exception as e:
                     _log(f'doc_review poll error: {e}')
@@ -1645,7 +1960,7 @@ _router = SkillRouter()
 
 
 def start_router(memo_event_queue=None):
-    """供 daemon.py 调用的入口。memo_event_queue 非空时备忘走推送立刻响应。"""
+    """供 daemon.py 调用的入口。memo_event_queue 非空时增加推送消费；备忘仍周期 /fetch 轮询（含手机消息）。"""
     _router.start(memo_event_queue)
 
 

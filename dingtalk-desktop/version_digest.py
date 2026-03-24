@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, date, timedelta
 from typing import Any, Dict, List, Optional, Tuple
@@ -184,13 +185,19 @@ def _collect_version_digest_webhooks(config: dict) -> List[str]:
     return out
 
 
-def _send_digest_to_webhooks(text: str, webhook_urls: List[str], *, quiet: bool) -> dict:
+def _send_digest_to_webhooks(
+    text: str,
+    webhook_urls: List[str],
+    *,
+    quiet: bool,
+    at_mobiles: Optional[List[str]] = None,
+) -> dict:
     """同一正文依次 POST；全部成功才算 success。"""
     if not webhook_urls:
         return {'success': False, 'error': 'no_webhook'}
     last_err = None
     for idx, url in enumerate(webhook_urls):
-        r = send_via_webhook(text, url, quiet=quiet)
+        r = send_via_webhook(text, url, quiet=quiet, at_mobiles=at_mobiles)
         if not r.get('success'):
             last_err = r.get('error') or 'send failed'
             if not quiet:
@@ -207,6 +214,66 @@ def _api_get(url, timeout=10, api_key=None):
     req = urllib.request.Request(url, headers=headers, method='GET')
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode('utf-8'))
+
+
+def fetch_checklist_blocks(pm_url, version_ids, api_key=None):
+    """从 PM 内部接口拉取各版本发版检查清单 Markdown 片段（与专项推送同源）。"""
+    if not version_ids:
+        return {}
+    try:
+        qs = urllib.parse.urlencode({'version_ids': ','.join(version_ids)})
+        url = f'{pm_url}/api/internal/version-checklist-blocks?{qs}'
+        data = _api_get(url, api_key=api_key)
+        inner = data.get('data') if isinstance(data, dict) else None
+        if not isinstance(inner, dict):
+            return {}
+        return inner.get('blocks') or {}
+    except Exception as e:
+        print(f'[warn] checklist blocks: {e}', flush=True)
+        return {}
+
+
+def fetch_pm_users(pm_url: str, api_key=None) -> List[dict]:
+    """从 GET /api/data 取 users 数组（含 externalIds），用于 Webhook @ 手机号。"""
+    try:
+        data = _api_get(f'{pm_url.rstrip("/")}/api/data', api_key=api_key)
+        if not isinstance(data, dict):
+            return []
+        users = data.get('users')
+        return users if isinstance(users, list) else []
+    except Exception as e:
+        print(f'[warn] fetch_pm_users: {e}', flush=True)
+        return []
+
+
+def collect_at_mobiles_for_versions(versions: List[dict], users: List[dict]) -> List[str]:
+    """汇总当前摘要中各版本 PLD/PLE/PLT 对应成员的钉钉手机号（去重）。"""
+    by_id = {str(u.get('id') or ''): u for u in users if u.get('id')}
+    out: List[str] = []
+    seen: set = set()
+    for v in versions:
+        for key in ('_pld', '_ple', '_plt'):
+            uid = v.get(key) or ''
+            if not uid:
+                continue
+            u = by_id.get(str(uid))
+            if not u:
+                continue
+            ext = u.get('externalIds') or u.get('external_ids') or {}
+            if not isinstance(ext, dict):
+                ext = {}
+            m = (str(ext.get('dingtalk_mobile') or '').strip()) or (str(u.get('phone') or '').strip())
+            if m and m not in seen:
+                seen.add(m)
+                out.append(m)
+    return out
+
+
+def append_dingtalk_at_line(markdown: str, mobiles: List[str]) -> str:
+    if not mobiles:
+        return markdown
+    line = ' '.join(f'@{m}' for m in mobiles)
+    return markdown.rstrip() + '\n\n' + line
 
 
 def fetch_dashboard(pm_url, api_key=None):
@@ -487,7 +554,7 @@ def enrich_pipeline(pm_url, version):
     version['_actual_stage_label'] = actual_label
 
 
-def _render_version(v, tmpl=None):
+def _render_version(v, tmpl=None, *, checklist_append=None):
     """按产品约定结构输出：### 状态emoji 版本|剩余天 → #### 建议 → #### 时间进度 → 超期 → 数据快照等。"""
     if tmpl is None:
         tmpl = _load_template()
@@ -630,10 +697,13 @@ def _render_version(v, tmpl=None):
         for r in risks_early[:max_risks]:
             lines.append(f'{_VD_BULLET}{r}')
 
-    return '\n\n'.join(lines)
+    body = '\n\n'.join(lines)
+    if checklist_append:
+        body = body + '\n\n' + checklist_append
+    return body
 
 
-def render_digest(versions):
+def render_digest(versions, checklist_by_id=None):
     tmpl = _load_template()
     now_str = datetime.now().strftime('%m/%d %H:%M')
     title = tmpl.get('title', '## 版本状态 [{timestamp}]').format(timestamp=now_str)
@@ -642,19 +712,26 @@ def render_digest(versions):
     footer = '\n\n' + tmpl.get('separator', '---') + '\n\n' + tmpl.get(
         'footer', '<font color="#999999">小秘书提醒</font>')
 
-    blocks = [_render_version(v, tmpl) for v in versions] or ['（无活跃版本）']
+    cl = checklist_by_id or {}
+    blocks = [
+        _render_version(v, tmpl, checklist_append=cl.get(v.get('id')))
+        for v in versions
+    ] or ['（无活跃版本）']
     return title + '\n\n' + top_sep + '\n\n' + block_sep.join(blocks) + footer
 
 
-def send_via_webhook(text, webhook_url, *, quiet=False):
+def send_via_webhook(text, webhook_url, *, quiet=False, at_mobiles=None):
     # title 须含自定义关键词「小秘书提醒」，与多群机器人配置一致
-    body = json.dumps({
+    payload = {
         'msgtype': 'markdown',
         'markdown': {
             'title': '小秘书提醒 · 版本状态',
             'text': text,
         },
-    }).encode('utf-8')
+    }
+    if at_mobiles:
+        payload['at'] = {'atMobiles': list(at_mobiles), 'isAtAll': False}
+    body = json.dumps(payload).encode('utf-8')
     req = urllib.request.Request(
         webhook_url, data=body,
         headers={'Content-Type': 'application/json'}, method='POST')
@@ -736,26 +813,39 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
         v['_api_key'] = api_key or None
         enrich_pipeline(pm_url, v)
 
-    digest = render_digest(versions)
+    vids = [str(v.get('id') or '') for v in versions]
+    vids = [x for x in vids if x]
+    cl_map = (
+        fetch_checklist_blocks(pm_url, vids, api_key=api_key or None)
+        if vids
+        else {}
+    )
+
+    digest = render_digest(versions, checklist_by_id=cl_map)
+    pm_users = fetch_pm_users(pm_url, api_key=api_key or None)
+    at_ms = collect_at_mobiles_for_versions(versions, pm_users)
+    digest_to_send = append_dingtalk_at_line(digest, at_ms)
+
     if log_to_stdout:
         try:
-            print(f'\n{digest}\n', flush=True)
+            print(f'\n{digest_to_send}\n', flush=True)
         except UnicodeEncodeError:
             enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
-            safe = (digest + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
+            safe = (digest_to_send + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
             print(f'\n{safe}\n', flush=True)
 
     if not send_webhook:
-        return {'ok': True, 'versions_count': len(versions), 'digest': digest, 'error': None}
+        return {'ok': True, 'versions_count': len(versions), 'digest': digest_to_send, 'error': None}
 
     if not webhook_urls:
         if log_to_stdout:
             print('[version-digest] no webhook configured, skipping send', flush=True)
-        return {'ok': False, 'versions_count': len(versions), 'digest': digest,
+        return {'ok': False, 'versions_count': len(versions), 'digest': digest_to_send,
                 'error': 'no_webhook'}
 
     quiet = not log_to_stdout
-    result = _send_digest_to_webhooks(digest, webhook_urls, quiet=quiet)
+    result = _send_digest_to_webhooks(
+        digest_to_send, webhook_urls, quiet=quiet, at_mobiles=at_ms or None)
     ok = bool(result and result.get('success'))
     if log_to_stdout:
         if ok:
@@ -763,7 +853,7 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
         else:
             print('[version-digest] send failed (one or more webhooks)', flush=True)
     err = None if ok else (result or {}).get('error', 'send failed')
-    return {'ok': ok, 'versions_count': len(versions), 'digest': digest, 'error': err}
+    return {'ok': ok, 'versions_count': len(versions), 'digest': digest_to_send, 'error': err}
 
 
 def main():

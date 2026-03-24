@@ -58,6 +58,9 @@ def get_webhook_url(key: str, fallback: str = '') -> str:
 
 DEFAULT_MY_UID = os.environ.get('DINGTALK_MY_UID', '316550726')
 
+# 单聊新建联系人时：部分 Push 把对端 sender 误标为本账号显示名，不可写入为对方昵称
+_P2P_IGNORE_DISPLAY = frozenset({'孙懿（猫姐）', '孙懿'})
+
 ADV_SEARCH_URL = (
     'app://desktop.dingtalk.com/web_content/advancedSearch.html'
     '?hideInput=true&uid=31'
@@ -377,12 +380,21 @@ class ContactsDB:
                 name = cls._resolve_name(other_uid)
             if not name and sender_uid and sender_uid != my_uid and is_p2p:
                 name = cls._resolve_name(sender_uid)
+            if name in _P2P_IGNORE_DISPLAY:
+                name = None
 
             if is_p2p:
+                peer_name = name or sender_uid or ''
+                if peer_name in _P2P_IGNORE_DISPLAY:
+                    peer_name = ''
+                if not peer_name and other_uid:
+                    peer_name = f'单聊·{other_uid}'
+                if not peer_name:
+                    peer_name = str(sender_uid or '')
                 entry = {
                     'cid': cid,
                     'uid': other_uid or sender_uid,
-                    'name': name or sender_uid,
+                    'name': peer_name,
                     'first_seen': now,
                     'last_seen': now,
                     'msg_count': 1,

@@ -882,8 +882,8 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
 
         fetch_result = _post(DAEMON_URL.rstrip('/') + '/fetch_report_content', {
             'url': url,
-            'wait_extra': 15,
-        }, timeout=120)
+            'wait_extra': 22,
+        }, timeout=180)
 
         if fetch_result.get('_error') or not fetch_result.get('success'):
             err = fetch_result.get('error') or fetch_result.get('_error') or 'unknown'
