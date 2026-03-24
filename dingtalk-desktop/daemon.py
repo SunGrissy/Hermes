@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Frida Daemon — 常驻守护进程，为 MCP 工具提供 HTTP API
+Frida Daemon ? ???????? MCP ???? HTTP API
 
-架构：
-  - 单 Frida session 附加到 DingTalk 主进程
-  - CEF 脚本：RPC 导出 execJs/loadUrl（消息发送）
-  - Monitor 脚本：Native Hook 实时消息监听
+???
+  - Frida session ??? DingTalk ???
+  - CEF ???RPC ?? execJs/loadUrl??????
+  - Monitor ???Native Hook ??????
   - HTTP API on localhost:19200
-  - DingTalk 进程 watchdog
+  - DingTalk ?? watchdog
 
-端点：
-  POST /send      {cid|name, message}  → 发消息（支持按姓名自动解析 CID）
-  POST /fetch     {cid|name, count}    → 获取历史消息
-  GET  /search    ?keyword=&limit=     → 搜日志
-  GET  /contacts  ?name=               → 查 CID
-  GET  /health                         → 状态
-  POST /shutdown                       → 停止守护进程
+???
+  POST /send      {cid|name, message}  ??????????? CID?
+  POST /fetch     {cid|name, count}    ??????
+  GET  /search    ?keyword=&limit=     ???
+  GET  /contacts  ?name=               ? CID
+  GET  /health                         ??
+  POST /shutdown                       ??????
 """
 import os
 import sys
@@ -28,12 +28,10 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from socketserver import ThreadingMixIn
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """每个请求在独立线程处理，避免 skill_router 调 /fetch 时死锁。"""
+    """????????????? skill_router ? /fetch ????"""
     daemon_threads = True
 from datetime import datetime
 
-# [AgentMemo Task] 开始时间: 2026-03-18 19:00
-# [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
 sys.path.insert(0, os.path.dirname(__file__))
 from lib.utils import (
     get_main_pid, get_main_pid_by_mem, js_escape, normalize,
@@ -42,7 +40,7 @@ from lib.utils import (
 )
 
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 _server_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 _KEY_FILES = [
@@ -58,19 +56,18 @@ LOG_FILE = os.environ.get(
     os.path.join(DATA_DIR, '_msg_log.jsonl'),
 )
 WATCHDOG_INTERVAL = 30
-FRIDA_RPC_TIMEOUT = 3   # Frida exports_sync 调用最长允许等待秒数（短超时快速失败）
+FRIDA_RPC_TIMEOUT = 3   # Frida exports_sync ?? RPC ?????
 
 
 def _frida_call(fn, *args, timeout=FRIDA_RPC_TIMEOUT):
-    """在独立线程里执行 Frida exports_sync 调用，超时则返回 None。
-    用法：result = _frida_call(script.exports_sync.exec_js, bid, js)
-    注意：不使用 context manager，而用 shutdown(wait=False)，避免
-    __exit__ 在卡住的工作线程上永久阻塞。
+    """??????? Frida exports_sync????? None?
+    ??result = _frida_call(script.exports_sync.exec_js, bid, js)
+    ?? context manager?shutdown(wait=False) ? __exit__ ?????
     """
     import concurrent.futures
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     future = executor.submit(fn, *args)
-    executor.shutdown(wait=False)   # 不等工作线程，让它自然结束
+    executor.shutdown(wait=False)   # ??????
     try:
         return future.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
@@ -80,7 +77,7 @@ def _frida_call(fn, *args, timeout=FRIDA_RPC_TIMEOUT):
 
 
 def _parse_date_param(val, end_of_day=False):
-    """Parse date param: 'YYYY-MM-DD [HH:MM:SS]' → ms timestamp, int passthrough, None passthrough"""
+    """Parse date param: 'YYYY-MM-DD [HH:MM:SS]' ? ms timestamp, int passthrough, None passthrough"""
     if val is None:
         return None
     if isinstance(val, (int, float)):
@@ -101,7 +98,7 @@ def _parse_date_param(val, end_of_day=False):
             return None
     return None
 
-# ── CEF Frida 脚本（持久化，RPC 导出）──
+# ?? CEF Frida ???????RPC ?????
 
 _CEF_SCRIPT = r"""
 'use strict';
@@ -180,12 +177,12 @@ if (!libcef) {
 }
 """
 
-# ── Monitor Frida 脚本 ──
+# ?? Monitor Frida ?? ??
 
 from lib.monitor import _MONITOR_JS, _process_push, _process_send
 from skill_router import start_router as _start_skill_router
 
-# ── Beacon 回调服务器（接收 CEF JS 回调）──
+# ?? Beacon ???????? CEF JS ?????
 
 class _BeaconServer:
     def __init__(self, port):
@@ -247,7 +244,7 @@ class _BeaconServer:
         self.received.clear()
 
 
-# ── FridaDaemon 核心 ──
+# ?? FridaDaemon ?? ??
 
 class FridaDaemon:
     def __init__(self):
@@ -290,7 +287,7 @@ class FridaDaemon:
 
         pid = get_main_pid() or get_main_pid_by_mem()
         if not pid:
-            log('DingTalk 进程未找到')
+            log('DingTalk main process not found')
             return False
 
         try:
@@ -306,13 +303,13 @@ class FridaDaemon:
             time.sleep(0.5)
 
             if self._cef_ready:
-                log(f'已附加到 DingTalk PID={pid}, CEF 就绪')
+                log(f'attached DingTalk pid={pid}, CEF ready')
             else:
-                log(f'已附加到 DingTalk PID={pid}, 但 CEF 未就绪')
+                log(f'attached DingTalk pid={pid}, CEF not ready (waiting for libcef script)')
 
             return self._cef_ready
         except Exception as e:
-            log(f'附加失败: {e}')
+            log(f'attach failed: {e}')
             self._cleanup()
             return False
 
@@ -328,10 +325,10 @@ class FridaDaemon:
                 self._monitor_script = self._session.create_script(_MONITOR_JS)
                 self._monitor_script.on('message', self._on_monitor_msg)
                 self._monitor_script.load()
-                log('消息监听器已启动')
+                log('message monitor script loaded')
                 return True
             except Exception as e:
-                log(f'监听器启动失败: {e}')
+                log(f'monitor start failed: {e}')
                 return False
 
     def _on_detached(self, reason, crash):
@@ -357,7 +354,7 @@ class FridaDaemon:
         p = msg['payload']
         if p.get('ready'):
             self._monitor_ready = True
-            log(f'监听器就绪, {p.get("hooks", 0)} 个 Hook')
+            log(f'monitor ready, {p.get("hooks", 0)} hook(s)')
             return
         if not data:
             return
@@ -368,8 +365,8 @@ class FridaDaemon:
                           self._dedup, MY_UID, LOG_FILE, False,
                           memo_callback=getattr(self, '_memo_callback', None))
         else:
-            # 他人发言仅走 ProcessPush：必须入队才能秒级响应「许愿」等。
-            # 自己发的仍以 ProcessRequest(send) 入队；push 侧跳过 is_self，避免与 send 双份。
+            # ?????? ProcessPush?????????????????
+            # ?????? ProcessRequest(send) ???push ??? is_self???? send ???
             _process_push(data, src,
                           self._dedup, MY_UID, LOG_FILE, False,
                           memo_callback=getattr(self, '_memo_callback', None))
@@ -393,7 +390,7 @@ class FridaDaemon:
             self._session = None
 
     def resolve_cid(self, name):
-        """按姓名解析 CID，返回 (cid, display_name) 或 (None, None)"""
+        """????? CID??? (cid, display_name) ? (None, None)"""
         entries = self.find_conversation(name)
         if not entries:
             return None, None
@@ -401,8 +398,8 @@ class FridaDaemon:
         return best['cid'], best.get('sender', name)
 
     def _find_jsapi_browser(self, force_rescan=False):
-        """扫描所有活跃 browser，返回第一个有 listMessage API 的 browser ID。
-        结果会缓存，后续调用直接返回缓存值；仅在 force_rescan=True 或缓存失效时重新扫描。
+        """?????? browser??????? listMessage API ? browser ID?
+        ???????????????????? force_rescan=True ???????????
         """
         if not self._cef_script:
             self._cached_jsapi_bid = None
@@ -411,16 +408,16 @@ class FridaDaemon:
         if self._cached_jsapi_bid is not None and not force_rescan:
             if self._verify_jsapi_browser(self._cached_jsapi_bid):
                 return self._cached_jsapi_bid
-            log(f'缓存的 JSAPI browser {self._cached_jsapi_bid} 已失效，重新扫描')
+            log(f'cached JSAPI browser {self._cached_jsapi_bid} invalid, rescan')
             self._cached_jsapi_bid = None
 
         try:
             bids = _frida_call(self._cef_script.exports_sync.scan_browsers)
             if bids is None:
-                log('scanBrowsers 超时，JSAPI 不可用')
+                log('scanBrowsers timeout or JSAPI unavailable')
                 return None
         except Exception as e:
-            log(f'scanBrowsers 失败: {e}')
+            log(f'scanBrowsers error: {e}')
             return None
 
         if not bids:
@@ -428,16 +425,16 @@ class FridaDaemon:
 
         for bid in bids:
             if self._verify_jsapi_browser(bid):
-                log(f'找到 JSAPI browser: ID={bid}')
+                log(f'using JSAPI browser id={bid}')
                 self._cached_jsapi_bid = bid
                 return bid
 
         return None
 
     def _read_browser1_url(self):
-        """读取 browser 1 当前 URL，用于 fetch_report_content 的保存/恢复。
-        复用 _ensure_b1 同款探测 JS，等待 2 秒收结果。
-        失败则返回 ADV_SEARCH_URL 作为安全 fallback。
+        """?? browser 1 ?? URL??? fetch_report_content ???/???
+        ?? _ensure_b1 ???? JS??? 2 ?????
+        ????? ADV_SEARCH_URL ???? fallback?
         """
         try:
             self._beacon.clear()
@@ -457,7 +454,7 @@ class FridaDaemon:
         return ADV_SEARCH_URL
 
     def _verify_jsapi_browser(self, bid):
-        """验证指定 browser 是否仍有 listMessage API"""
+        """???? browser ???? listMessage API"""
         if not self._cef_script:
             return False
         self._beacon.clear()
@@ -471,7 +468,7 @@ class FridaDaemon:
         try:
             r = _frida_call(self._cef_script.exports_sync.exec_js, bid, check_js)
             if r is None:
-                return False  # 超时视为不可用
+                return False  # ???????
         except Exception:
             return False
         time.sleep(1)
@@ -479,22 +476,22 @@ class FridaDaemon:
         return reports.get('chk', False) is True
 
     def fetch_history(self, cid, count=20, before=None, after=None, timeout=30):
-        """通过 JSAPI dingtalk.message.listMessage 获取历史消息
+        """?? JSAPI dingtalk.message.listMessage ??????
         
-        before: 获取此时间之前的消息（YYYY-MM-DD 或 ms 时间戳），作为 cursor
-        after:  过滤掉此时间之前的消息（YYYY-MM-DD 或 ms 时间戳），作为下界
+        before: ???????????YYYY-MM-DD ? ms ??????? cursor
+        after:  ????????????YYYY-MM-DD ? ms ?????????
         """
         before_ts = _parse_date_param(before, end_of_day=True)
         after_ts = _parse_date_param(after, end_of_day=False)
         cursor_val = str(before_ts) if before_ts else "Number.MAX_SAFE_INTEGER"
 
-        # 锁获取前先检查 JSAPI，避免因 exec_js_sync 卡死而永久持锁
+        # ??????? JSAPI???? exec_js_sync ???????
         if not self.is_attached or not self._cef_script:
             if not self.attach():
                 return {'success': False, 'error': 'Cannot attach to DingTalk'}
         bid = self._find_jsapi_browser()
         if not bid:
-            return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
+            return {'success': False, 'error': '???? listMessage API ? browser'}
 
         with self._fetch_lock:
             if not self.is_attached:
@@ -503,7 +500,7 @@ class FridaDaemon:
 
             bid = self._find_jsapi_browser()
             if not bid:
-                return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
+                return {'success': False, 'error': '???? listMessage API ? browser'}
 
             count = min(count, 50)
             cid_safe = js_escape(cid)
@@ -516,7 +513,7 @@ class FridaDaemon:
             if result != 'ok':
                 bid = self._find_jsapi_browser(force_rescan=True)
                 if not bid:
-                    return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
+                    return {'success': False, 'error': '???? listMessage API ? browser'}
                 self._beacon.clear()
                 result = _frida_call(self._cef_script.exports_sync.exec_js, bid, fetch_js)
                 if result != 'ok':
@@ -524,7 +521,7 @@ class FridaDaemon:
 
             msgs_raw = self._wait_for_fetch_beacon(timeout=timeout)
             if msgs_raw is None:
-                return {'success': False, 'error': '等待 JSAPI 响应超时'}
+                return {'success': False, 'error': '?? JSAPI ????'}
 
             messages = self._format_jsapi_messages(msgs_raw)
             self._fetch_count += 1
@@ -545,7 +542,7 @@ class FridaDaemon:
             return resp
 
     def _format_jsapi_messages(self, msgs_raw):
-        """解析 JSAPI dingtalk.message.listMessage 返回的消息列表"""
+        """?? JSAPI dingtalk.message.listMessage ???????"""
         if not isinstance(msgs_raw, list):
             return []
 
@@ -595,7 +592,7 @@ class FridaDaemon:
             entry = {
                 'time': dt,
                 'ts': ts_int,
-                'sender': '我' if is_self else (sender_name or uid),
+                'sender': '?' if is_self else (sender_name or uid),
                 'uid': uid,
                 'is_self': is_self,
                 'content_type': ct,
@@ -628,16 +625,16 @@ class FridaDaemon:
         """Extract author name and clean text from ct=2950 report card.
 
         Supported title formats:
-          [日志] 张三的日报
-          [日志] 个人日报 · [张三] · [0316]
-          [日志] 个人日报 · 张三 · [0316]
-          [日志] 个人日报 · 张三
-          (同上，周报 / 月报)
+          [??] ?????
+          [??] ???? ? [??] ? [0316]
+          [??] ???? ? ?? ? [0316]
+          [??] ???? ? ??
+          (????? / ??)
         """
         import re
         text = m.get('text', '') or ''
 
-        # 先把标题和内容分开（有些消息已经是 "title || content" 格式）
+        # ????????????????? "title || content" ???
         if '||' in text:
             title_part, content_part = text.split('||', 1)
             content_part = content_part.strip()
@@ -650,23 +647,23 @@ class FridaDaemon:
             content_part = ''
 
         author = None
-        # Pattern 1: [日志] ...张三的日报/周报/月报（从标题部分提取）
-        m1 = re.search(r'\[日志\]\s*(.+?)的[日周月]报', title_part)
+        # Pattern 1: [??] ...?????/??/???????????
+        m1 = re.search(r'\[??\]\s*(.+?)?[???]?', title_part)
         if m1:
             author = m1.group(1).strip()
         if not author:
-            # Pattern 2: [日志] 个人日报/周报/月报 · [张三] or · 张三
+            # Pattern 2: [??] ????/??/?? ? [??] or ? ??
             m2 = re.search(
-                r'\[日志\]\s*个人[日周月]报\s*[··]\s*\[?([^\]·\s][^\]·|]*?)\]?'
-                r'(?:\s*[··]|$)',
+                r'\[??\]\s*??[???]?\s*[??]\s*\[?([^\]?\s][^\]?|]*?)\]?'
+                r'(?:\s*[??]|$)',
                 title_part,
             )
             if m2:
                 author = m2.group(1).strip()
         if not author:
-            # Pattern 3: [日志] 个人日报 · 张三  (no trailing separator)
+            # Pattern 3: [??] ???? ? ??  (no trailing separator)
             m3 = re.search(
-                r'\[日志\]\s*个人[日周月]报\s*[··]\s*([^\]·\n|]+)',
+                r'\[??\]\s*??[???]?\s*[??]\s*([^\]?\n|]+)',
                 title_part,
             )
             if m3:
@@ -677,8 +674,8 @@ class FridaDaemon:
         if author:
             m['sender'] = author
 
-        # 优先用 card_ext.biz_custom_desc 作为正文（钉钉日报卡片的内容预览）
-        # 其次用消息里已有的 content_part（|| 之后的部分）
+        # ??? card_ext.biz_custom_desc ?????????????????
+        # ????????? content_part?|| ??????
         card_ext = m.get('card_ext') or {}
         desc = card_ext.get('biz_custom_desc', '')
         if desc:
@@ -692,7 +689,7 @@ class FridaDaemon:
 
     @staticmethod
     def _extract_report_from_bform(bf_str):
-        """从 b_form 字符串直接提取日报内容"""
+        """? b_form ???????????"""
         if not bf_str:
             return ''
         try:
@@ -712,7 +709,7 @@ class FridaDaemon:
 
     @staticmethod
     def _extract_report_from_raw(raw_json):
-        """从 ct=300 的原始 content JSON 中提取日报内容（fallback）"""
+        """? ct=300 ??? content JSON ????????fallback?"""
         try:
             ct_obj = json.loads(raw_json)
         except Exception:
@@ -722,7 +719,7 @@ class FridaDaemon:
         for att in attachments:
             ext = att.get('extension', {})
             bf_str = ext.get('b_form', '')
-            btl = ext.get('b_tl', '日报')
+            btl = ext.get('b_tl', '??')
             htl = ext.get('h_tl', '')
 
             if bf_str:
@@ -808,7 +805,7 @@ class FridaDaemon:
         if isinstance(url, str) and 'advancedSearch' in url and has_api:
             return True
 
-        log('B1 不在 advancedSearch，尝试恢复...')
+        log('B1 not on advancedSearch, navigating...')
         self._cef_script.exports_sync.load_url(1, ADV_SEARCH_URL)
         time.sleep(4)
 
@@ -821,11 +818,11 @@ class FridaDaemon:
         return isinstance(url, str) and 'advancedSearch' in url and has_api
 
     def find_browser_with_cid(self, target_cid: str, timeout: int = 5) -> int | None:
-        """扫描所有 CEF browser，返回当前显示 target_cid 会话的 browser ID（没找到返回 None）。"""
+        """???? CEF browser??????? target_cid ??? browser ID?????? None??"""
         try:
             bids = self._cef_script.exports_sync.scan_browsers()
         except Exception as e:
-            log(f'scan_browsers 失败: {e}')
+            log(f'scan_browsers error: {e}')
             return None
         if not bids:
             return None
@@ -851,26 +848,26 @@ class FridaDaemon:
             except Exception:
                 pass
 
-        # 等待 beacon 回报
+        # ?? beacon ??
         for _ in range(timeout * 4):
             time.sleep(0.25)
             reports = self._beacon.get_reports()
             for k, v in reports.items():
                 if k.startswith(prefix):
                     bid_found = int(k.split('_')[-1])
-                    log(f'找到招聘群 browser: ID={bid_found}')
+                    log(f'matched conversation browser id={bid_found}')
                     return bid_found
         return None
 
     def trigger_file_download(self, cid: str, msg_id: str, file_name: str,
                               wait_seconds: int = 12) -> str:
         """
-        在持有 cid 会话的 browser 里调用 openMessageFile 触发下载，
-        轮询文件系统等待文件落盘，返回本地路径（超时返回空字符串）。
+        ??? cid ??? browser ??? openMessageFile ?????
+        ??????????????????????????????
         """
         bid = self.find_browser_with_cid(cid)
         if not bid:
-            log(f'trigger_file_download: 未找到持有会话 {cid} 的 browser（群窗口可能未打开）')
+            log(f'trigger_file_download: no browser for cid={cid}, abort')
             return ''
 
         self._beacon.clear()
@@ -891,10 +888,10 @@ class FridaDaemon:
         try:
             self._cef_script.exports_sync.exec_js(bid, open_js)
         except Exception as e:
-            log(f'trigger_file_download exec_js 失败: {e}')
+            log(f'trigger_file_download exec_js error: {e}')
             return ''
 
-        # 轮询文件系统，按 file_name 匹配
+        # ???????? file_name ??
         search_dirs = [
             'D:/DownLoads',
             'D:/DownLoads/DingDingDownLoads',
@@ -908,24 +905,24 @@ class FridaDaemon:
                     continue
                 candidate = os.path.join(base, file_name)
                 if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
-                    log(f'文件已落盘: {candidate}')
+                    log(f'download found: {candidate}')
                     return candidate
-                # 搜索一层子目录
+                # ???????
                 try:
                     for entry in os.scandir(base):
                         if entry.is_dir():
                             c2 = os.path.join(entry.path, file_name)
                             if os.path.exists(c2) and os.path.getsize(c2) > 0:
-                                log(f'文件已落盘: {c2}')
+                                log(f'download found: {c2}')
                                 return c2
                 except OSError:
                     pass
-        log(f'trigger_file_download 超时，文件未落盘: {file_name}')
+        log(f'trigger_file_download timeout, file not found: {file_name}')
         return ''
 
     def exec_custom_js(self, js, label='exec_result', timeout=10):
-        """在 JSAPI browser 中执行任意 JS，通过 beacon 收结果。
-        JS 内可用: dingtalk 对象, fetch 到 http://127.0.0.1:{BEACON_PORT}/b?l={label}
+        """? JSAPI browser ????? JS??? beacon ????
+        JS ???: dingtalk ??, fetch ? http://127.0.0.1:{BEACON_PORT}/b?l={label}
         """
         bid = self._find_jsapi_browser()
         if not bid:
@@ -945,7 +942,7 @@ class FridaDaemon:
         return {'success': True, 'results': matched}
 
     def probe_jsapi(self, timeout=10):
-        """探测 JSAPI dingtalk 对象的结构"""
+        """?? JSAPI dingtalk ?????"""
         bid = self._find_jsapi_browser()
         if not bid:
             return {'success': False, 'error': 'No JSAPI browser found'}
@@ -991,7 +988,7 @@ class FridaDaemon:
         return {'success': False, 'error': 'timeout'}
 
     def get_conversation_info(self, cid, timeout=10):
-        """通过 JSAPI getBaseConversation 获取会话元数据（群名、类型等）"""
+        """?? JSAPI getBaseConversation ???????????????"""
         bid = self._find_jsapi_browser()
         if not bid:
             return {'success': False, 'error': 'No JSAPI browser found'}
@@ -1045,13 +1042,13 @@ class FridaDaemon:
         return {'success': False, 'error': 'timeout'}
 
     def queue_name_resolve(self, cid):
-        """将 CID 加入名称解析队列"""
+        """? CID ????????"""
         with self._name_queue_lock:
             if cid not in self._name_queue:
                 self._name_queue.append(cid)
 
     def start_name_resolver(self):
-        """启动后台名称解析线程"""
+        """??????????"""
         if self._name_resolver_thread and self._name_resolver_thread.is_alive():
             return
         self._name_resolver_thread = threading.Thread(
@@ -1059,7 +1056,7 @@ class FridaDaemon:
         self._name_resolver_thread.start()
 
     def _name_resolver_loop(self):
-        """后台循环：从队列取 CID，调 JSAPI 查群名，更新 ContactsDB"""
+        """????????? CID?? JSAPI ?????? ContactsDB"""
         while self._running:
             cid = None
             with self._name_queue_lock:
@@ -1075,15 +1072,15 @@ class FridaDaemon:
                 result = self.get_conversation_info(cid)
                 if result.get('success') and result.get('name'):
                     ContactsDB.set_name(cid, result['name'])
-                    log(f'[name-resolver] {cid} → {result["name"]}')
+                    log(f'[name-resolver] {cid} -> {result["name"]}')
                 else:
-                    log(f'[name-resolver] {cid} 查询失败: {result.get("error", "no name")}')
+                    log(f'[name-resolver] {cid} failed: {result.get("error", "no name")}')
             except Exception as e:
-                log(f'[name-resolver] {cid} 异常: {e}')
+                log(f'[name-resolver] {cid} error: {e}')
             time.sleep(1)
 
     def enrich_contacts(self):
-        """批量补全所有未解析的群聊名称"""
+        """??????????????"""
         unresolved = ContactsDB.get_unresolved_groups()
         count = 0
         for cid in unresolved:
@@ -1091,25 +1088,28 @@ class FridaDaemon:
             count += 1
         return {'queued': count, 'total_unresolved': len(unresolved)}
 
-    # ── 自己的日报提取 ──
+    # ?? ??????? ??
 
     MY_REPORT_GROUP_CID = '74401645538'
 
-    def fetch_report_content(self, url, timeout=60, wait_extra=None):
-        """通过 CEF loadUrl 打开报告页面并精准提取报告内容
+    def fetch_report_content(self, url, timeout=60, wait_extra=None, full_sweep=True,
+                             deep_extract=True):
+        """?? CEF loadUrl ???????????????
 
-        始终使用 browser 1（JSAPI browser），先保存当前 URL，抓取完毕后原样恢复，
-        保证 DingTalk UI（搜索栏、文档面板等）不受影响。
-        优先用 CSS 选择器定位报告正文容器，最终 fallback 到 body.innerText。
+        ???? browser 1?JSAPI browser??????? URL???????????
+        ?? DingTalk UI????????????????
+        ??? CSS ?????????????? fallback ? body.innerText?
 
-        wait_extra: readyState complete 后额外等待秒数，让 SPA 渲染正文。
-                    None = 自动检测（alidocs.dingtalk.com → 15s，其他 → 2s）
+        wait_extra: readyState complete ????????? SPA ?????
+                    None = ?????alidocs.dingtalk.com ? 22s??? ? 2s?
+        full_sweep: AliDocs ????????????????? HTTP ???????? full_sweep=False ???
+        deep_extract: AliDocs ??? deep_extract=False ?????????? scan2???? HTTP ????
         """
-        _to_end = None
         is_alidocs = ('alidocs.dingtalk.com' in url or '/doc/' in url)
         if wait_extra is None:
             if is_alidocs:
-                wait_extra = 15
+                # AliDocs SPA + ?? iframe ??????????????
+                wait_extra = 22
             else:
                 wait_extra = 2
         with self._fetch_lock:
@@ -1117,8 +1117,8 @@ class FridaDaemon:
                 if not self.attach():
                     return {'success': False, 'error': 'Cannot attach to DingTalk'}
 
-            # 始终用 browser 1；用完后恢复到 about:blank（中性状态）
-            # 不恢复到 advancedSearch.html，否则会触发钉钉搜索栏 UI 弹出
+            # ??? browser 1??????? about:blank??????
+            # ???? advancedSearch.html??????????? UI ??
             content_bid = 1
 
             self._beacon.clear()
@@ -1126,8 +1126,8 @@ class FridaDaemon:
             if result != 'ok':
                 return {'success': False, 'error': f'loadUrl failed: {result}'}
 
-            # 等页面渲染完成（轮询 readyState），最多等 30 秒后再执行 JS
-            # 避免固定 sleep 20s 在慢速页面上依然超时
+            # ?????????? readyState????? 30 ????? JS
+            # ???? sleep 20s ??????????
             ready_js = (
                 "(function(){"
                 "var P=" + str(BEACON_PORT) + ";"
@@ -1144,19 +1144,20 @@ class FridaDaemon:
             )
             self._beacon.clear()
             self._cef_script.exports_sync.exec_js(content_bid, ready_js)
-            # 等待 page_ready 信号，最多 30 秒
+            # ?? page_ready ????? 30 ?
             for _ in range(60):
                 time.sleep(0.5)
                 if 'page_ready' in self._beacon.get_reports():
                     break
-            # 额外等待让 SPA 框架渲染完（AliDocs 等需要更长时间）
+            # ????? SPA ??????AliDocs ????????
             time.sleep(wait_extra)
 
-            # AliDocs 正文常在 iframe 内且按需挂载节点：仅读 body.innerText 时只能拿到「当前视口附近」，
-            # 后半篇（如成功指标）会缺失，却混入侧栏「字数统计」等。先分步滚动主窗与各 iframe 再抽取。
-            if 'alidocs.dingtalk.com' in url or '/doc/' in url:
-                # 语雀/钉钉文档常在 iframe 内用 div overflow:auto 承载正文，document 滚动无效；
-                # 需对「所有可纵向滚动的元素」分步 scrollTop，才能把虚拟列表后半段挂进 DOM。
+            # AliDocs ???? iframe ??????????? body.innerText ??????????????
+            # ???????????????????????????????????? iframe ????
+            scroll_alidocs = ('alidocs.dingtalk.com' in url or '/doc/' in url)
+            if scroll_alidocs:
+                # ??/?????? iframe ?? div overflow:auto ?????document ?????
+                # ???????????????? scrollTop????????????? DOM?
                 _scroll_js = (
                     "(function(){"
                     "function stepDoc(doc){"
@@ -1181,20 +1182,27 @@ class FridaDaemon:
                     "}catch(x){}"
                     "}"
                     "}catch(x){}}"
-                    "try{stepDoc(document);}catch(x){}"
-                    "var ifr=document.querySelectorAll('iframe'),i,idoc;"
+                    "}"
+                    "function walkIframes(doc,depth){"
+                    "if(!doc||depth>6)return;"
+                    "try{stepDoc(doc);}catch(x){}"
+                    "var ifr,i,idoc;"
+                    "try{ifr=doc.querySelectorAll('iframe');}catch(x){return;}"
                     "for(i=0;i<ifr.length;i++){"
                     "try{"
                     "idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
-                    "if(idoc)stepDoc(idoc);"
+                    "if(idoc)walkIframes(idoc,depth+1);"
                     "}catch(e){}"
                     "}"
+                    "}"
+                    "walkIframes(document,0);"
                     "})()"
                 )
-                for _ in range(16):
-                    self._cef_script.exports_sync.exec_js(content_bid, _scroll_js)
-                    time.sleep(0.28)
-                time.sleep(0.5)
+                if deep_extract:
+                    for _ in range(24):
+                        self._cef_script.exports_sync.exec_js(content_bid, _scroll_js)
+                        time.sleep(0.28)
+                    time.sleep(0.5)
 
             extract_js = (
                 "(function(){"
@@ -1202,55 +1210,109 @@ class FridaDaemon:
                 "function post(l,d){fetch('http://127.0.0.1:'+P"
                 "+'/r?l='+encodeURIComponent(l),"
                 "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
-
-                # ── 选择器列表（按优先级排序） ──
+                "function textOf(el){return (el&&el.innerText||'').trim();}"
+                "function sidebarNoise(t){"
+                "if(!t)return false;"
+                "if(/\\u5b57\\u6570\\u7edf\\u8ba1|\\u5b57\\u7b26\\u6570/.test(t))return true;"
+                "var h=t.slice(0,280);"
+                "return /"
+                "\\u6700\\u8fd1\\u7f16\\u8f91|\\u534f\\u4f5c\\u6210\\u5458|"
+                "\\u9080\\u8bf7\\u4f60\\u534f\\u4f5c/"
+                ".test(h);}"
+                "function shellNoise(t){"
+                "if(!t)return false;"
+                "return /\\u6211\\u7684\\u6587\\u6863/.test(t)&&"
+                "/\\u56e2\\u961f\\u6587\\u4ef6/.test(t);}"
+                "function listNoise(t){"
+                "if(!t||t.length<600)return false;"
+                "var lines=t.split('\\n'),short=[],i,s;"
+                "for(i=0;i<lines.length;i++){"
+                "s=lines[i].replace(/\\r/g,'').trim();if(s)short.push(s);}"
+                "if(short.length<24)return false;"
+                "var head=short.slice(0,12).join('\\n'),reps=0;"
+                "for(i=0;i<=short.length-12;i++){"
+                "if(short.slice(i,i+12).join('\\n')===head)reps++;}"
+                "return reps>=4;}"
+                "var pri=["
+                "'.ne-viewer-body','.ne-doc-viewer','[data-slate-node=\"document\"]',"
+                "'.lake-doc-content','.lake-engine','.ProseMirror','.ne-paragraphs',"
+                "'.ne-editor-inner'];"
                 "var sels=["
-                "'.ne-editor-input','.ne-paragraphs','.ne-doc-editor',"
-                "'.ne-content-editable','[class*=\"ne-editor\"]','[class*=\"ne-paragraphs\"]',"
+                "'.ne-editor-wrap','.ne-editor-input','.ne-doc-editor',"
+                "'.lake-content-editor','.ne-content-editable',"
+                "'[class*=\"ne-editor\"]','[class*=\"ne-paragraphs\"]',"
                 "'.report-detail','.report-content','.detail-content',"
                 "'.log-detail','.form-detail','[class*=report]','[class*=detail]',"
                 "'article','main','.content','.page-content'];"
-
-                # ── 在指定 document 上尝试选择器：取 innerText 最长者（避免命中小块工具栏） ──
                 "function tryDocBest(doc,prefix){"
                 "var best=null,bestL=0,i,j,e,t,list;"
-                "for(i=0;i<sels.length;i++){"
-                "try{"
-                "list=doc.querySelectorAll(sels[i]);"
+                "for(i=0;i<pri.length;i++){"
+                "try{list=doc.querySelectorAll(pri[i]);"
                 "if(!list||!list.length)continue;"
                 "for(j=0;j<list.length;j++){"
-                "e=list[j];"
-                "t=(e.innerText||'').trim();"
-                "if(t.length>bestL){bestL=t.length;best={el:e,method:prefix+sels[i]+'#'+j};}"
-                "}"
-                "}catch(x){}}"
+                "e=list[j];t=textOf(e);"
+                "if(t.length>bestL&&!sidebarNoise(t)&&!shellNoise(t)&&!listNoise(t)){"
+                "bestL=t.length;best={el:e,method:prefix+'P>'+pri[i]+'#'+j};}"
+                "}}catch(x){}}"
+                "if(bestL>220)return best;"
+                "for(i=0;i<sels.length;i++){"
+                "try{list=doc.querySelectorAll(sels[i]);"
+                "if(!list||!list.length)continue;"
+                "for(j=0;j<list.length;j++){"
+                "e=list[j];t=textOf(e);"
+                "if(t.length>bestL&&!sidebarNoise(t)&&!shellNoise(t)&&!listNoise(t)){"
+                "bestL=t.length;best={el:e,method:prefix+sels[i]+'#'+j};}"
+                "}}catch(x){}}"
                 "return bestL>20?best:null;}"
-
-                # ── 主 document 尝试 ──
-                "var found=tryDocBest(document,'');"
-
-                # ── iframe 穿透：必须始终尝试（AliDocs 正文在 iframe 内；顶层 shell 常 >200 字会误跳过 iframe） ──
-                "var iframes=document.querySelectorAll('iframe');"
-                "for(var f=0;f<iframes.length;f++){"
-                "try{var idoc=iframes[f].contentDocument||iframes[f].contentWindow.document;"
+                "function bestLen(f){return f?textOf(f.el).length:0;}"
+                "function scanIframes(doc,depth,found){"
+                "if(!doc||depth>6)return found;"
+                "var ifr,i,idoc,ifound,bl=bestLen(found);"
+                "try{ifr=doc.querySelectorAll('iframe');"
+                "for(i=0;i<ifr.length;i++){"
+                "try{"
+                "idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
                 "if(!idoc)continue;"
-                "var ifound=tryDocBest(idoc,'iframe>');"
-                "if(ifound&&ifound.el.innerText.trim().length>"
-                "(found?found.el.innerText.trim().length:0)){"
-                "found=ifound;}"
-                # ── iframe 的 body fallback ──
-                "if(idoc.body&&idoc.body.innerText&&idoc.body.innerText.trim().length>"
-                "(found?found.el.innerText.trim().length:0)){"
-                "found={el:idoc.body,method:'iframe>body'};}"
+                "ifound=tryDocBest(idoc,'if'+depth+'>');"
+                "if(bestLen(ifound)>bl){found=ifound;bl=bestLen(found);}"
+                "found=scanIframes(idoc,depth+1,found);bl=bestLen(found);"
                 "}catch(x){}}"
-
-                # ── 最终 fallback ──
+                "}catch(x){}"
+                "return found;}"
+                "function collectCandidates(doc,depth,out){"
+                "if(!doc||depth>8)return;"
+                "var cand=tryDocBest(doc,'c'+depth+'>');"
+                "if(cand){var tx=textOf(cand.el);"
+                "if(tx.length>=200&&!listNoise(tx)&&!shellNoise(tx)&&!sidebarNoise(tx))"
+                "out.push(cand);}"
+                "var ifr,i,idoc;"
+                "try{ifr=doc.querySelectorAll('iframe');"
+                "for(i=0;i<ifr.length;i++){"
+                "try{idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
+                "if(idoc)collectCandidates(idoc,depth+1,out);"
+                "}catch(e){}}"
+                "}catch(x){}}"
+                "}"
+                "var isAli=(location.href||'').indexOf('alidocs.dingtalk.com')>=0;"
+                "var found=null,bestPick=0,ci,out,tx2;"
+                "if(isAli){"
+                "out=[];collectCandidates(document,0,out);"
+                "for(ci=0;ci<out.length;ci++){"
+                "tx2=textOf(out[ci].el).length;"
+                "if(tx2>bestPick){bestPick=tx2;found=out[ci];}"
+                "}"
+                "if(!found||bestPick<400){"
+                "found=scanIframes(document,0,null);"
+                "if(found&&(listNoise(textOf(found.el))||shellNoise(textOf(found.el))))found=null;"
+                "}"
+                "}else{"
+                "found=tryDocBest(document,'');"
+                "found=scanIframes(document,0,found);"
+                "}"
                 "var el=found?found.el:document.body;"
                 "var method=found?found.method:'body';"
-
-                "var text=(el.innerText||'').trim();"
+                "var text=textOf(el);"
                 "var title=document.title||'';"
-
                 "var cs=3000,n=Math.ceil(text.length/cs);"
                 "post('rpt_meta',{title:title,len:text.length,parts:n,method:method});"
                 "for(var i=0;i<n&&i<100;i++){"
@@ -1283,80 +1345,92 @@ class FridaDaemon:
                 if meta:
                     break
 
-                # AliDocs 偶发首轮未回传 meta：补一次滚底并重试
-                if attempt < attempts and _to_end:
+                # AliDocs ????? meta???????? scroll ????
+                if attempt < attempts and is_alidocs:
                     try:
-                        self._cef_script.exports_sync.exec_js(content_bid, _to_end)
+                        self._cef_script.exports_sync.exec_js(content_bid, _scroll_js)
                     except Exception:
                         pass
                     time.sleep(1.5)
-            # 恢复 browser 1 到中性状态，不导航回 advancedSearch 以免触发搜索框 UI
-            try:
-                self._cef_script.exports_sync.load_url(1, 'about:blank')
-            except Exception:
-                pass
-
-            if not meta:
-                # 兜底：主流程未回传 meta 时，用简化 body/iframe 合并抽取再试一次，
-                # 避免直接返回 timed out（AliDocs 偶发会出现 selectors 脚本无回传）。
-                fallback_js = (
-                    "(function(){"
-                    "var P=" + str(BEACON_PORT) + ";"
-                    "function post(l,d){fetch('http://127.0.0.1:'+P"
-                    "+'/r?l='+encodeURIComponent(l),"
-                    "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
-                    "var parts=[];"
-                    "try{if(document.body&&document.body.innerText)parts.push(document.body.innerText);}catch(x){}"
-                    "var ifr=document.querySelectorAll('iframe');"
-                    "for(var i=0;i<ifr.length;i++){"
-                    "try{"
-                    "var idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
-                    "if(idoc&&idoc.body&&idoc.body.innerText)parts.push(idoc.body.innerText);"
-                    "}catch(e){}"
-                    "}"
-                    "var text=parts.join('\\n\\n').trim();"
-                    "var title=document.title||'';"
-                    "var cs=3000,n=Math.ceil(text.length/cs);"
-                    "post('rpt_meta',{title:title,len:text.length,parts:n,method:'fallback-body'});"
-                    "for(var j=0;j<n&&j<100;j++){post('rpt_c'+j,{d:text.substr(j*cs,cs)});}"
-                    "})()"
-                )
-                self._beacon.clear()
-                self._cef_script.exports_sync.exec_js(content_bid, fallback_js)
-                expected_parts = 1
-                for _ in range(min(timeout, 45) * 2):
-                    time.sleep(0.5)
-                    reports = self._beacon.get_reports()
-                    if 'rpt_meta' in reports and meta is None:
-                        meta = reports['rpt_meta']
-                        expected_parts = (
-                            meta.get('parts', 1) if isinstance(meta, dict) else 1
-                        )
-                    if meta is not None:
-                        received = sum(1 for k in reports if k.startswith('rpt_c'))
-                        if received >= expected_parts:
-                            break
-
-            if not meta:
-                return {
-                    'success': False,
-                    'error': (
-                        'DOM extraction timed out '
-                        f'(timeout={timeout}s, attempts={attempts}, fallback=1)'
-                    ),
-                }
-
+            reports = self._beacon.get_reports()
             full_text = ''
-            for i in range(100):
-                chunk = reports.get(f'rpt_c{i}')
-                if chunk and isinstance(chunk, dict):
-                    full_text += chunk.get('d', '')
+            if meta:
+                for _ci in range(100):
+                    c = reports.get(f'rpt_c{_ci}')
+                    if c and isinstance(c, dict):
+                        full_text += c.get('d', '')
+                full_text = full_text.strip()
+            if meta is None:
+                try:
+                    self._cef_script.exports_sync.load_url(content_bid, 'about:blank')
+                except Exception:
+                    pass
+                return {'success': False, 'error': 'extract timeout: no rpt_meta from page'}
+            # ?? browser 1 ?????????? advancedSearch ??????
+            # ?? AliDocs ????????????????????? ??
+            if is_alidocs and deep_extract:
+                all_chunks = []
+                sweep_n = 24 if full_sweep else 10
+                ratios = (0.15, 0.35, 0.55, 0.75, 0.92) if full_sweep else (0.2, 0.5, 0.8)
+                # ?????
+                top_js = "(function(){ var s=document.scrollingElement||document.body; if(s) s.scrollTop=0; " \
+                         "var els=document.querySelectorAll('*'); for(var i=0;i<els.length;i++){ " \
+                         "var st=window.getComputedStyle(els[i]); if(st.overflowY==='auto'||st.overflowY==='scroll') els[i].scrollTop=0; } })()"
+                self._cef_script.exports_sync.exec_js(content_bid, top_js)
+                time.sleep(1.0)
 
-            # AliDocs 可能是虚拟滚动：单次抽取只拿到当前视口附近内容。
-            # 当正文过短时，再补抓「顶部 + 中段」两次并合并，尽量补齐关键章节。
-            if is_alidocs and len(full_text or '') < 1800:
+                # ??????????????1?????
+                for step in range(sweep_n):
+                    self._beacon.clear()
+                    self._cef_script.exports_sync.exec_js(content_bid, extract_js)
+                    
+                    # ??????
+                    reports_step = {}
+                    step_meta = None
+                    for _ in range(10): # ??? 5s
+                        time.sleep(0.5)
+                        reports_step = self._beacon.get_reports()
+                        if 'rpt_meta' in reports_step:
+                            step_meta = reports_step['rpt_meta']
+                            expected_p = step_meta.get('parts', 1) if isinstance(step_meta, dict) else 1
+                            if sum(1 for k in reports_step if k.startswith('rpt_c')) >= expected_p:
+                                break
+                    
+                    # ??????
+                    step_text = ''
+                    for i in range(100):
+                        c = reports_step.get(f'rpt_c{i}')
+                        if c and isinstance(c, dict): step_text += c.get('d', '')
+                    
+                    if step_text.strip():
+                        all_chunks.append(step_text.strip())
+                    
+                    # ??????
+                    self._cef_script.exports_sync.exec_js(content_bid, _scroll_js)
+                    time.sleep(1.0) # ???????????
+                
+                # AliDocs ??????????????????????????????
+                lines_seen = set()
+                final_lines = []
+                for chunk in all_chunks:
+                    for line in chunk.split('\n'):
+                        clean = line.strip()
+                        if not clean:
+                            final_lines.append('')
+                            continue
+                        if len(clean) <= 4 or clean not in lines_seen:
+                            final_lines.append(line)
+                            if len(clean) > 4:
+                                lines_seen.add(clean)
+                
+                full_text = '\n'.join(final_lines).strip()
+                if isinstance(meta, dict):
+                    meta['len'] = len(full_text)
+                    meta['method'] = str(meta.get('method', 'body')) + '+sweep'
+            if is_alidocs and deep_extract:
                 merged = (full_text or '').strip()
-                for ratio in (0.02, 0.45):
+                # ???? 9 ??? 0.1 ? 0.9???????
+                for ratio in ratios:
                     pos_js = (
                         "(function(){"
                         "function setPos(doc,r){"
@@ -1364,28 +1438,25 @@ class FridaDaemon:
                         "try{"
                         "var se=doc.scrollingElement||doc.documentElement||doc.body;"
                         "if(se&&se.scrollHeight>0)se.scrollTop=Math.floor(se.scrollHeight*r);"
-                        "var win=doc.defaultView||window;"
-                        "var all=doc.querySelectorAll('*'),i,e,st,oy;"
-                        "for(i=0;i<all.length;i++){"
-                        "e=all[i];"
-                        "try{st=win.getComputedStyle(e);oy=st.overflowY;"
-                        "if((oy==='auto'||oy==='scroll')&&e.scrollHeight>e.clientHeight+50)"
-                        "e.scrollTop=Math.floor(e.scrollHeight*r);"
+                        "var list=['.ne-doc-viewer','.ne-viewer-body','.lake-engine',"
+                        "'[class*=\"viewer\"]','.ProseMirror'];"
+                        "for(var k=0;k<list.length;k++){ try{ var el=doc.querySelector(list[k]);"
+                        "if(el&&el.scrollHeight>el.clientHeight+50) { el.scrollTop=Math.floor(el.scrollHeight*r); } }catch(x){}}"
+                        "var ifr,i,idoc;"
+                        "try{ifr=doc.querySelectorAll('iframe');"
+                        "for(i=0;i<ifr.length;i++){"
+                        "try{idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
+                        "if(idoc)setPos(idoc,r);}catch(e){}}"
                         "}catch(x){}"
-                        "}"
                         "}catch(x){}"
                         "}"
                         f"var r={ratio};"
                         "setPos(document,r);"
-                        "var ifr=document.querySelectorAll('iframe');"
-                        "for(var k=0;k<ifr.length;k++){"
-                        "try{var idoc=ifr[k].contentDocument||ifr[k].contentWindow.document;setPos(idoc,r);}catch(e){}"
-                        "}"
                         "})()"
                     )
                     try:
                         self._cef_script.exports_sync.exec_js(content_bid, pos_js)
-                        time.sleep(0.8)
+                        time.sleep(1.2)
                     except Exception:
                         continue
 
@@ -1414,14 +1485,30 @@ class FridaDaemon:
                         if chunk and isinstance(chunk, dict):
                             extra += chunk.get('d', '')
                     extra = (extra or '').strip()
-                    if extra and extra not in merged:
-                        merged = (merged + '\n\n' + extra).strip()
+                    if extra:
+                        seen_ln = {x.strip() for x in merged.split('\n') if x.strip()}
+                        add_lines = []
+                        for ln in extra.split('\n'):
+                            st = ln.strip()
+                            if not st:
+                                add_lines.append(ln)
+                                continue
+                            if st not in seen_ln:
+                                seen_ln.add(st)
+                                add_lines.append(ln)
+                        addition = '\n'.join(add_lines).strip()
+                        if addition:
+                            merged = (merged + '\n\n' + addition).strip()
 
                 if merged:
                     full_text = merged
                     if isinstance(meta, dict):
                         meta['len'] = len(full_text)
                         meta['method'] = str(meta.get('method', 'body')) + '+scan2'
+
+            if is_alidocs and not deep_extract and isinstance(meta, dict):
+                meta['len'] = len(full_text or '')
+                meta['method'] = str(meta.get('method', 'body')) + '+shallow'
 
             return {
                 'success': True,
@@ -1433,10 +1520,10 @@ class FridaDaemon:
 
     def fetch_my_reports(self, count=5, before=None, after=None,
                          report_type=None, full_content=False):
-        """从「我的报」群获取自己的报告（ct=2950 互动卡片），支持 CEF DOM 提取完整内容
+        """???????????????ct=2950 ???????? CEF DOM ??????
 
-        使用独立 JSAPI JS（probe 风格）直接获取消息并提取卡片 URL，
-        绕开 fetch_history 的通用处理逻辑。
+        ???? JSAPI JS?probe ?????????????? URL?
+        ?? fetch_history ????????
         """
         before_ts = _parse_date_param(before, end_of_day=True)
         after_ts = _parse_date_param(after, end_of_day=False)
@@ -1450,7 +1537,7 @@ class FridaDaemon:
 
             bid = self._find_jsapi_browser()
             if not bid:
-                return {'success': False, 'error': '未找到 JSAPI browser'}
+                return {'success': False, 'error': '??? JSAPI browser'}
 
             self._beacon.clear()
             cid_safe = js_escape(self.MY_REPORT_GROUP_CID)
@@ -1522,7 +1609,7 @@ class FridaDaemon:
                         'error': err.get('error', str(err)) if isinstance(err, dict) else str(err)}
 
             if not meta:
-                return {'success': False, 'error': 'JSAPI 响应超时'}
+                return {'success': False, 'error': 'JSAPI ????'}
 
             raw_cards = []
             for ci in range(expected_chunks):
@@ -1579,7 +1666,7 @@ class FridaDaemon:
                         card['content'] = cr.get('content', '')
                         card['extraction_method'] = cr.get('extraction_method', '')
                 except Exception as e:
-                    card['content'] = f'[加载失败: {e}]'
+                    card['content'] = f'[????: {e}]'
 
         return {
             'success': True,
@@ -1590,20 +1677,20 @@ class FridaDaemon:
     def fetch_reports_paginated(self, count=10, before=None, after=None,
                                 author=None, report_type=None, max_pages=20,
                                 max_seconds=200, cid=None):
-        """daemon 侧分页拉取工作汇报（ct=300），browser 扫描只做一次"""
+        """daemon ??????????ct=300??browser ??????"""
         target_cid = cid or '316550726:420217003'
         PAGE_SIZE = 50
         before_ts = _parse_date_param(before, end_of_day=True)
         after_ts = _parse_date_param(after, end_of_day=False)
         t_start = time.time()
 
-        # 锁获取前先检查 JSAPI 可用性，避免因 exec_js_sync 卡死而永久持锁
+        # ??????? JSAPI ??????? exec_js_sync ???????
         if not self.is_attached or not self._cef_script:
             if not self.attach():
                 return {'success': False, 'error': 'Cannot attach to DingTalk'}
         bid = self._find_jsapi_browser()
         if not bid:
-            return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
+            return {'success': False, 'error': '???? listMessage API ? browser'}
 
         with self._fetch_lock:
             if not self.is_attached:
@@ -1612,7 +1699,7 @@ class FridaDaemon:
 
             bid = self._find_jsapi_browser()
             if not bid:
-                return {'success': False, 'error': '未找到有 listMessage API 的 browser'}
+                return {'success': False, 'error': '???? listMessage API ? browser'}
 
             all_msgs = []
             seen_ts = set()
@@ -1623,7 +1710,7 @@ class FridaDaemon:
             while len(all_msgs) < count and pages < max_pages:
                 elapsed = time.time() - t_start
                 if elapsed > max_seconds:
-                    log(f'[fetch_reports] 时间预算用尽 ({elapsed:.0f}s > {max_seconds}s)，已获取 {len(all_msgs)} 条')
+                    log(f'[fetch_reports] timeout ({elapsed:.0f}s > {max_seconds}s), got {len(all_msgs)} msgs')
                     timed_out = True
                     break
                 cursor_val = str(cursor) if cursor else "Number.MAX_SAFE_INTEGER"
@@ -1649,7 +1736,7 @@ class FridaDaemon:
 
                 raw_batch = self._wait_for_fetch_beacon(timeout=8)
                 if raw_batch is None:
-                    log('[fetch_reports] beacon 超时，JSAPI 响应丢失，终止分页')
+                    log('[fetch_reports] beacon: no JSAPI payload, stop page')
                     break
 
                 messages = self._format_jsapi_messages(raw_batch)
@@ -1664,8 +1751,8 @@ class FridaDaemon:
                     ct = m.get('content_type')
                     if ct == 2950:
                         txt = m.get('text', '') or ''
-                        if '[日志]' not in txt and '日报' not in txt \
-                                and '周报' not in txt and '月报' not in txt:
+                        if '[??]' not in txt and '??' not in txt \
+                                and '??' not in txt and '??' not in txt:
                             continue
                         m = self._normalize_report_card(m)
                     elif ct != 300:
@@ -1713,16 +1800,16 @@ class FridaDaemon:
         }
         if timed_out:
             result['timed_out'] = True
-            result['note'] = f'时间预算 {max_seconds}s 内获取了 {len(msgs)} 条部分结果'
+            result['note'] = f'???? {max_seconds}s ???? {len(msgs)} ?????'
         return result
 
     def fetch_reports_from_log(self, after=None, before=None, cid=None,
                                author=None, report_type=None, count=500):
-        """从本地监控日志读取报告（JSAPI 不可用时的回退方案）。
-        支持按 CID、时间范围、作者、报告类型过滤。
+        """????????????JSAPI ???????????
+        ??? CID????????????????
         """
         if not os.path.exists(LOG_FILE):
-            return {'success': False, 'error': '日志文件不存在'}
+            return {'success': False, 'error': '???????'}
 
         after_ts = _parse_date_param(after, end_of_day=False) if after else None
         before_ts = _parse_date_param(before, end_of_day=True) if before else None
@@ -1754,8 +1841,8 @@ class FridaDaemon:
 
                 if ct == 2950:
                     txt = m.get('text', '') or ''
-                    if '[日志]' not in txt and '日报' not in txt \
-                            and '周报' not in txt and '月报' not in txt:
+                    if '[??]' not in txt and '??' not in txt \
+                            and '??' not in txt and '??' not in txt:
                         continue
                     m = self._normalize_report_card(m)
 
@@ -1783,7 +1870,7 @@ class FridaDaemon:
         }
 
     def _build_fetch_js(self, cid_safe, cursor_val, count, is_first):
-        """构建 listMessage JS 调用代码"""
+        """?? listMessage JS ????"""
         return (
             "(function(){"
             "var P=" + str(BEACON_PORT) + ";"
@@ -1851,7 +1938,7 @@ class FridaDaemon:
             "}"
             "text=btl+' ['+htl+'] || '+pp.join(' || ');"
             "}}catch(ep){text=btl+' | '+bf;}"
-            "}else{text=btl||'[工作汇报]';}"
+            "}else{text=btl||'[????]';}"
             "}"
             "if(bm.extension){"
             "if(bm.extension.creatorId)sender_name=bm.extension.creatorId;"
@@ -1896,7 +1983,7 @@ class FridaDaemon:
         )
 
     def _wait_for_fetch_beacon(self, timeout=30):
-        """等待 beacon 回调并收集消息，返回 raw messages list 或 None"""
+        """?? beacon ?????????? raw messages list ? None"""
         meta = None
         expected_chunks = 0
         for _ in range(timeout * 5):
@@ -1926,7 +2013,7 @@ class FridaDaemon:
         return msgs_raw
 
     def probe_listmsg_raw(self, cid, count=1, timeout=30):
-        """dump listMessage 返回的完整原始对象结构"""
+        """dump listMessage ???????????"""
         bid = self._find_jsapi_browser()
         if not bid:
             return {'success': False, 'error': 'No JSAPI browser found'}
@@ -2031,10 +2118,10 @@ class FridaDaemon:
         for entry in ContactsDB.search(name):
             cid_map[entry['cid']] = {
                 'cid': entry['cid'],
-                'sender': entry.get('name', '未知'),
+                'sender': entry.get('name', '??'),
                 'uid': entry.get('uid', ''),
                 'time': entry.get('last_seen', ''),
-                'preview': f"[联系人库] {entry.get('type','')}, 消息数: {entry.get('msg_count',0)}",
+                'preview': f"[????] {entry.get('type','')}, ???: {entry.get('msg_count',0)}",
             }
 
         lines = self.search_log(name, limit)
@@ -2046,7 +2133,7 @@ class FridaDaemon:
                     if not existing or (obj.get('time', '') > existing.get('time', '')):
                         cid_map[obj['cid']] = {
                             'cid': obj['cid'],
-                            'sender': obj.get('sender', '未知'),
+                            'sender': obj.get('sender', '??'),
                             'time': obj.get('time', ''),
                             'preview': (obj.get('text', '') or '')[:60],
                         }
@@ -2107,7 +2194,7 @@ class FridaDaemon:
             'log_exists': os.path.exists(LOG_FILE),
         }
 
-    # ── Watchdog ──
+    # ?? Watchdog ??
 
     def start_watchdog(self):
         self._running = True
@@ -2122,15 +2209,15 @@ class FridaDaemon:
             try:
                 pid = get_main_pid() or get_main_pid_by_mem()
                 if not pid:
-                    log('[watchdog] DingTalk 未运行，尝试启动...')
+                    log('[watchdog] DingTalk not running, trying to start...')
                     self._start_dingtalk()
                     time.sleep(10)
                     pid = get_main_pid()
                     if pid:
-                        log(f'[watchdog] DingTalk 已启动 PID={pid}')
+                        log(f'[watchdog] DingTalk started pid={pid}')
 
                 if pid and not self.is_attached:
-                    log('[watchdog] Frida session 断开，重新附加...')
+                    log('[watchdog] Frida session lost, re-attaching...')
                     self.attach()
                     self.start_monitor()
                     self.start_name_resolver()
@@ -2141,12 +2228,12 @@ class FridaDaemon:
                         if r != 'pong':
                             raise Exception('ping failed')
                     except Exception:
-                        log('[watchdog] CEF ping 失败，重新附加...')
+                        log('[watchdog] CEF ping failed, reconnecting...')
                         self._cleanup()
                         self.attach()
                         self.start_monitor()
             except Exception as e:
-                log(f'[watchdog] 错误: {e}')
+                log(f'[watchdog] error: {e}')
 
     def _start_dingtalk(self):
         import subprocess
@@ -2157,9 +2244,9 @@ class FridaDaemon:
         if os.path.exists(dt_path):
             try:
                 subprocess.Popen([dt_path], creationflags=0x00000008)
-                log(f'[watchdog] 已启动 DingTalk: {dt_path}')
+                log(f'[watchdog] launched DingTalk: {dt_path}')
             except Exception as e:
-                log(f'[watchdog] 启动 DingTalk 失败: {e}')
+                log(f'[watchdog] launch DingTalk failed: {e}')
 
     def shutdown(self):
         self._running = False
@@ -2167,7 +2254,7 @@ class FridaDaemon:
         self._beacon.stop()
 
 
-# ── HTTP API 服务器 ──
+# ?? HTTP API ??? ??
 
 _daemon = FridaDaemon()
 
@@ -2258,7 +2345,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
             if not cid and name:
                 cid, resolved = _daemon.resolve_cid(name)
                 if not cid:
-                    self._json_response({'error': f'找不到 "{name}" 的会话'}, 404)
+                    self._json_response({'error': f'??? "{name}" ???'}, 404)
                     return
                 body['resolved_name'] = resolved
             if not cid:
@@ -2279,7 +2366,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
             if not cid and name:
                 cid, resolved = _daemon.resolve_cid(name)
                 if not cid:
-                    self._json_response({'error': f'找不到 "{name}" 的会话'}, 404)
+                    self._json_response({'error': f'??? "{name}" ???'}, 404)
                     return
             if not cid:
                 self._json_response({'error': 'cid or name required'}, 400)
@@ -2301,12 +2388,12 @@ class DaemonHandler(BaseHTTPRequestHandler):
             cid = body.get('cid')
             force_log = body.get('source') == 'log'
             if force_log or not _daemon._find_jsapi_browser():
-                # JSAPI 不可用时，自动回退到本地监控日志
+                # JSAPI ????????????????
                 result = _daemon.fetch_reports_from_log(
                     after=after, before=before, cid=cid,
                     author=author, report_type=report_type, count=max(count, 500))
                 if not force_log:
-                    result['note'] = 'JSAPI 不可用，使用本地监控日志（只含已监控到的消息）'
+                    result['note'] = 'JSAPI ???????????????????????'
             else:
                 max_seconds = int(body.get('max_seconds', 90))
                 result = _daemon.fetch_reports_paginated(
@@ -2338,8 +2425,16 @@ class DaemonHandler(BaseHTTPRequestHandler):
                 timeout = int(body.get('timeout', 60))
                 if timeout < 10:
                     timeout = 10
+                full_sweep = body.get('full_sweep', True)
+                if isinstance(full_sweep, str):
+                    full_sweep = full_sweep.lower() not in ('0', 'false', 'no')
+                deep_ex = body.get('deep_extract', True)
+                if isinstance(deep_ex, str):
+                    deep_ex = deep_ex.lower() not in ('0', 'false', 'no')
                 result = _daemon.fetch_report_content(
-                    url, timeout=timeout, wait_extra=wait_extra
+                    url, timeout=timeout, wait_extra=wait_extra,
+                    full_sweep=bool(full_sweep),
+                    deep_extract=bool(deep_ex),
                 )
                 self._json_response(result)
             except Exception as e:
@@ -2429,7 +2524,7 @@ class DaemonHandler(BaseHTTPRequestHandler):
         try:
             self.wfile.write(body)
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
-            # 客户端已超时关闭（如 skill_router urllib 先断开），避免刷屏 traceback
+            # ?????????? skill_router urllib ????????? traceback
             pass
 
     def log_message(self, *a):
@@ -2452,17 +2547,24 @@ def log(msg):
 
 def main():
     global _http_server
+    if sys.platform == 'win32':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except Exception:
+            pass
 
-    log(f'启动 Frida Daemon on port {DAEMON_PORT}')
+
+    log(f'starting Frida daemon on port {DAEMON_PORT}')
     log(f'Beacon port: {BEACON_PORT}')
     log(f'Log file: {LOG_FILE}')
 
     _daemon._beacon.start()
-    log('Beacon 服务器已启动')
+    log('beacon server ready')
 
     _memo_event_queue = None
     if _daemon.attach():
-        log('Frida 已附加，CEF 就绪')
+        log('Frida attached, CEF ready')
         import queue as _queue_module
         _memo_event_queue = _queue_module.Queue()
         try:
@@ -2480,8 +2582,8 @@ def main():
             _colleague_skill_cids = set()
 
         def _memo_callback(rec):
-            """助理群 group_cid 内消息一律入队（本人备忘/预审/上班啦依赖此路径；MY_UID 未配置时本人消息易被误判为他人）。
-            白名单群 colleague_skill_cids 内消息入队（本人+他人）。"""
+            """??? group_cid ????????????/??/?????????MY_UID ?????????????????
+            ???? colleague_skill_cids ????????+????"""
             c = str(rec.get('cid') or '').strip()
             if not c:
                 return
@@ -2494,21 +2596,21 @@ def main():
         _daemon._memo_callback = _memo_callback
         _daemon.start_monitor()
     else:
-        log('初始附加失败，watchdog 将自动重试')
+        log('not attached; watchdog will retry attach')
 
     _daemon.start_watchdog()
     _daemon.start_name_resolver()
-    log('Watchdog + NameResolver 已启动')
+    log('watchdog + name resolver started')
 
     _start_skill_router(_memo_event_queue)
-    log('SkillRouter 已启动' + (' (助理群推送=秒级)' if _memo_event_queue else ''))
+    log('skill router started' + (' (memo queue on)' if _memo_event_queue else ''))
 
     _http_server = ThreadedHTTPServer(('127.0.0.1', DAEMON_PORT), DaemonHandler)
-    log(f'HTTP API 就绪: http://127.0.0.1:{DAEMON_PORT}')
-    log('端点: GET /health | POST /send | POST /fetch | GET /search | GET /contacts | POST /shutdown')
+    log(f'HTTP API listening http://127.0.0.1:{DAEMON_PORT}')
+    log('routes: GET /health | POST /send | POST /fetch | GET /search | GET /contacts | POST /shutdown')
 
     def handle_signal(sig, frame):
-        log('收到停止信号')
+        log('shutdown signal, exiting...')
         from lib.utils import ContactsDB
         ContactsDB.flush()
         _daemon.shutdown()
@@ -2523,7 +2625,7 @@ def main():
         pass
     finally:
         _daemon.shutdown()
-        log('已停止')
+        log('exited')
 
 
 if __name__ == '__main__':
