@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - pm-system 子模块：localStorage 配额止血（不阻断服务端保存）
+
+**状态**: 已推送 tygit（子模块 `origin main` + 父仓同步指针）
+
+**内容**:
+- 子模块 `pm-system`：`fix(ui): localStorage 满时不阻断 POST /api/data`（`2685a68`）
+
+---
+
 ## 2026-03-24 - pm-system 子模块：同步冲突、JSON 导入与 loadData 修复
 
 **状态**: 已推送 tygit（子模块 `origin main` + 父仓同步指针）
