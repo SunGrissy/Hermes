@@ -2,7 +2,7 @@
 
 ## 2026-03-24 - 面试清单（张凌）、md-reader 深链与钉钉 Skill；子模块同步
 
-**状态**: 验收通过（将提交并推送 tygit）
+**状态**: 已推送 tygit（父仓 `7164bcb`；子模块 `md-reader ec30c91`、`pm-system 3a8ea8f`）
 
 **内容**:
 - `interviews/zhangling_ops_2026-03-24/`：张凌运营策划面试清单（含 README+简历全文）、README 说明
