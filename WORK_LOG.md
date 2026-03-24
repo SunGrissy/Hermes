@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - pm-system 管线钉钉块 + 远端 0401 推送脚本
+
+**状态**: 已推送 tygit（子模块 `origin main` + 父仓同步指针）
+
+**内容**:
+- 子模块 `pm-system`：`feat(pm-system): 管线节点钉钉块远端渲染与 pipeline_node_tasks 入库`（`bc9a238`）：`pipeline_node_tasks.json` 纳入版本、`.gitignore` 白名单、`pipeline_node_checklist_render` 支持无 DB 路径
+- `dingtalk-desktop/_send_0401_remote_version_webhook.py`：192 取数、助理通知/版本 webhook、本地补管线块
+
+---
+
 ## 2026-03-24 - pm-system 子模块：localStorage 配额止血（不阻断服务端保存）
 
 **状态**: 已推送 tygit（子模块 `origin main` + 父仓同步指针）
