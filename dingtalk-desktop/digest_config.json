@@ -118,7 +118,7 @@
       "focus": "战斗方向，可能成为APM和主美的卡点，关注工作内容与管线PM/主美日报的关联度"
     }
   },
-  "pm_system_url": "http://172.16.3.197:8000",
+  "pm_system_url": "http://192.168.20.160:8112",
   "pm_system_api_key": "jluAsEdnr40fHjg7E88t",
   "version_digest_limit": 3,
   "_note_version_digest_webhooks": "版本状态同一 Markdown 依次推送到下列群；机器人自定义关键词均为「小秘书提醒」。也可用 version_digest_webhook + version_digest_webhook_extra 代替本数组。",
@@ -162,6 +162,9 @@
     "group_cid": "73216314617",
     "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117",
     "palace_url": "http://127.0.0.1:8300",
+    "palace_link_base": "",
+    "_note_palace_link": "预审钉钉消息里「完整报告」链接的 base。留空则自动用本机首个 172.* 网卡 IP + palace_url 端口；无 172 时回退 127.0.0.1。可手填如 http://172.22.1.5:8300。设 palace_report_link_skip_lan_172 为 true 可禁用自动 172、始终用 palace_url。",
+    "palace_report_link_skip_lan_172": false,
     "doc_review_window_seconds": 3600,
     "doc_review_palace_timeout_seconds": 600,
     "_note_doc_review_progress": "预审进度心跳：每隔 N 秒推送一条（阶段+已等待秒数）；设为 0 关闭",

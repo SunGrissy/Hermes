@@ -38,6 +38,9 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 from db.store import save_doc_review_result, was_doc_attempted_recently
 
+# [AgentPalace Task] 2026-03-24 无 report_id 时「其余见 Palace 报告」改为可操作的排障说明
+# [AgentPalace Task] 2026-03-24 预审推送内完整报告链接优先使用 palace_link_base / 本机 172.*
+
 
 def _load_doc_review_templates() -> dict:
     try:
@@ -69,6 +72,53 @@ def normalize_doc_url(url: str) -> str:
 DAEMON_URL  = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 PALACE_URL  = os.environ.get('PALACE_URL', 'http://127.0.0.1:8300')
 PALACE_ROOT = os.environ.get('PALACE_ROOT', str(Path(__file__).resolve().parent.parent.parent / 'palace'))
+
+
+def _detect_lan_172_host(timeout: float = 5.0) -> str:
+    """Windows：取本机第一个 172.* IPv4，供局域网内打开 Palace 报告链接。"""
+    if os.name != 'nt':
+        return ''
+    ps = (
+        "(Get-NetIPAddress -AddressFamily IPv4 | "
+        "Where-Object { $_.IPAddress -like '172.*' } | "
+        "Select-Object -First 1 -ExpandProperty IPAddress)"
+    )
+    try:
+        proc = subprocess.run(
+            ['powershell', '-NoProfile', '-Command', ps],
+            capture_output=True, text=True, timeout=timeout,
+            encoding='utf-8', errors='replace',
+        )
+        out = (proc.stdout or '').strip()
+        if not out:
+            return ''
+        ip = out.splitlines()[0].strip()
+        if ip.startswith('172.'):
+            return ip
+    except Exception:
+        pass
+    return ''
+
+
+def _resolve_palace_report_link_base(config: dict, palace_publish_url: str) -> str:
+    """
+    钉钉摘要里「完整报告」链接使用的 base（可与 palace_url 不同：发布仍走本机回环）。
+    优先级：doc_review.palace_link_base > 本机 172.* > palace_publish_url
+    """
+    explicit = (config.get('palace_link_base') or '').strip().rstrip('/')
+    if explicit:
+        return explicit
+    pub = (palace_publish_url or PALACE_URL).strip()
+    if not pub.lower().startswith('http'):
+        pub = 'http://' + pub
+    parsed = urllib.parse.urlparse(pub)
+    port = parsed.port or 8300
+    if not config.get('palace_report_link_skip_lan_172'):
+        ip172 = _detect_lan_172_host()
+        if ip172:
+            return f'http://{ip172}:{port}'.rstrip('/')
+    return pub.rstrip('/')
+
 
 _RE_ALIDOCS = re.compile(
     r'https?://alidocs\.dingtalk\.com/i/nodes/[^\s\]>)\u3001\u3002\uff0c"\']*'
@@ -604,10 +654,18 @@ def _run_palace_cli_cancellable(
 
 def _build_summary(palace_resp: dict, title: str, url: str,
                    report_id: str | None, text_length: int,
-                   palace_base: str = '', tpl: dict = None) -> str:
-    """从 Palace 预审结果构建钉钉推送的摘要文本；tpl 为 doc_review 模板，缺省则自动加载。"""
+                   palace_base: str = '', report_link_base: str = '',
+                   tpl: dict = None) -> str:
+    """从 Palace 预审结果构建钉钉推送的摘要文本；tpl 为 doc_review 模板，缺省则自动加载。
+
+    palace_base：与 Palace CLI --publish-url 一致（通常 127.0.0.1）。
+    report_link_base：摘要里「完整报告」Markdown 链接用的 base（可为局域网 172.*）。
+    """
     if tpl is None:
         tpl = _load_doc_review_templates()
+
+    link_base = (report_link_base or palace_base or PALACE_URL).rstrip('/')
+    palace_home = link_base
 
     def _line(key: str, **kwargs) -> str:
         s = (tpl.get(key) or '').strip()
@@ -679,7 +737,9 @@ def _build_summary(palace_resp: dict, title: str, url: str,
     lines.append(_line('summary_separator_major') or '---')
     lines.append('')
 
-    def _append_issue_block(sev: str, items: list, section_key: str, more_key: str):
+    def _append_issue_block(
+        sev: str, items: list, section_key: str, more_key: str, more_key_no_report: str,
+    ):
         if not items:
             return
         lines.append(
@@ -701,25 +761,41 @@ def _build_summary(palace_resp: dict, title: str, url: str,
                 lines.append(f'　{gap}')
             lines.append('')
         if len(items) > max_show:
+            key = more_key if report_id else more_key_no_report
             lines.append(
-                _line(more_key, shown=max_show, total=len(items))
+                _line(
+                    key, shown=max_show, total=len(items),
+                    palace_home=palace_home,
+                )
                 or f'… 共 {len(items)} 项，此处仅列前 {max_show} 项，其余见 Palace 报告。'
             )
             lines.append('')
 
-    _append_issue_block('P0', p0_items, 'summary_section_p0', 'summary_more_p0')
-    _append_issue_block('P1', p1_items, 'summary_section_p1', 'summary_more_p1')
+    _append_issue_block(
+        'P0', p0_items, 'summary_section_p0',
+        'summary_more_p0', 'summary_more_p0_no_report',
+    )
+    _append_issue_block(
+        'P1', p1_items, 'summary_section_p1',
+        'summary_more_p1', 'summary_more_p1_no_report',
+    )
 
     # 引擎汇总有计数但 issues 未带 severity 时，提示看报告
     if blocker > 0 and not p0_items:
+        fb = (
+            'summary_p0_fallback' if report_id else 'summary_p0_fallback_no_report'
+        )
         lines.append(
-            _line('summary_p0_fallback', count=blocker)
+            _line(fb, count=blocker, palace_home=palace_home)
             or f'🔴 引擎汇总 P0 **{blocker}** 项（明细未在推送中展开，请打开完整报告）。'
         )
         lines.append('')
     if concern > 0 and not p1_items:
+        fb = (
+            'summary_p1_fallback' if report_id else 'summary_p1_fallback_no_report'
+        )
         lines.append(
-            _line('summary_p1_fallback', count=concern)
+            _line(fb, count=concern, palace_home=palace_home)
             or f'🟡 引擎汇总 P1 **{concern}** 项（明细未在推送中展开，请打开完整报告）。'
         )
         lines.append('')
@@ -728,7 +804,7 @@ def _build_summary(palace_resp: dict, title: str, url: str,
     lines.append('')
     lines.append(_line('summary_chars', text_length=text_length) or f'**提取字数** {text_length}')
     if report_id:
-        base = palace_base or PALACE_URL
+        base = link_base
         report_url = f'{base.rstrip("/")}/report/{report_id}'
         rlab = _palace_report_link_label(report_url)
         lines.append(
@@ -852,8 +928,12 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
 
         # ── Step 2: 调 Palace CLI 预审（可终止）──────────────────────
         palace_root = config.get('palace_root', '') or PALACE_ROOT
-        palace_base = config.get('palace_url', '') or PALACE_URL
-        _log(f'calling Palace CLI (root={palace_root}) ...')
+        palace_base = (config.get('palace_url', '') or PALACE_URL).rstrip('/')
+        report_link_base = _resolve_palace_report_link_base(config, palace_base)
+        _log(
+            f'calling Palace CLI (root={palace_root}) publish={palace_base!r} '
+            f'report_link={report_link_base!r} ...'
+        )
 
         provider = config.get('palace_provider', '')
         palace_timeout = int(config.get('doc_review_palace_timeout_seconds', 600))
@@ -886,8 +966,10 @@ def process_doc_review(msg_id: str, url: str, sender_uid: str,
              f'report_id={report_id}')
 
         # ── Step 3: 推送预审摘要到群 ──────────────────────────────
-        summary = _build_summary(palace_resp, title, url, report_id, length,
-                                 palace_base=palace_base, tpl=tpl)
+        summary = _build_summary(
+            palace_resp, title, url, report_id, length,
+            palace_base=palace_base, report_link_base=report_link_base, tpl=tpl,
+        )
         _send_webhook(summary, webhook_url)
 
         # ── Step 4: 持久化到 DB，防止重启后重复处理 ─────────────

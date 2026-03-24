@@ -623,3 +623,14 @@
 
 **备注**:
 - 本次仅提交 dingtalk-desktop 相关改动，不包含工作区其他项目与未跟踪文件
+
+## [2026-03-24] - [文档预审链路稳定性修复（Palace/daemon/推送）]
+
+**状态**: 已完成（持续跟踪抓取质量）
+
+**内容**:
+- `dingtalk-desktop/skills/doc_review.py`：报告链接支持 `palace_link_base`，默认优先本机 `172.*` 局域网地址；无 report_id 时推送改为可操作排障提示
+- `dingtalk-desktop/message_templates.json`、`digest_config.json`：补充 no-report 文案占位与链接基址配置项
+- `dingtalk-desktop/daemon.py`：`/fetch_report_content` 增加 `timeout` 参数与异常回传，AliDocs 场景补充滚动/重试/fallback 抽取逻辑
+- 新增运维脚本：`kill_old_daemon.py`、`run_doc_review_once.py`、`restart_fetch_notify_assistant.py`，用于重启、单次预审与抓取结果钉钉通知
+- `palace/palace_engine/engine.py`、`palace/roles/boundary.yaml`：成功指标识别规则补充同义词与 missing 判定约束，减少“有指标误判缺失”

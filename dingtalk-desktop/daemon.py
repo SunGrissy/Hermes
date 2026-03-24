@@ -1095,7 +1095,7 @@ class FridaDaemon:
 
     MY_REPORT_GROUP_CID = '74401645538'
 
-    def fetch_report_content(self, url, timeout=30, wait_extra=None):
+    def fetch_report_content(self, url, timeout=60, wait_extra=None):
         """通过 CEF loadUrl 打开报告页面并精准提取报告内容
 
         始终使用 browser 1（JSAPI browser），先保存当前 URL，抓取完毕后原样恢复，
@@ -1105,8 +1105,10 @@ class FridaDaemon:
         wait_extra: readyState complete 后额外等待秒数，让 SPA 渲染正文。
                     None = 自动检测（alidocs.dingtalk.com → 15s，其他 → 2s）
         """
+        _to_end = None
+        is_alidocs = ('alidocs.dingtalk.com' in url or '/doc/' in url)
         if wait_extra is None:
-            if 'alidocs.dingtalk.com' in url or '/doc/' in url:
+            if is_alidocs:
                 wait_extra = 15
             else:
                 wait_extra = 2
@@ -1150,7 +1152,50 @@ class FridaDaemon:
             # 额外等待让 SPA 框架渲染完（AliDocs 等需要更长时间）
             time.sleep(wait_extra)
 
-            self._beacon.clear()
+            # AliDocs 正文常在 iframe 内且按需挂载节点：仅读 body.innerText 时只能拿到「当前视口附近」，
+            # 后半篇（如成功指标）会缺失，却混入侧栏「字数统计」等。先分步滚动主窗与各 iframe 再抽取。
+            if 'alidocs.dingtalk.com' in url or '/doc/' in url:
+                # 语雀/钉钉文档常在 iframe 内用 div overflow:auto 承载正文，document 滚动无效；
+                # 需对「所有可纵向滚动的元素」分步 scrollTop，才能把虚拟列表后半段挂进 DOM。
+                _scroll_js = (
+                    "(function(){"
+                    "function stepDoc(doc){"
+                    "if(!doc)return;"
+                    "try{"
+                    "var se=doc.scrollingElement||doc.documentElement||doc.body;"
+                    "if(se&&se.scrollHeight>se.clientHeight+50){"
+                    "var ch=se.clientHeight||600;"
+                    "se.scrollTop=Math.min(se.scrollTop+Math.floor(ch*0.92),se.scrollHeight);"
+                    "}"
+                    "var win=doc.defaultView||window;"
+                    "var all=doc.querySelectorAll('*'),j,e,st,oy;"
+                    "for(j=0;j<all.length;j++){"
+                    "e=all[j];"
+                    "try{"
+                    "st=win.getComputedStyle(e);"
+                    "oy=st.overflowY;"
+                    "if((oy==='auto'||oy==='scroll')&&e.scrollHeight>e.clientHeight+80){"
+                    "var h=e.clientHeight||400;"
+                    "e.scrollTop=Math.min(e.scrollTop+Math.floor(h*0.92),e.scrollHeight);"
+                    "}"
+                    "}catch(x){}"
+                    "}"
+                    "}catch(x){}}"
+                    "try{stepDoc(document);}catch(x){}"
+                    "var ifr=document.querySelectorAll('iframe'),i,idoc;"
+                    "for(i=0;i<ifr.length;i++){"
+                    "try{"
+                    "idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
+                    "if(idoc)stepDoc(idoc);"
+                    "}catch(e){}"
+                    "}"
+                    "})()"
+                )
+                for _ in range(16):
+                    self._cef_script.exports_sync.exec_js(content_bid, _scroll_js)
+                    time.sleep(0.28)
+                time.sleep(0.5)
+
             extract_js = (
                 "(function(){"
                 "var P=" + str(BEACON_PORT) + ";"
@@ -1166,25 +1211,30 @@ class FridaDaemon:
                 "'.log-detail','.form-detail','[class*=report]','[class*=detail]',"
                 "'article','main','.content','.page-content'];"
 
-                # ── 在指定 document 上尝试选择器 ──
-                "function tryDoc(doc,prefix){"
-                "for(var i=0;i<sels.length;i++){"
-                "try{var e=doc.querySelector(sels[i]);"
-                "if(e&&e.innerText&&e.innerText.trim().length>20)"
-                "return{el:e,method:prefix+sels[i]};"
+                # ── 在指定 document 上尝试选择器：取 innerText 最长者（避免命中小块工具栏） ──
+                "function tryDocBest(doc,prefix){"
+                "var best=null,bestL=0,i,j,e,t,list;"
+                "for(i=0;i<sels.length;i++){"
+                "try{"
+                "list=doc.querySelectorAll(sels[i]);"
+                "if(!list||!list.length)continue;"
+                "for(j=0;j<list.length;j++){"
+                "e=list[j];"
+                "t=(e.innerText||'').trim();"
+                "if(t.length>bestL){bestL=t.length;best={el:e,method:prefix+sels[i]+'#'+j};}"
+                "}"
                 "}catch(x){}}"
-                "return null;}"
+                "return bestL>20?best:null;}"
 
                 # ── 主 document 尝试 ──
-                "var found=tryDoc(document,'');"
+                "var found=tryDocBest(document,'');"
 
-                # ── iframe 穿透：遍历所有 iframe，尝试读取 contentDocument ──
-                "if(!found||found.el.innerText.trim().length<200){"
+                # ── iframe 穿透：必须始终尝试（AliDocs 正文在 iframe 内；顶层 shell 常 >200 字会误跳过 iframe） ──
                 "var iframes=document.querySelectorAll('iframe');"
                 "for(var f=0;f<iframes.length;f++){"
                 "try{var idoc=iframes[f].contentDocument||iframes[f].contentWindow.document;"
                 "if(!idoc)continue;"
-                "var ifound=tryDoc(idoc,'iframe>');"
+                "var ifound=tryDocBest(idoc,'iframe>');"
                 "if(ifound&&ifound.el.innerText.trim().length>"
                 "(found?found.el.innerText.trim().length:0)){"
                 "found=ifound;}"
@@ -1193,7 +1243,6 @@ class FridaDaemon:
                 "(found?found.el.innerText.trim().length:0)){"
                 "found={el:idoc.body,method:'iframe>body'};}"
                 "}catch(x){}}"
-                "}"
 
                 # ── 最终 fallback ──
                 "var el=found?found.el:document.body;"
@@ -1209,22 +1258,38 @@ class FridaDaemon:
                 "})()"
             )
 
-            self._cef_script.exports_sync.exec_js(content_bid, extract_js)
-
             meta = None
-            expected_parts = 1
-            for _ in range(timeout * 2):
-                time.sleep(0.5)
-                reports = self._beacon.get_reports()
-                if 'rpt_meta' in reports and meta is None:
-                    meta = reports['rpt_meta']
-                    expected_parts = meta.get('parts', 1) if isinstance(meta, dict) else 1
-                if meta is not None:
-                    received = sum(1 for k in reports if k.startswith('rpt_c'))
-                    if received >= expected_parts:
-                        break
+            reports = {}
+            attempts = 2 if is_alidocs else 1
+            for attempt in range(1, attempts + 1):
+                self._beacon.clear()
+                self._cef_script.exports_sync.exec_js(content_bid, extract_js)
 
-            reports = self._beacon.get_reports()
+                expected_parts = 1
+                for _ in range(timeout * 2):
+                    time.sleep(0.5)
+                    reports = self._beacon.get_reports()
+                    if 'rpt_meta' in reports and meta is None:
+                        meta = reports['rpt_meta']
+                        expected_parts = (
+                            meta.get('parts', 1) if isinstance(meta, dict) else 1
+                        )
+                    if meta is not None:
+                        received = sum(1 for k in reports if k.startswith('rpt_c'))
+                        if received >= expected_parts:
+                            break
+
+                reports = self._beacon.get_reports()
+                if meta:
+                    break
+
+                # AliDocs 偶发首轮未回传 meta：补一次滚底并重试
+                if attempt < attempts and _to_end:
+                    try:
+                        self._cef_script.exports_sync.exec_js(content_bid, _to_end)
+                    except Exception:
+                        pass
+                    time.sleep(1.5)
             # 恢复 browser 1 到中性状态，不导航回 advancedSearch 以免触发搜索框 UI
             try:
                 self._cef_script.exports_sync.load_url(1, 'about:blank')
@@ -1232,13 +1297,131 @@ class FridaDaemon:
                 pass
 
             if not meta:
-                return {'success': False, 'error': 'DOM extraction timed out'}
+                # 兜底：主流程未回传 meta 时，用简化 body/iframe 合并抽取再试一次，
+                # 避免直接返回 timed out（AliDocs 偶发会出现 selectors 脚本无回传）。
+                fallback_js = (
+                    "(function(){"
+                    "var P=" + str(BEACON_PORT) + ";"
+                    "function post(l,d){fetch('http://127.0.0.1:'+P"
+                    "+'/r?l='+encodeURIComponent(l),"
+                    "{method:'POST',body:JSON.stringify(d),mode:'no-cors'}).catch(function(){});}"
+                    "var parts=[];"
+                    "try{if(document.body&&document.body.innerText)parts.push(document.body.innerText);}catch(x){}"
+                    "var ifr=document.querySelectorAll('iframe');"
+                    "for(var i=0;i<ifr.length;i++){"
+                    "try{"
+                    "var idoc=ifr[i].contentDocument||ifr[i].contentWindow.document;"
+                    "if(idoc&&idoc.body&&idoc.body.innerText)parts.push(idoc.body.innerText);"
+                    "}catch(e){}"
+                    "}"
+                    "var text=parts.join('\\n\\n').trim();"
+                    "var title=document.title||'';"
+                    "var cs=3000,n=Math.ceil(text.length/cs);"
+                    "post('rpt_meta',{title:title,len:text.length,parts:n,method:'fallback-body'});"
+                    "for(var j=0;j<n&&j<100;j++){post('rpt_c'+j,{d:text.substr(j*cs,cs)});}"
+                    "})()"
+                )
+                self._beacon.clear()
+                self._cef_script.exports_sync.exec_js(content_bid, fallback_js)
+                expected_parts = 1
+                for _ in range(min(timeout, 45) * 2):
+                    time.sleep(0.5)
+                    reports = self._beacon.get_reports()
+                    if 'rpt_meta' in reports and meta is None:
+                        meta = reports['rpt_meta']
+                        expected_parts = (
+                            meta.get('parts', 1) if isinstance(meta, dict) else 1
+                        )
+                    if meta is not None:
+                        received = sum(1 for k in reports if k.startswith('rpt_c'))
+                        if received >= expected_parts:
+                            break
+
+            if not meta:
+                return {
+                    'success': False,
+                    'error': (
+                        'DOM extraction timed out '
+                        f'(timeout={timeout}s, attempts={attempts}, fallback=1)'
+                    ),
+                }
 
             full_text = ''
             for i in range(100):
                 chunk = reports.get(f'rpt_c{i}')
                 if chunk and isinstance(chunk, dict):
                     full_text += chunk.get('d', '')
+
+            # AliDocs 可能是虚拟滚动：单次抽取只拿到当前视口附近内容。
+            # 当正文过短时，再补抓「顶部 + 中段」两次并合并，尽量补齐关键章节。
+            if is_alidocs and len(full_text or '') < 1800:
+                merged = (full_text or '').strip()
+                for ratio in (0.02, 0.45):
+                    pos_js = (
+                        "(function(){"
+                        "function setPos(doc,r){"
+                        "if(!doc)return;"
+                        "try{"
+                        "var se=doc.scrollingElement||doc.documentElement||doc.body;"
+                        "if(se&&se.scrollHeight>0)se.scrollTop=Math.floor(se.scrollHeight*r);"
+                        "var win=doc.defaultView||window;"
+                        "var all=doc.querySelectorAll('*'),i,e,st,oy;"
+                        "for(i=0;i<all.length;i++){"
+                        "e=all[i];"
+                        "try{st=win.getComputedStyle(e);oy=st.overflowY;"
+                        "if((oy==='auto'||oy==='scroll')&&e.scrollHeight>e.clientHeight+50)"
+                        "e.scrollTop=Math.floor(e.scrollHeight*r);"
+                        "}catch(x){}"
+                        "}"
+                        "}catch(x){}"
+                        "}"
+                        f"var r={ratio};"
+                        "setPos(document,r);"
+                        "var ifr=document.querySelectorAll('iframe');"
+                        "for(var k=0;k<ifr.length;k++){"
+                        "try{var idoc=ifr[k].contentDocument||ifr[k].contentWindow.document;setPos(idoc,r);}catch(e){}"
+                        "}"
+                        "})()"
+                    )
+                    try:
+                        self._cef_script.exports_sync.exec_js(content_bid, pos_js)
+                        time.sleep(0.8)
+                    except Exception:
+                        continue
+
+                    self._beacon.clear()
+                    self._cef_script.exports_sync.exec_js(content_bid, extract_js)
+                    meta2 = None
+                    reports2 = {}
+                    expected2 = 1
+                    for _ in range(min(timeout, 40) * 2):
+                        time.sleep(0.5)
+                        reports2 = self._beacon.get_reports()
+                        if 'rpt_meta' in reports2 and meta2 is None:
+                            meta2 = reports2['rpt_meta']
+                            expected2 = (
+                                meta2.get('parts', 1) if isinstance(meta2, dict) else 1
+                            )
+                        if meta2 is not None:
+                            rc = sum(1 for k in reports2 if k.startswith('rpt_c'))
+                            if rc >= expected2:
+                                break
+                    if not meta2:
+                        continue
+                    extra = ''
+                    for i in range(100):
+                        chunk = reports2.get(f'rpt_c{i}')
+                        if chunk and isinstance(chunk, dict):
+                            extra += chunk.get('d', '')
+                    extra = (extra or '').strip()
+                    if extra and extra not in merged:
+                        merged = (merged + '\n\n' + extra).strip()
+
+                if merged:
+                    full_text = merged
+                    if isinstance(meta, dict):
+                        meta['len'] = len(full_text)
+                        meta['method'] = str(meta.get('method', 'body')) + '+scan2'
 
             return {
                 'success': True,
@@ -2148,11 +2331,27 @@ class DaemonHandler(BaseHTTPRequestHandler):
             if not url:
                 self._json_response({'error': 'url required'}, 400)
                 return
-            wait_extra = body.get('wait_extra', None)
-            if wait_extra is not None:
-                wait_extra = int(wait_extra)
-            result = _daemon.fetch_report_content(url, wait_extra=wait_extra)
-            self._json_response(result)
+            try:
+                wait_extra = body.get('wait_extra', None)
+                if wait_extra is not None:
+                    wait_extra = int(wait_extra)
+                timeout = int(body.get('timeout', 60))
+                if timeout < 10:
+                    timeout = 10
+                result = _daemon.fetch_report_content(
+                    url, timeout=timeout, wait_extra=wait_extra
+                )
+                self._json_response(result)
+            except Exception as e:
+                import traceback
+                self._json_response(
+                    {
+                        'success': False,
+                        'error': f'fetch_report_content exception: {e}',
+                        'traceback': traceback.format_exc(),
+                    },
+                    500,
+                )
 
         elif parsed.path == '/probe_jsapi':
             result = _daemon.probe_jsapi(timeout=10)

@@ -24,6 +24,8 @@ from .schemas import (
 
 logger = logging.getLogger("palace.engine")
 
+# [AgentPalace Task] 2026-03-24 提取规范：成功指标同义与 missing 判定收紧
+
 _PERSP_LABEL = {
     "pld": "WHAT \u5185\u5bb9\u65b9\u5411",
     "ple": "WHAT\u2192HOW \u53ef\u8bbe\u8ba1\u6027",
@@ -265,6 +267,11 @@ _DEFAULT_EXTRACTION_OUTPUT_SPEC = (
     "   - extracted_text 填写从文档中找到的相关原文（至少 2-3 段完整上下文，避免断章取义）\n"
     "   - gap_description 说明缺了什么或哪里不完整\n"
     "   - acceptance_criteria 描述'什么算完成'的验收标准（具体、可检验的交付物描述）\n"
+    "   - 针对 item_id=what-success-metrics：「北极星指标」「核心指标」「North Star」与「成功指标」章节下等价的顶层指标视为同一类；"
+    "已写「分层参与指标」「健康度指标」等与团队模板一致的三段结构即视为已具备成功指标框架。\n"
+    "     仅当通读输入全文后仍找不到任何指标列举时方可标 missing；若已有指标项但缺目标值/阈值、不可衡量或缺健康度，标 incomplete 并在 gap 中写清缺口，"
+    "禁止在 gap 中写「文档完全没有成功指标」类表述。\n"
+    "     若 status 为 missing，extracted_text 必须为空；若文中存在指标段落却标 missing，视为严重错误。\n"
     "4. cross_layer_observations: 数组 {category(intent/readiness/annotate), description, suggestion}\n"
     "   - intent: 体验意图在跨层传递中的一致性风险\n"
     "   - readiness: 下游团队启动工作所需的前置条件缺口\n"

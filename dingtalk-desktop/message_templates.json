@@ -3,39 +3,21 @@
 
   "version_digest": {
     "title": "## 版本状态 [{timestamp}]",
-
-    "version": {
-      "header": "### **{name}** | {phase}",
-
-      "countdown": {
-      "overdue":  "❗**[超期]** 已到/超过发版日",
-      "urgent":   "⚠️**[紧]** {days}天后发版",
-      "normal":   "✅ {days}天后发版",
-        "urgent_threshold_days": 7
-      },
-
-      "feature_line":   "**Feature**: {summary}",
-      "capacity_line":  "**容量**: {pct}%",
-      "milestone_line": "**里程碑**: {ms_name} ({ms_date})",
-      "pipeline_line":  "**管线节点**: {node_name} ({node_date})",
-      "overdue_line":   "⛔**[超期节点]** {nodes}",
-      "risk_line":      "⚠️**[风险]** {text}"
-    },
+    "top_separator": "---",
 
     "show": {
-      "capacity":         true,
       "milestone":        true,
-      "pipeline_current": true,
       "overdue_nodes":    true,
       "risks":            true
     },
 
     "limits": {
-      "risks": 3
+      "risks": 3,
+      "overdue_nodes": 5
     },
 
     "separator": "---",
-    "footer":    "###### ※ 小秘书提醒"
+    "footer":    "###### <font color=\"#94a3b8\">※ 小秘书提醒</font>"
   },
 
   "report_digest": {
@@ -116,6 +98,10 @@
     "memo_assign_ok": "已将 **memo #{seq}** 在 TR 中指派给 **{who}**",
     "topic_pick_confirm": "#### **选题已收录**（{module}）\n\n----\n\n**选题 #{seq}**（TR: topic:#{seq}）\n{summary}\n\n",
     "topic_duplicate": "#### 选题未重复收录\n\n已有进行中的 **选题 #{existing_seq}**（内容相同）\n{summary}\n\n未新建条目。\n\n",
+    "topic_delete": "topic #{seq} 已删除：{summary}",
+    "topic_edit_desc_ok": "已更新 **topic #{seq}** 描述：{summary}",
+    "topic_delete_need_ids": "请写明要删除的选题编号，例如：删除选题 3 或 删除 topic 24、25、26",
+    "memo_delete_need_ids": "请写明要删除的备忘编号，例如：删除备忘 3 或 删除 memo 24、25、26",
     "topic_library_title": "### **选题库**（TaskReminder，共 {n} 条）\n\n",
     "topic_library_empty": "TR 中没有带 `topic:#N` 的任务。\n\n",
     "topic_library_item": "**topic #{seq}** [{status}] {what}\n> 负责人：{who}　到期：{due}　模块：{module}\n\n",
@@ -216,8 +202,12 @@
     "summary_section_p1": "#### 🟡 P1 关注（共 {count} 项）",
     "summary_more_p0": "… 共 **{total}** 项，此处仅列前 **{shown}** 项，其余见 Palace 报告。",
     "summary_more_p1": "… 共 **{total}** 项，此处仅列前 **{shown}** 项，其余见 Palace 报告。",
+    "summary_more_p0_no_report": "… 共 **{total}** 项，此处仅列前 **{shown}** 项。本次未生成 Palace 在线报告链接：请确认本机已用 PM `quick_start` 启动 Palace Web（默认 **:8300**）且预审已成功发布；也可直接打开 {palace_home} 在列表中找对应报告。",
+    "summary_more_p1_no_report": "… 共 **{total}** 项，此处仅列前 **{shown}** 项。本次未生成 Palace 在线报告链接：请确认本机已用 PM `quick_start` 启动 Palace Web（默认 **:8300**）且预审已成功发布；也可直接打开 {palace_home} 在列表中找对应报告。",
     "summary_p0_fallback": "🔴 引擎汇总 P0 **{count}** 项（明细未在推送中展开，请打开完整报告）。",
     "summary_p1_fallback": "🟡 引擎汇总 P1 **{count}** 项（明细未在推送中展开，请打开完整报告）。",
+    "summary_p0_fallback_no_report": "🔴 引擎汇总 P0 **{count}** 项（明细未在推送中展开）。未生成报告链接时请确认 Palace Web（:8300）已启动且发布成功；首页 {palace_home}",
+    "summary_p1_fallback_no_report": "🟡 引擎汇总 P1 **{count}** 项（明细未在推送中展开）。未生成报告链接时请确认 Palace Web（:8300）已启动且发布成功；首页 {palace_home}",
     "summary_max_issues_per_severity": 6,
     "summary_max_gap_chars": 100,
     "summary_chars": "**提取字数** {text_length}",
