@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - pm-system 子模块：版本专项进度钉钉推送
+
+**状态**: 已推送 tygit（子模块 `origin main` + 父仓同步子模块指针）
+
+**内容**:
+- `pm-system`：`feat(pm-system): 版本专项进度钉钉推送与 dashboard 摘要复用`（commit `dc7eaee`）
+
+---
+
 ## 2026-03-23 - dingtalk-desktop：版本状态多群 webhook（PMO/PLD）
 
 **状态**: 验收通过
