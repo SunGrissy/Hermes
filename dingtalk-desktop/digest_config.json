@@ -1,4 +1,5 @@
 {
+  "default_pipeline_pm_user_id": "u021",
   "team_members": [
     "胡亚飞",
     "李思奕",
@@ -131,8 +132,17 @@
   "resume_notify_webhook": "https://oapi.dingtalk.com/robot/send?access_token=2816ab39197d77e816fa943c358fea510752bb27d5041725b87b345288b76bae",
   "memo_tracker": {
     "group_cid": "73216314617",
-    "colleague_skill_cids": ["73472166912", "47857575121"],
-    "_note_colleague_skill_cids": "他人发言仅白名单群入队（例：杨琳汇报直通车）；本人仍可在 group_cid 或白名单群发指令。助理群内同事发言默认忽略。",
+    "assistant_group_skill_uids": [
+      "316550726"
+    ],
+    "_note_assistant_group_skill_uids": "助理通知主群(group_cid)内仅列表中的钉钉 UID 可触发备忘/完成/愿望/运维/上班啦/版本摘要/预审等；白名单 colleague_skill_cids 与选题群不受限。[] 表示不限制。删除本字段时回退为环境变量 DINGTALK_MY_UID（未设则 lib.utils.DEFAULT_MY_UID）。",
+    "colleague_skill_cids": [
+      "73472166912",
+      "47857575121",
+      "46459012:436804184",
+      "46459012:3600063488"
+    ],
+    "_note_colleague_skill_cids": "他人发言仅白名单群/单聊入队（例：杨琳汇报直通车；崔忠仁/刘泊霆单聊 CID 见上）；本人仍可在 group_cid 或白名单群发指令。助理群内同事发言默认忽略。",
     "_note_wish_reply_webhook_by_cid": "备忘/TR/完成/删除 memo、今日/明日/本周关注、许愿/愿望单/删除或完成 wish 等技能回复均按「发言群」选 Webhook：wish_reply_webhook_by_cid 键为群 CID，值为该群机器人 URL；未映射的群用下方 webhook_url（或 webhook_config.json 的 memo_tracker）。",
     "_note_wish_reply_keyword": "B 群等自定义机器人的「自定义关键词」若开启，须与 A/助理一致：小秘书提醒。发送侧由 memo_tracker 模板控制：Markdown 的 title=webhook_keyword，正文末尾 footer 含该词（见 message_templates.json memo_tracker）。",
     "wish_reply_webhook_by_cid": {

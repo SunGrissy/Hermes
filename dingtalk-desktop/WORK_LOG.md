@@ -1,5 +1,29 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-24] 专项推送：默认数据源 digest（192 PM）+ 0401 并入 _push
+
+### 状态：验收通过
+
+### 本次工作内容
+
+- `digest_config.json`：`pm_system_url` 指向内网 192 PM（`http://192.168.20.160:8112`），作为 version_digest / 专项推送默认信息源
+- `_push_versions_webhook_at_dm.py`：PM 基址顺序 `--pm-url` > `digest_config.pm_system_url` > `PM_SYSTEM_URL` > 172 兜底；默认任务含五一版、五月中、0401；`--only` / `--report`
+- `_send_0401_remote_version_webhook.py`：调用 `_push_versions_webhook_at_dm.py --only <版本名>`，保留互斥锁与冷却
+- `run_daily_version.ps1`：A2 跑 `_push_versions_webhook_at_dm.py`（定时任务由本机计划任务另行配置）
+
+---
+
+## [2026-03-24] version_digest：拉 users + Webhook @ 手机号；run_daily_version.ps1
+
+### 状态：待验收
+
+### 本次工作内容
+
+- `version_digest.py`：`GET /api/data` 取 `users`，按版本 `_pld/_ple/_plt` 汇总 `dingtalk_mobile`；正文追加 `@手机号`；`send_via_webhook` 增加 `at`/`atMobiles`
+- `run_daily_version.ps1`：串联 `version_digest.py` 与 `_send_0401_remote_version_webhook.py`（可按需改版本名）
+
+---
+
 ## [2026-03-20] 备忘提醒任务脚本、status_check、monitor/utils/skill_router 调整
 
 ### 状态：已提交推送（父仓）
