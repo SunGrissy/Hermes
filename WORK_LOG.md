@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - pm-system 子模块：同步冲突、JSON 导入与 loadData 修复
+
+**状态**: 已推送 tygit（子模块 `origin main` + 父仓同步指针）
+
+**内容**:
+- 子模块 `pm-system`：`fix(sync): 冲突合并持久化、导入覆盖与 loadData const 修复`（`9408626`）
+
+---
+
 ## 2026-03-24 - Palace：import_report（引擎 JSON 导入 Web）
 
 **状态**: 已提交（父仓 main，待推送；commit 见 `git log -1`）
