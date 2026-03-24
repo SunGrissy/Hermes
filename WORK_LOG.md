@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## 2026-03-24 - 面试清单（张凌）、md-reader 深链与钉钉 Skill；子模块同步
+
+**状态**: 验收通过（将提交并推送 tygit）
+
+**内容**:
+- `interviews/zhangling_ops_2026-03-24/`：张凌运营策划面试清单（含 README+简历全文）、README 说明
+- `.cursor/skills/interview-checklist-dingtalk/`：清单生成后发 md-reader 局域网链接至助理群；`send_result_webhook` 支持 `DINGTALK_WEBHOOK_KEY` 与 `interview_checklist` 配置
+- `dingtalk-desktop/webhook_config.json.example`：`interview_checklist` key；`skills/status_check.py` 拉起 md-reader 时设 `MD_READER_ROOT`
+- `md-reader` 子模块：`MD_READER_ROOT` 规范化、`?path=` 深链与选根后打开、版本 2.1.3、`start.bat`/README、`quick_start` 改调 `start.bat`
+- `pm-system` 子模块：`quick_start.bat` 直接启动 `md-reader\start.bat`（注入工作区根）
+
+---
+
 ## 2026-03-24 - pm-system 子模块：版本专项进度钉钉推送
 
 **状态**: 已推送 tygit（子模块 `origin main` + 父仓同步子模块指针）

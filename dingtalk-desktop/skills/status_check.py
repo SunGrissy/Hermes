@@ -33,7 +33,7 @@ SERVICES = [
 _START_COMMANDS = {
     'PmSystemApp': ('pm-system/backend', [sys.executable, '-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000']),
     'PerformEval': ('performeval', [sys.executable, '-m', 'uvicorn', 'backend.main:app', '--host', '0.0.0.0', '--port', '8112']),
-    'md-reader': ('md-reader', [sys.executable, '-m', 'uvicorn', 'server:app', '--host', '127.0.0.1', '--port', '8899']),
+    'md-reader': ('md-reader', [sys.executable, '-m', 'uvicorn', 'server:app', '--host', '0.0.0.0', '--port', '8899']),
     'Palace': ('palace', [sys.executable, '-m', 'uvicorn', 'palace_web.server:app', '--host', '0.0.0.0', '--port', '8300']),
     # dingtalk-desktop 不自动启动（当前进程即 daemon）
 }
@@ -95,9 +95,13 @@ def _try_start(name: str) -> bool:
         creationflags = 0
         if sys.platform == 'win32':
             creationflags = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+        env = os.environ.copy()
+        if name == 'md-reader':
+            env['MD_READER_ROOT'] = os.path.abspath(_WORKSPACE_ROOT)
         subprocess.Popen(
             argv,
             cwd=cwd,
+            env=env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

@@ -68,7 +68,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 2. **次选**：用管道时，在 PowerShell 里先执行 `$OutputEncoding = [System.Text.Encoding]::UTF8`，再 pipe 内容进脚本。
 3. **禁止**：不要把大段中文作为命令行参数（`py script.py "中文..."`），在 Windows 下会按系统编码（如 GBK）传参，导致乱码。
 
-**统一 webhook 配置**：`dingtalk-desktop/webhook_config.json.example` 列出全部 key（cursor_session / default / version_digest / resume_notify / memo_tracker / doc_review），与 `digest_config.json` 里现有 webhook 一一对应；后续可让 digest、简历、备忘等也从该文件读，实现一处配置多端复用。
+**统一 webhook 配置**：`dingtalk-desktop/webhook_config.json.example` 列出全部 key（cursor_session / default / interview_checklist / version_digest / resume_notify / memo_tracker / doc_review）。可选环境变量 **DINGTALK_WEBHOOK_KEY** 指定使用哪个 key（默认 `cursor_session`）；该 key 在 json 中为空时回退 **`default`**。
 
 ### 方式二：daemon /send（仅当用户明确要求「用我的身份发」时）
 

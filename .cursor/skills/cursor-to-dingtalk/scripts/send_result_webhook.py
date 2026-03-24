@@ -3,7 +3,8 @@
 通过钉钉机器人 Webhook 发送 Markdown 消息。
 标题：环境变量 DINGTALK_TITLE（默认 Agent代号-工作摘要），建议设为「本会话代号-工作摘要」如 AgentFlow-工作摘要。
 正文由 stdin 或文件传入，末尾自动加 footer「###### ※ 小秘书提醒」。
-URL: DINGTALK_WEBHOOK_URL 或 dingtalk-desktop/webhook_config.json 的 cursor_session。
+URL: DINGTALK_WEBHOOK_URL；否则读 dingtalk-desktop/webhook_config.json。
+配置 key 由环境变量 DINGTALK_WEBHOOK_KEY 指定（默认 cursor_session）；该 key 为空时回退 default。
 """
 import os
 import sys
@@ -30,7 +31,7 @@ def _log_send(title: str, content_len: int):
     except Exception:
         pass
 DEFAULT_TITLE = "Agent代号-工作摘要"
-WEBHOOK_KEY = "cursor_session"
+DEFAULT_WEBHOOK_KEY = "cursor_session"
 
 
 def _workspace_root():
@@ -40,7 +41,7 @@ def _workspace_root():
 
 
 def _get_webhook_url() -> str:
-    """优先环境变量，否则读 dingtalk-desktop/webhook_config.json 的 cursor_session。"""
+    """优先 DINGTALK_WEBHOOK_URL；否则读 webhook_config.json 中 DINGTALK_WEBHOOK_KEY 对应项，空则回退 default。"""
     url = os.environ.get("DINGTALK_WEBHOOK_URL", "").strip()
     if url:
         return url
@@ -51,7 +52,11 @@ def _get_webhook_url() -> str:
     try:
         with open(path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-        return (cfg.get(WEBHOOK_KEY) or "").strip()
+        key = os.environ.get("DINGTALK_WEBHOOK_KEY", "").strip() or DEFAULT_WEBHOOK_KEY
+        url = (cfg.get(key) or "").strip()
+        if not url and key != "default":
+            url = (cfg.get("default") or "").strip()
+        return url
     except Exception:
         return ""
 
@@ -111,7 +116,8 @@ def main():
     url = _get_webhook_url()
     if not url:
         print(
-            "error: set DINGTALK_WEBHOOK_URL or dingtalk-desktop/webhook_config.json cursor_session",
+            "error: set DINGTALK_WEBHOOK_URL or dingtalk-desktop/webhook_config.json "
+            "(DINGTALK_WEBHOOK_KEY or cursor_session / default)",
             file=sys.stderr,
         )
         return 1

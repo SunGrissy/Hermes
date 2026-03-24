@@ -11,6 +11,7 @@
 | fastapi-router | FastAPI 路由与 CRUD、鉴权、Pydantic 模型 |
 | frontend-design | 高区分度前端/落地页/组件设计 |
 | github-ops | GitHub 仓库、分支保护、PR、gh CLI |
+| interview-checklist-dingtalk | 面试清单生成后发 md-reader 局域网链接到钉钉助理群 |
 | multi-service-orchestration | 端口、启动命令、依赖、健康检查 |
 | pm-data-sync | PmSystem 数据同步与冲突合并 |
 | preflight-checks | 门禁失败修复（敏感信息、引用一致性等） |
