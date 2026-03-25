@@ -1,5 +1,35 @@
 # Work Log - MyAgents Root
 
+## 2026-03-25 - pm-system 验收通过：版本列表卡片（管线概况/规划提醒/两列布局）
+
+**状态**: 验收通过
+
+**内容**:
+- 子模块 `pm-system`：版本卡片 PLE/PLT/PLQA、管线概况 2 条、阶段承接、规划提醒与 `APP_VERSION` 1.0.44（见子模块 `WORK_LOG`）
+- 根仓库：同步子模块指针并推送 tygit
+
+---
+
+## 2026-03-25 - 规划窗口 <=28d/已到期 + 全局 APM（digest + PM 后端）
+
+**状态**: 待验收
+
+**内容**:
+- `dingtalk-desktop`：`--auto-scheduled` 筛选与 `default_pipeline_apm_user_id`（见 `dingtalk-desktop/WORK_LOG`）
+- 子模块 `pm-system`：`pipeline_notify_apm_user_id`、`APP_VERSION` 1.0.27（见子模块 `WORK_LOG`）
+
+---
+
+## 2026-03-25 - pm-system 管线五人角色 + dingtalk 定时专项推送脚本
+
+**状态**: 待验收
+
+**内容**:
+- 子模块 `pm-system`：PLT/PLE/PLQA、专项通知 footer、`APP_VERSION` 1.0.26（见子模块 `WORK_LOG`）
+- `dingtalk-desktop`：`--auto-scheduled`、`run_pipeline_notify_scheduled.ps1`、`register_pipeline_notify_schtasks.ps1`（见 `dingtalk-desktop/WORK_LOG`）
+
+---
+
 ## 2026-03-24 - pm-system 去掉保存/定时钉钉推送；0401 脚本防刷屏
 
 **状态**: 已推送 tygit
