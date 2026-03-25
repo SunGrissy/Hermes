@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-25 - pm-system：Feature 负责人职能组扩展 + DoR 布局
+
+**状态**: 验收通过
+
+**内容**:
+- 子模块 `pm-system`：负责人候选含体验/数值/实验组；规划台 DoR 单行排版与短占位符（`APP_VERSION` 1.0.49，见子模块 `WORK_LOG`）
+- 根仓库：同步子模块指针并推送 tygit
+
+---
+
 ## 2026-03-25 - pm-system 验收通过：Feature 负责人 assignee / FeatureAssignee / 保存结果校验
 
 **状态**: 验收通过
