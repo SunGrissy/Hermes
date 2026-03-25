@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-25 - pm-system 验收通过：Feature 负责人 assignee / FeatureAssignee / 保存结果校验
+
+**状态**: 验收通过
+
+**内容**:
+- 子模块 `pm-system`：Feature `assignee` 与策划组 datalist、共用模块、列表展示与保存反馈（`APP_VERSION` 1.0.47，见子模块 `WORK_LOG`）
+- 根仓库：同步子模块指针并推送 tygit
+
+---
+
 ## 2026-03-25 - pm-system 验收通过：版本列表卡片（管线概况/规划提醒/两列布局）
 
 **状态**: 验收通过
