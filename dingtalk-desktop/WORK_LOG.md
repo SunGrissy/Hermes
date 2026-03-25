@@ -1,5 +1,41 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-25] 查岗/上班啦/修复：列表摘要、口令始终回执、大门自检与查岗对齐
+
+### 状态：验收通过（已推送 tygit）
+
+### 本次工作内容
+
+- **status_check**：查岗/上班啦 **始终 webhook**（全绿也推）；异常项 **列表+emoji**；**修复** 先推「已收到」、`run_repair_flow` 分离子进程 `daemon_health_notify`；**上班啦** 展示 **本次拉起已恢复** / **需关注**
+- **skill_router**：「修复」「查岗」「上班啦」路由与日志与上述一致
+- **daemon_health_notify**：`analyze_health` 纳入 `monitor_running`/`dingtalk_running` 与查岗一致；未通过时提示看控制台/stdout/stderr
+- **message_templates**：`repair_ack`、`intro_inspection_all_ok`、`title_inspection_all_ok`、`title_morning_all_ok`、`intro_morning_all_ok*` 等
+
+---
+
+## [2026-03-25] 定时筛选：规划 DDL <=28 天或已到期；digest 全局 APM
+
+### 状态：待验收
+
+### 本次工作内容
+
+- `_push_versions_webhook_at_dm.py`：`--auto-scheduled` 筛选改为规划 DDL **距今 <=28 天或已过期**、且未发版（去掉 -14 天下限）；`@` 顺序 **PM+APM**+PLD+PLE+PLT+PLQA
+- `digest_config.json`：`default_pipeline_apm_user_id` = `u079`（屈丽茹），PM 仍为 `u021`（张梦君）
+
+---
+
+## [2026-03-25] 定时管线提醒：--auto-scheduled、默认 Webhook、注册计划任务脚本
+
+### 状态：待验收
+
+### 本次工作内容
+
+- `_push_versions_webhook_at_dm.py`：`--auto-scheduled`（规划 DDL 距今 -14～28 天且未发版）；Webhook 空则用 `webhook_config.json` → `default`；`@` PM+PLD+PLE+PLT+PLQA
+- `run_pipeline_notify_scheduled.ps1`：日志写入 `logs/pipeline_scheduled_YYYYMMDD.log`
+- `register_pipeline_notify_schtasks.ps1`：周一至周六 9:15 / 19:45 注册示例（管理员执行一次）
+
+---
+
 ## [2026-03-25] skill_router：助理群白名单、手机消息轮询、/fetch 超时与 daemon HTTP
 
 ### 状态：验收通过（已推送 tygit）

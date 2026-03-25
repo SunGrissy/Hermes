@@ -26,6 +26,7 @@ if _THIS_DIR not in sys.path:
     sys.path.insert(0, _THIS_DIR)
 
 from lib.utils import get_webhook_url  # noqa: E402
+from lib.daemon_spawn import start_daemon_background  # noqa: E402
 
 _DAEMON_URL = os.environ.get("DINGTALK_DAEMON_URL", "http://127.0.0.1:19200").rstrip("/")
 _KEYWORD = "小秘书提醒"
@@ -58,17 +59,8 @@ def _post_shutdown(base: str) -> None:
 
 
 def _start_daemon_bg() -> None:
-    creation = 0
-    if sys.platform == "win32":
-        creation = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-    subprocess.Popen(
-        ["py", "daemon.py"],
-        cwd=_THIS_DIR,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=creation,
-    )
+    """默认新开 cmd 窗口跑 daemon，便于看日志；无头模式见 lib/daemon_spawn 说明。"""
+    start_daemon_background(cwd=_THIS_DIR)
 
 
 def fetch_health() -> tuple[bool, dict | None, str]:
@@ -77,7 +69,7 @@ def fetch_health() -> tuple[bool, dict | None, str]:
 
 
 def analyze_health(data: dict | None) -> tuple[bool, list[str]]:
-    """Return (all_ok, human lines)."""
+    """Return (all_ok, human lines)。判定与查岗「大门」daemon_full 对齐，避免一条说红一条说绿。"""
     lines: list[str] = []
     if not data:
         lines.append("health: no JSON body")
@@ -89,11 +81,17 @@ def analyze_health(data: dict | None) -> tuple[bool, list[str]]:
     pid = data.get("pid", "?")
     lines.append(f"daemon={daemon} pid={pid}")
     lines.append(f"frida_attached={frida} cef_ready={cef} dingtalk_running={dt_run}")
+    if "monitor_running" in data:
+        lines.append(f"monitor_running={data.get('monitor_running')}")
     ok = (
         daemon == "running"
         and frida is True
         and cef is True
     )
+    if not data.get("dingtalk_running"):
+        ok = False
+    if "monitor_running" in data and data.get("monitor_running") is False:
+        ok = False
     return ok, lines
 
 
@@ -128,15 +126,23 @@ def build_markdown(
     title_phase: str,
     lines: list[str],
     restarted: bool,
+    healthy: bool,
 ) -> str:
     restart_note = "已执行重启 (shutdown + py daemon.py)。" if restarted else "未执行重启。"
     body = "\n".join(lines)
+    fail_hint = ""
+    if not healthy:
+        fail_hint = (
+            "\n> **请你看一眼本机日志**：Frida / CEF / 钉钉等仍异常时，请到 **daemon 新开的控制台窗口** 看实时报错；"
+            "若以无头方式启动，请打开 `dingtalk-desktop` 目录下的 **daemon_stdout.txt**、**daemon_stderr.txt**。\n\n"
+        )
     return (
         f"### {_KEYWORD} · 通道自检\n"
         f"**{title_phase}**\n\n"
         f"{restart_note}\n\n"
         f"```\n{body}\n```\n\n"
-        f"endpoint: `{_DAEMON_URL}/health`\n\n"
+        f"endpoint: `{_DAEMON_URL}/health`\n"
+        f"{fail_hint}"
         f"---\n###### ※ {_KEYWORD}"
     )
 
@@ -217,7 +223,9 @@ def main() -> int:
         detail_lines.append("(no-restart: skipped recovery)")
 
     title = "自检通过" if healthy else "自检未通过"
-    md = build_markdown(title_phase=title, lines=detail_lines, restarted=restarted)
+    md = build_markdown(
+        title_phase=title, lines=detail_lines, restarted=restarted, healthy=healthy,
+    )
 
     if args.no_webhook:
         print(md, flush=True)

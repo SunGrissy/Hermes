@@ -11,7 +11,11 @@
   - 文本含「愿望单」→ 列出未完成愿望（wish #N + 旧版 TR 条目）（日志 + webhook）；优先于「愿望」单独触发
   - 文本含「删除 wish N」「删除愿望 N」→ 删本地 wish 记录并移除 TR 中 wish:#N
   - 文本含「完成 wish N」「关闭愿望 N」→ 本地标 done，TR 中 wish:#N 标 processStatus=done
-  - 助理通知群发送「上班啦」/「上班」→ 执行 MyAgents 工具状态检查，结果经 webhook（小秘书提醒）推送
+  - 助理通知群「上班啦」/「上班」→ 巡检并尝试拉起未就绪服务；**始终 webhook 摘要**（已在跑 / 已拉起恢复 / 仍异常）
+  - 助理群「查岗」→ 只巡检不启动；**始终 webhook 摘要**（全绿也推，确认口令已执行）
+  - 助理群「修复」→ **先 webhook「指令已收到」**，再同上班啦拉起并复检并推摘要；钉钉大门仍异常则分离子进程跑 daemon_health_notify（自检+可选重启），勿在本线程内关 daemon
+  - 助理群「查看进程」→ desk_ops 调用仓库根 proc_manager.py --markdown-list，结果 webhook；「关进程 N」或「关进程 1,3」按快照序号关闭（与桌面运维同门禁）
+  - 助理群「启动PM」「启动 PM」（中间可空格，PM 大小写不敏感）→ desk_ops 执行 quick_start_headless.bat 等，探活后 webhook 汇总（8000 若被其它服务占用会失败）
   - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
   - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；选题改描述/删除 topic（与备忘同类指令，支持多编号顿号分隔）；「选题库」从 TR 列出全部 topic:#N 并先做一次本地同步；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 与本地 memo/wish/topic（选题以 TR 文案/删改/完成为准）；选题专用群 cid 可由 topic_skill_group_name 在 report_cids 中按群名解析
   - 助理群「预审」：推送路径下优先用本进程缓存的「上一条钉钉文档链接」（与备忘同源 send 事件），避免依赖 /fetch 回溯
@@ -19,7 +23,7 @@
 架构：
   - 启动时由 daemon.py 调用 SkillRouter.start()
   - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各群的新消息
-  - ct=502 且未处理过 → 交给 skills/resume_screen
+  - ct=502 且未处理过 → 交给 skills/resume_screen（时间窗以本机 PDF 落盘 mtime 为准，见 _resume_time_gate_blocks）
   - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望」/wish/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker；触发词后可跟标点空格，解析时会剥离
   - 通过 DB + 内存 seen_ids 实现幂等
   - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
@@ -38,11 +42,19 @@ from datetime import datetime
 # [AgentMemo Task] 任务目标: MEMO-001 补齐 ct=3100 富文本处理并接入模板链路
 # [AgentWish Task] 开始时间: 2026-03-19
 # [AgentWish Task] 任务目标: WISH-001 群消息「许愿」/「愿望单」路由
+# [AgentRsum Task] 开始时间: 2026-03-25
+# [AgentRsum Task] 任务目标: RESUME-001~003 简历轮询源 cid、日志回退、排除本人/内部材料 PDF
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _THIS_DIR)
 
-from db.store import init_db, is_resume_processed, is_memo_processed, is_doc_review_processed
-from skills.resume_screen import process_resume_message
+from db.store import (
+    init_db,
+    is_resume_processed,
+    save_resume_result,
+    is_memo_processed,
+    is_doc_review_processed,
+)
+from skills.resume_screen import process_resume_message, _find_local_pdf
 from version_digest import run_version_digest_send
 from skills.memo_tracker import (
     process_memo,
@@ -74,6 +86,7 @@ from skills.memo_tracker import (
     process_person_lookup,
     person_lookup_match_keyword,
     sync_tr_state_to_local_memos_wishes,
+    _wish_webhook_for_cid,
 )
 from skills.desk_ops import process_desk_ops
 from skills.doc_review import (
@@ -84,7 +97,7 @@ from skills.doc_review import (
     try_user_stop_doc_review,
     send_no_active_doc_review_stop_reply,
 )
-from skills.status_check import run_and_send as run_status_check_and_send
+from skills.status_check import run_morning_flow, run_inspection_flow, run_repair_flow
 from lib.utils import get_webhook_url, DATA_DIR, DEFAULT_MY_UID, ContactsDB
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
@@ -470,6 +483,8 @@ def _read_log_messages(cid: str, max_count: int = 50,
             'content_type': m.get('content_type', 0),
             'text': m.get('text', '') or '',
             'raw': m.get('raw', '') or '',
+            'is_self': bool(m.get('is_self')),
+            'direction': str(m.get('direction', '') or ''),
             '_from_log': True,
         })
 
@@ -523,31 +538,101 @@ def _extract_file_info(msg: dict) -> tuple:
     return msg_id, file_name, file_path
 
 
-_RESUME_WINDOW_MS = 48 * 3600 * 1000   # 只处理 48 小时内的简历消息
+# 招聘会话里会混有「本人发给 HR 的材料」；此类 PDF 不应走候选人初筛 LLM
+_RESUME_SKIP_NAME_SUBSTRINGS = (
+    '面试评价',
+    '面试结论',
+    '面试清单',
+    '面试记录',
+    '面试反馈',
+    '述职',
+    '二次审核',
+    '审核意见',
+    '入职定级',
+    '录用审批',
+    '背调',
+)
 
 
-def _poll_once(cid: str, notify_cid: str, seen_ids: set,
-               source_name: str = '', start_ts: int = 0):
-    """轮询一个招聘群/私信，处理所有新的 ct=502 消息。
-    结果发到 notify_cid（助理通知群），而非原来源。
-    source_name: 来源的显示名（用于推送消息中告知来源）
-    start_ts: daemon 本次启动时刻（毫秒），早于此时刻的消息跳过
+def _resume_pdf_filename_should_skip(file_name: str) -> bool:
+    if not (file_name or '').strip():
+        return False
+    n = file_name.lower()
+    for s in _RESUME_SKIP_NAME_SUBSTRINGS:
+        if s.lower() in n:
+            return True
+    return False
+
+
+def _resume_message_is_from_me(msg: dict) -> bool:
+    """True = 本条文件消息为本人发出（发给 HR 的评价/清单等），非候选人投递。"""
+    if msg.get('is_self') is True:
+        return True
+    me = str(os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)).strip()
+    u = str(msg.get('uid') or '').strip()
+    if u and me and u == me:
+        return True
+    d = str(msg.get('direction', '') or '')
+    if '→' in d and '发送' in d:
+        return True
+    return False
+
+
+_RESUME_WINDOW_MS = 48 * 3600 * 1000   # 与本机 PDF mtime（下载/落盘时间）比较的滑动窗长度
+
+
+def _resume_resolve_local_pdf_path(file_name: str, file_path_hint: str) -> str:
+    """本机已落盘的 PDF 路径（钉钉附件路径或常见下载目录按文件名命中），无则返回空串。"""
+    if file_path_hint and os.path.exists(file_path_hint):
+        return file_path_hint
+    if (file_name or '').strip():
+        return _find_local_pdf(file_name) or ''
+    return ''
+
+
+def _resume_time_gate_blocks(file_name: str, file_path_hint: str, now_ms: int) -> bool:
+    """True = 仅因「下载时间窗」应跳过本条。
+
+    - 尚无本机文件：不挡（早期发送的简历可先进 pipeline，等 trigger_download 或你手动下载后再判）。
+    - 已有本机文件：只按文件 mtime 与「当前往前 48h」滑动窗比较，不掺消息发送时间、也不用 daemon 启动时刻。
     """
-    # 与 _HYDRATE_FETCH_TIMEOUT_S 一致：daemon /fetch 串行锁 + JSAPI 慢时 30s 易误判超时
-    messages = _fetch_recent_messages(
+    p = _resume_resolve_local_pdf_path(file_name, file_path_hint)
+    if not p:
+        return False
+    try:
+        mt = int(os.path.getmtime(p) * 1000)
+    except OSError:
+        return False
+    return mt < (now_ms - _RESUME_WINDOW_MS)
+
+
+def _fetch_resume_messages(cid: str, count: int, timeout: int) -> list:
+    """招聘群简历：优先 daemon /fetch；超时或空列表时读 _msg_log.jsonl（依赖 Monitor 为 ct=502 写入 raw）。"""
+    messages = _fetch_recent_messages(cid, count=count, timeout=timeout)
+    if messages:
+        return messages
+    msgs = _read_log_messages(cid, max_count=80, max_age_ms=_RESUME_WINDOW_MS)
+    if msgs:
+        _log(
+            'resume: /fetch 无可用数据，已改用监控日志 '
+            f'({len(msgs)} 条)；若仍无初筛请确认本机已更新 monitor 且重启 daemon'
+        )
+    return msgs
+
+
+def _poll_once(cid: str, seen_ids: set, source_name: str = ''):
+    """轮询一个招聘群/私信，处理所有新的 ct=502 消息。
+    初筛结论经 resume_notify Webhook 推送（见 resume_screen）；本函数只负责在源会话上拉消息与触发下载。
+    source_name: 来源的显示名（用于推送消息中告知来源）
+    """
+    # 与 _HYDRATE_FETCH_TIMEOUT_S 一致；fetch 失败时 _fetch_resume_messages 回退监控日志
+    messages = _fetch_resume_messages(
         cid, count=20, timeout=_HYDRATE_FETCH_TIMEOUT_S)
     processed_count = 0
     now_ms = int(time.time() * 1000)
-    # 截止时间 = max(启动时刻, 48小时前)，两个条件都满足才处理
-    cutoff_ms = max(start_ts, now_ms - _RESUME_WINDOW_MS)
 
     for msg in messages:
         if msg.get('content_type') != 502:
-            continue
-
-        # ── 时间门禁：消息发送时间必须晚于截止时间 ──────────────
-        msg_ts = int(msg.get('ts') or 0)
-        if msg_ts and msg_ts < cutoff_ms:
             continue
 
         msg_id, file_name, file_path = _extract_file_info(msg)
@@ -557,17 +642,38 @@ def _poll_once(cid: str, notify_cid: str, seen_ids: set,
         if file_name and not file_name.lower().endswith('.pdf'):
             continue
 
+        if _resume_time_gate_blocks(file_name, file_path or '', now_ms):
+            continue
+
         if msg_id in seen_ids or is_resume_processed(msg_id):
             continue
 
         sender_uid = str(msg.get('uid', ''))
-        reply_cid = notify_cid or cid
-        _log(f'发现新简历: {file_name} (uid={sender_uid}, 来源={source_name or cid}) → 结果发到 {reply_cid}')
+        if _resume_message_is_from_me(msg):
+            _log(f'跳过简历初筛（本人发出的文件）: {file_name}')
+            save_resume_result(
+                msg_id, cid, sender_uid, file_name, file_path or '',
+                '—', '跳过', '非候选人投递：本人发出的 PDF', reply_sent=False,
+            )
+            seen_ids.add(msg_id)
+            continue
+        if _resume_pdf_filename_should_skip(file_name):
+            _log(f'跳过简历初筛（文件名属内部材料）: {file_name}')
+            save_resume_result(
+                msg_id, cid, sender_uid, file_name, file_path or '',
+                '—', '跳过', '非候选人简历：文件名命中内部材料关键词', reply_sent=False,
+            )
+            seen_ids.add(msg_id)
+            continue
+
+        # process_resume_message.group_cid 用于本地路径缺失时的 /trigger_download，必须在简历所在群/私信 cid；
+        # 初筛结论仅经 resume_notify Webhook 推送，与 notify_cid 无绑定。
+        _log(f'发现新简历: {file_name} (uid={sender_uid}, 来源={source_name or cid})')
 
         try:
             result = process_resume_message(
                 msg_id=msg_id,
-                group_cid=reply_cid,
+                group_cid=cid,
                 sender_uid=sender_uid,
                 file_name=file_name,
                 file_path=file_path,
@@ -671,6 +777,8 @@ _RE_PRECHECK_STOP = re.compile(
 )
 # 支持「上班啦」「上班」「上班啦！」等，整条以上班啦/上班开头且无其它实质内容即可
 _RE_MORNING = re.compile(r'^\s*(?:上班啦|上班)\s*[!！。.~\s]*$')
+_RE_INSPECTION = re.compile(r'^\s*查岗\s*[!！。.~\s]*$')
+_RE_REPAIR = re.compile(r'^\s*修复\s*[!！。.~\s]*$')
 # 版本状态摘要（与 py version_digest.py 同源，发向 digest 里 version_digest_webhook）
 _RE_VERSION_DIGEST = re.compile(
     r'^\s*版本\s*(?:咋样|怎么样)了\s*[!！。.?？~\s]*$')
@@ -955,14 +1063,64 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             return
         _recent_cmd_ts[key] = now_ms
         try:
-            webhook_url = memo_cfg.get('webhook_url', '')
-            if webhook_url and run_status_check_and_send(webhook_url):
-                _log('push: 上班啦 -> 已执行状态检查并推送')
+            webhook_url = _wish_webhook_for_cid(memo_cfg, msg_cid)
+            if not webhook_url:
+                _log('push: 上班啦 -> 未配置 webhook')
             else:
-                _log('push: 上班啦 -> webhook 未配置或发送失败')
+                r = run_morning_flow(webhook_url)
+                if r.get('notified'):
+                    _log('push: 上班啦 -> 已推送%s' % ('（全部就绪）' if r.get('all_ok') else '（含仍异常）'))
+                else:
+                    _log('push: 上班啦 -> 发送失败')
             memo_seen_ids.add(msg_id)
         except Exception as e:
             _log(f'morning status_check error: {e}')
+        return
+
+    if _RE_INSPECTION.match(text):
+        key = (msg_cid, 'inspection')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            webhook_url = _wish_webhook_for_cid(memo_cfg, msg_cid)
+            if not webhook_url:
+                _log('push: 查岗 -> 未配置 webhook')
+            else:
+                r = run_inspection_flow(webhook_url)
+                if r.get('notified'):
+                    _log('push: 查岗 -> 已推送%s' % ('（全绿）' if r.get('all_ok') else '（含异常）'))
+                else:
+                    _log('push: 查岗 -> 发送失败')
+            memo_seen_ids.add(msg_id)
+        except Exception as e:
+            _log(f'inspection status_check error: {e}')
+        return
+
+    if _RE_REPAIR.match(text):
+        key = (msg_cid, 'repair')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            webhook_url = _wish_webhook_for_cid(memo_cfg, msg_cid)
+            if not webhook_url:
+                _log('push: 修复 -> 未配置 webhook')
+            else:
+                r = run_repair_flow(webhook_url)
+                if r.get('ack_notified'):
+                    _log('push: 修复 -> 已推送收到确认')
+                if r.get('notified'):
+                    _log('push: 修复 -> 已推送复检摘要')
+                else:
+                    _log('push: 修复 -> 复检摘要发送失败')
+                if r.get('gate_repair_spawned'):
+                    _log('push: 修复 -> 已分离启动 daemon_health_notify')
+            memo_seen_ids.add(msg_id)
+        except Exception as e:
+            _log(f'repair status_check error: {e}')
         return
 
     if _RE_VERSION_DIGEST.match(text):
@@ -1338,12 +1496,62 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log('poll: 上班啦 -> 跳过（超出有效时间窗或时间戳无效）')
                 continue
             try:
-                webhook_url = memo_cfg.get('webhook_url', '')
-                if webhook_url and run_status_check_and_send(webhook_url):
-                    _log('poll: 上班啦 -> 已执行状态检查并推送')
+                webhook_url = _wish_webhook_for_cid(memo_cfg, group_cid)
+                if not webhook_url:
+                    _log('poll: 上班啦 -> 未配置 webhook')
+                else:
+                    r = run_morning_flow(webhook_url)
+                    if r.get('notified'):
+                        _log('poll: 上班啦 -> 已推送%s' % ('（全部就绪）' if r.get('all_ok') else '（含仍异常）'))
+                    else:
+                        _log('poll: 上班啦 -> 发送失败')
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'morning status_check error: {e}')
+            continue
+
+        if _RE_INSPECTION.match(text):
+            if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+                seen_ids.add(msg_id)
+                _log('poll: 查岗 -> 跳过（超出有效时间窗或时间戳无效）')
+                continue
+            try:
+                webhook_url = _wish_webhook_for_cid(memo_cfg, group_cid)
+                if not webhook_url:
+                    _log('poll: 查岗 -> 未配置 webhook')
+                else:
+                    r = run_inspection_flow(webhook_url)
+                    if r.get('notified'):
+                        _log('poll: 查岗 -> 已推送%s' % ('（全绿）' if r.get('all_ok') else '（含异常）'))
+                    else:
+                        _log('poll: 查岗 -> 发送失败')
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'inspection status_check error: {e}')
+            continue
+
+        if _RE_REPAIR.match(text):
+            if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+                seen_ids.add(msg_id)
+                _log('poll: 修复 -> 跳过（超出有效时间窗或时间戳无效）')
+                continue
+            try:
+                webhook_url = _wish_webhook_for_cid(memo_cfg, group_cid)
+                if not webhook_url:
+                    _log('poll: 修复 -> 未配置 webhook')
+                else:
+                    r = run_repair_flow(webhook_url)
+                    if r.get('ack_notified'):
+                        _log('poll: 修复 -> 已推送收到确认')
+                    if r.get('notified'):
+                        _log('poll: 修复 -> 已推送复检摘要')
+                    else:
+                        _log('poll: 修复 -> 复检摘要发送失败')
+                    if r.get('gate_repair_spawned'):
+                        _log('poll: 修复 -> 已分离启动 daemon_health_notify')
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'repair status_check error: {e}')
             continue
 
         if _RE_VERSION_DIGEST.match(text):
@@ -1906,9 +2114,7 @@ class SkillRouter:
             for cid in recruit_cids:
                 source_name = cid_names.get(cid, '')
                 try:
-                    n = _poll_once(cid, notify_cid, self._seen_ids,
-                                   source_name=source_name,
-                                   start_ts=self._start_ts)
+                    n = _poll_once(cid, self._seen_ids, source_name=source_name)
                     if n:
                         _log(f'[{source_name or cid}] processed {n} resumes')
                 except Exception as e:
@@ -1970,7 +2176,6 @@ if __name__ == '__main__':
     recruit_cids = _load_recruit_cids()
     print('招聘群:', recruit_cids)
     seen: set = set()
-    notify_cid = _load_config().get('notify_cid', '')
     for cid in recruit_cids:
-        n = _poll_once(cid, notify_cid, seen)
+        n = _poll_once(cid, seen)
         print(f'群 {cid} 处理 {n} 份')
