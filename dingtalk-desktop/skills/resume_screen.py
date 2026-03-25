@@ -25,12 +25,15 @@ from db.store import is_resume_processed, save_resume_result
 
 DAEMON_URL = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 
-# ── LLM 配置（复用 report_digest 的解析逻辑） ─────────────────
+# ── LLM 配置 ─────────────────────────────────────────────────
+# 优先级：RESUME_LLM_* > LLM_* > palace/.env > 硬编码默认值
+
+_DEFAULT_MODEL = 'claude-opus-4.6'
 
 def _resolve_llm():
-    key  = os.environ.get('LLM_API_KEY', '')
-    base = os.environ.get('LLM_API_BASE', '')
-    model = os.environ.get('LLM_MODEL', '')
+    key   = os.environ.get('RESUME_LLM_API_KEY') or os.environ.get('LLM_API_KEY', '')
+    base  = os.environ.get('RESUME_LLM_API_BASE') or os.environ.get('LLM_API_BASE', '')
+    model = os.environ.get('RESUME_LLM_MODEL') or os.environ.get('LLM_MODEL', '')
     if not key:
         palace_env = os.path.join(_ROOT, '..', 'palace', '.env')
         if os.path.exists(palace_env):
@@ -44,7 +47,7 @@ def _resolve_llm():
                     if k == 'PALACE_API_KEY' and not key:   key   = v
                     elif k == 'PALACE_API_BASE' and not base: base  = v
                     elif k == 'PALACE_MODEL' and not model:  model = v
-    return key, base or 'https://api.openai.com/v1', model or 'gpt-4o-mini'
+    return key, base or 'https://api.openai.com/v1', model or _DEFAULT_MODEL
 
 
 # ── 岗位猜测 + 应届识别 ───────────────────────────────────────
@@ -131,7 +134,7 @@ def _call_llm(prompt: str, system: str = '') -> str:
     payload = json.dumps({
         'model': model,
         'messages': messages,
-        'max_tokens': 800,
+        'max_tokens': 1200,
         'temperature': 0.3,
     }).encode('utf-8')
 
@@ -176,8 +179,23 @@ def _build_prompt(resume_text: str, role: str, checklist: str,
         )
     else:
         system = (
-            '你是一位游戏公司的人力资源专家，擅长简历初筛。'
-            '请根据提供的初筛清单和简历内容，给出客观、简洁的初筛结论。'
+            '你是一位游戏公司的人力资源专家，擅长系统策划岗简历初筛。\n'
+            '本次筛选的目标定级为 **L3 系统策划**，请严格按以下标准评估。\n\n'
+            '【L3 核心能力要求】\n'
+            '1. 多系统耦合：有设计多个系统之间数据流转、接口定义、耦合边界的经验\n'
+            '2. 框架扩展：能从具体系统中抽象可复用框架，设计可扩展的系统架构\n'
+            '3. 快轨复用：能设计配置化/模板化机制，让同类系统快速搭建而非每次从零开始\n'
+            '4. WHAT->HOW->BUILD 全链路：能独立定义需求(WHAT)、拆解方案(HOW)、'
+            '产出 Spec 级文档让程序直接开发(BUILD)\n'
+            '5. Spec 级文档：有明确的方案文档/需求规格/配表设计产出经验\n\n'
+            '【L3 vs L2 判定规则】\n'
+            '- 简历中有多系统耦合/框架设计/架构扩展证据 -> 可能达到 L3\n'
+            '- 简历仅体现单系统独立完成全流程，无跨系统架构证据 -> L2 水平\n'
+            '- 简历以"参与/协助"为主、无独立主导经验 -> L1 水平\n'
+            '- L2 扎实但 L3 证据不足 -> 结论给"待定"，注明"L2扎实、L3待面试验证"\n'
+            '- 简历无法体现 L2 以上能力 -> 结论给"不通过"\n\n'
+            '【禁止臆测】简历中没有明确的需求定义、架构设计、框架抽象等表述时，'
+            '不得判定为"体现 L3 思维"。\n'
             '输出格式严格遵守要求，不要添加额外说明。'
         )
         checklist_section = (
@@ -187,7 +205,10 @@ def _build_prompt(resume_text: str, role: str, checklist: str,
         output_hint = (
             '请严格按如下格式输出（不要多余文字）：\n'
             '结论：[通过 / 待定 / 不通过]\n'
-            '核心判定：[一句话≤20字，说明该结论的决定性原因，如"核心产出类项目少，系统能力待核实"]\n'
+            '核心判定：[一句话<=20字，说明该结论的决定性原因]\n'
+            'L3评估：[简历是否体现L3核心能力（多系统耦合/框架扩展/快轨复用/Spec文档），'
+            '<=40字，无证据则写"简历未体现L3架构能力"]\n'
+            '定级判断：[L3可能 / L2扎实L3待验 / L2 / L1+ / 不达标]\n'
             '理由：[1-2句话，聚焦最关键的依据]\n'
             '亮点：[命中的优先信号，逗号分隔，没有则写"无"]\n'
             '红线：[触发的红线，逗号分隔，没有则写"无"]\n'
@@ -213,6 +234,8 @@ def _parse_llm_output(text: str) -> dict:
         'redlines': '',
         'focus': '',
         'potential': '',   # 应届生专用：潜力信号
+        'l3_assess': '',   # 社招专用：L3 架构能力评估
+        'level': '',       # 社招专用：定级判断
     }
     patterns = {
         'verdict':    r'结论[：:]\s*(.+)',
@@ -222,6 +245,8 @@ def _parse_llm_output(text: str) -> dict:
         'redlines':   r'红线[：:]\s*(.+)',
         'focus':      r'建议考察[：:]\s*(.+)',
         'potential':  r'潜力信号[：:]\s*(.+)',
+        'l3_assess':  r'L3评估[：:]\s*(.+)',
+        'level':      r'定级判断[：:]\s*(.+)',
     }
     for key, pat in patterns.items():
         m = re.search(pat, text)
@@ -299,10 +324,12 @@ _DEFAULT_TEMPLATE = {
         'fail':    '❌ 简历初筛不通过 | {candidate} · {role}',
     },
     'lines': [
-        {'key': 'core',       'show': True,  'tpl': '◆ **核心判定：** {core}'},
-        {'key': 'highlights', 'show': True,  'tpl': '★ **亮点：** {highlights}'},
-        {'key': 'redlines',   'show': True,  'tpl': '✖ **红线：** {redlines}'},
-        {'key': 'reason',     'show': True,  'tpl': '▶ **详细理由：** {reason}'},
+        {'key': 'core',       'show': True,  'tpl': '** **核心判定：** {core}'},
+        {'key': 'l3_assess',  'show': True,  'tpl': '** **L3评估：** {l3_assess}'},
+        {'key': 'level',      'show': True,  'tpl': '** **定级判断：** {level}'},
+        {'key': 'highlights', 'show': True,  'tpl': '** **亮点：** {highlights}'},
+        {'key': 'redlines',   'show': True,  'tpl': '** **红线：** {redlines}'},
+        {'key': 'reason',     'show': True,  'tpl': '** **详细理由：** {reason}'},
     ],
 }
 
@@ -324,6 +351,8 @@ def _format_reply(file_name: str, role: str, parsed: dict,
         'role':       role,
         'source':     source_name,
         'core':       parsed.get('core', ''),
+        'l3_assess':  parsed.get('l3_assess', ''),
+        'level':      parsed.get('level', ''),
         'highlights': parsed.get('highlights', ''),
         'potential':  parsed.get('potential', ''),
         'redlines':   parsed.get('redlines', ''),

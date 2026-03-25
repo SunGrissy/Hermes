@@ -146,6 +146,8 @@
 
     "lines": [
       { "key": "core",       "show": true, "tpl": "❗ **核心判定：** {core}" },
+      { "key": "l3_assess",  "show": true, "tpl": "🏗 **L3评估：** {l3_assess}" },
+      { "key": "level",      "show": true, "tpl": "📊 **定级判断：** {level}" },
       { "key": "highlights", "show": true, "tpl": "✅ **亮点：** {highlights}" },
       { "key": "redlines",   "show": true, "tpl": "❌ **红线：** {redlines}" },
       { "key": "reason",     "show": true, "tpl": "▶ **理由：** {reason}" }

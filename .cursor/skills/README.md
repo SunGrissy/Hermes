@@ -2,10 +2,14 @@
 
 本目录为工作空间**唯一 skill 来源**，换设备拉仓库即可恢复完整 Agent 能力。
 
+**与 Cursor 用户目录同步**：全局技能在 `%USERPROFILE%\.cursor\skills\`。以本仓库 `.cursor/skills` 为权威副本；新增或改版 skill 后，将同名目录复制到用户目录，避免全局旧版与项目不一致。详见 `digital-twin-voice` Skill 末节。
+
 ## 清单
 
 | Skill | 用途 |
 |-------|------|
+| producer-dialogue | 对制作人说人话、少技术黑话、产品思维组织回答；Skills 仓库与用户目录同步维护 |
+| digital-twin-voice | 数字分身措辞与主人翁立场（禁用「你们」）；含双目录同步说明 |
 | cursor-to-dingtalk | 会话结束把结果发钉钉（daemon /send 或 Webhook，footer 小秘书提醒） |
 | dual-git-sync | tygit 主仓 + GitHub 可选镜像、子模块、novel 独立仓 |
 | fastapi-router | FastAPI 路由与 CRUD、鉴权、Pydantic 模型 |
@@ -15,7 +19,7 @@
 | multi-service-orchestration | 端口、启动命令、依赖、健康检查 |
 | pm-data-sync | PmSystem 数据同步与冲突合并 |
 | preflight-checks | 门禁失败修复（敏感信息、引用一致性等） |
-| resume-screening | 简历筛选 |
+| resume-screening | 简历筛选（规则双写：`.cursor/rules/resume-screening.mdc` 同步维护） |
 | survey-analysis | 问卷调研 CSV 分析、跨版本对比、HTML 报告 |
 | token-usage-analysis | Cursor 用量 CSV 分析、优化建议 |
 | vanilla-js-ui-patterns | 原生 JS 弹窗、Toast、表格等 UI 模式 |

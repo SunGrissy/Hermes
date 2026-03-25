@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## 2026-03-25 - 简历初筛：规则双写、钉钉 L3 标准与模型；于志伟面试清单；performeval 任猛定级文档
+
+**状态**: 已提交
+
+**内容**:
+- `.cursor/rules/resume-screening.mdc` 与 `resume-screening` Skill 双写同步说明；`dingtalk-desktop` 简历初筛社招 L3 标准、`claude-opus-4.6` 与模板字段；`interviews/yuzhiwei_sys_2026-03-25/` 系统策划 L3 面试清单
+- 子模块 `performeval`：任猛入职定级与考核 md（见子模块 `WORK_LOG`）
+
+---
+
 ## 2026-03-25 - pm-system：Feature 负责人职能组扩展 + DoR 布局
 
 **状态**: 验收通过

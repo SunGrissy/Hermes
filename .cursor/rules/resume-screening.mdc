@@ -1,12 +1,12 @@
 ---
-name: resume-screening
-description: Screen game planning resumes (策划岗简历初筛) using role-based checklists. Use when the user asks for resume screening, 简历初筛, 初审, 筛选简历, or to evaluate a candidate PDF against 系统策划/战斗策划/运营策划 criteria. Checklist location: performeval/面试/简历初筛/.
+description: 策划岗简历初筛规则——按岗位清单对照简历，输出通过/待定/不通过及初试考察重点。用户提到简历初筛、筛选简历、按系统策划/战斗策划/运营策划评估时激活。权威副本与 Skill 双写同步，见文首「同步维护」。
+alwaysApply: false
 ---
 
-# 策划岗简历初筛
+# 策划岗简历初筛（工作空间规则）
 
-> **同步维护**：本 Skill 与 `.cursor/rules/resume-screening.mdc` **内容须保持一致**。任一侧增删改初筛规则时，请同步更新另一侧。  
-> **关联实现**：招聘群 PDF 自动初筛见 `dingtalk-desktop/skills/resume_screen.py`（与清单路径、输出字段等约定对齐）。
+> **同步维护**：本文件与 `.cursor/skills/resume-screening/SKILL.md` **内容须保持一致**。任一侧增删改初筛规则时，请同步更新另一侧。  
+> **关联实现**：招聘群 PDF 自动初筛逻辑见 `dingtalk-desktop/skills/resume_screen.py`（清单路径、LLM 提示词等与 Skill/规则约定应对齐）。
 
 基于 `performeval/面试/简历初筛/` 下的清单，对候选人简历做初筛并输出结论。
 
