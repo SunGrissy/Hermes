@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-03-25] - 简历初筛：主策L4接入与社招按岗位Prompt修复
+
+**状态**: 待推送
+
+**内容**:
+- `.cursor/rules/resume-screening.mdc` 与 `.cursor/skills/resume-screening/SKILL.md` 双写同步：纳入主策划岗位、补充全岗位思维考察口径
+- `dingtalk-desktop/skills/resume_screen.py`：新增主策划岗位识别与 L4 评估字段；修复社招 prompt 按岗位区分（系统/战斗/运营/主策）
+- 子模块 `performeval`：新增主策划清单并更新现有清单/README（见子模块 `WORK_LOG.md`）
+
+---
+
 ## 2026-03-25 - 简历初筛：规则双写、钉钉 L3 标准与模型；于志伟面试清单；performeval 任猛定级文档
 
 **状态**: 已提交
