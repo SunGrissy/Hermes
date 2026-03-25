@@ -26,6 +26,7 @@ from app.services.pipeline_node_checklist_render import (
     version_duck_from_pm_api,
 )
 from app.services.release_checklist_render import PIPELINE_STAGES
+from app.services.demand_pool_health import compute_demand_pool_health
 from app.services.version_progress_notify import enrich_pipeline_for_version, render_version_status_markdown
 
 _ACCEPTANCE_IDX = next(i for i, (sid, _) in enumerate(PIPELINE_STAGES) if sid == "acceptance")
@@ -55,6 +56,9 @@ def _extract_data(payload: dict) -> dict:
 
 class _RemoteVersionLike:
     def __init__(self, remote_version: dict):
+        self.version_type = remote_version.get("versionType") or remote_version.get(
+            "version_type"
+        )
         self.pipeline_ddls = (
             remote_version.get("pipelineDDLs")
             or remote_version.get("pipelineDdls")
@@ -233,6 +237,8 @@ def _render_one(
     if not active:
         raise SystemExit(f"ERROR: dashboard has no active version for id={vid}")
     entry = active[0]
+    vt = str(target.get("versionType") or target.get("version_type") or "").strip()
+    entry["versionType"] = vt
     entry["startDate"] = target.get("startDate")
     entry["nodeManualChecks"] = (
         target.get("nodeManualChecks") or target.get("node_manual_checks") or {}
@@ -244,47 +250,57 @@ def _render_one(
     entry["_pm_name"] = pm_name
 
     suffix = ""
-    try:
-        blocks = _extract_data(
-            _api_get_json(f"{pm_url}/api/internal/version-checklist-blocks?version_ids={vid}", api_key)
-        )
-        suffix = (blocks.get("blocks") or {}).get(vid) or ""
-    except Exception as e:
-        print(f"WARN: checklist blocks: {e}", flush=True)
-
-    if suffix and "管线节点待办" not in suffix:
+    if vt == "demand_pool":
+        fs = entry.get("featureSummary") if isinstance(entry.get("featureSummary"), dict) else {}
+        if not isinstance(fs.get("poolHealth"), dict):
+            fs = dict(fs) if isinstance(fs, dict) else {}
+            fs["poolHealth"] = compute_demand_pool_health(target.get("features") or [])
+            entry["featureSummary"] = fs
+    else:
         try:
-            v_duck = version_duck_from_pm_api(target)
-            feats = features_duck_from_pm_api(target.get("features") or [])
-            pipe_md = render_pipeline_node_checklists_markdown(
-                None,
-                v_duck,
-                features_override=feats,
-                suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
+            blocks = _extract_data(
+                _api_get_json(
+                    f"{pm_url}/api/internal/version-checklist-blocks?version_ids={vid}",
+                    api_key,
+                )
             )
-            if pipe_md:
-                suffix = f"---\n\n{pipe_md}\n\n---\n\n{suffix.strip()}"
+            suffix = (blocks.get("blocks") or {}).get(vid) or ""
         except Exception as e:
-            print(f"WARN: merge pipeline checklist: {e}", flush=True)
-    elif not suffix:
-        try:
-            v_duck = version_duck_from_pm_api(target)
-            feats = features_duck_from_pm_api(target.get("features") or [])
-            pipe_md = render_pipeline_node_checklists_markdown(
-                None,
-                v_duck,
-                features_override=feats,
-                suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
-            )
-            if pipe_md:
-                suffix = f"---\n\n{pipe_md}"
-        except Exception as e:
-            print(f"WARN: local pipeline checklist: {e}", flush=True)
+            print(f"WARN: checklist blocks: {e}", flush=True)
 
-    ps = target.get("pipelineStatus") or target.get("pipeline_status") or {}
-    fi = _first_incomplete_main_stage_index(ps)
-    if fi is not None and fi < _ACCEPTANCE_IDX and suffix:
-        suffix = _strip_release_checklist_block(suffix)
+        if suffix and "管线节点待办" not in suffix:
+            try:
+                v_duck = version_duck_from_pm_api(target)
+                feats = features_duck_from_pm_api(target.get("features") or [])
+                pipe_md = render_pipeline_node_checklists_markdown(
+                    None,
+                    v_duck,
+                    features_override=feats,
+                    suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
+                )
+                if pipe_md:
+                    suffix = f"---\n\n{pipe_md}\n\n---\n\n{suffix.strip()}"
+            except Exception as e:
+                print(f"WARN: merge pipeline checklist: {e}", flush=True)
+        elif not suffix:
+            try:
+                v_duck = version_duck_from_pm_api(target)
+                feats = features_duck_from_pm_api(target.get("features") or [])
+                pipe_md = render_pipeline_node_checklists_markdown(
+                    None,
+                    v_duck,
+                    features_override=feats,
+                    suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
+                )
+                if pipe_md:
+                    suffix = f"---\n\n{pipe_md}"
+            except Exception as e:
+                print(f"WARN: local pipeline checklist: {e}", flush=True)
+
+        ps = target.get("pipelineStatus") or target.get("pipeline_status") or {}
+        fi = _first_incomplete_main_stage_index(ps)
+        if fi is not None and fi < _ACCEPTANCE_IDX and suffix:
+            suffix = _strip_release_checklist_block(suffix)
 
     sfx_map = {vid: suffix} if suffix else None
     md = render_version_status_markdown([entry], checklist_suffix_by_id=sfx_map)
@@ -346,6 +362,7 @@ def run_version_progress_push(
     summary_heading: str = "猫姐嘴替 · 版本状态推送",
     report_filename: str = "_version_push_report.md",
     pm_url_override: str | None = None,
+    skip_demand_pool_in_batch: bool = False,
 ) -> None:
     with open(DESKTOP_CFG, "r", encoding="utf-8") as f:
         cfg = json.load(f)
@@ -372,6 +389,12 @@ def run_version_progress_push(
             (v for v in (data_all.get("versions") or []) if str(v.get("name", "")) == vname),
             {},
         )
+        if skip_demand_pool_in_batch and str(
+            raw.get("versionType") or raw.get("version_type") or ""
+        ).strip() == "demand_pool":
+            print(f"SKIP: {vname} 为需求池类型，默认批次不推送", flush=True)
+            report_lines.append(f"- **{vname}** 跳过（需求池不在默认推送列表）")
+            continue
         pld_id = force_pld or raw.get("pldUserId") or ""
         pl_user = _user_by_id(users, str(pld_id)) if pld_id else None
         mobile = _dingtalk_mobile(pl_user)
@@ -443,15 +466,18 @@ def main() -> None:
     if (args.only or "").strip():
         jobs = [(n.strip(), None) for n in args.only.split(",") if n.strip()]
         heading = f"猫姐嘴替 · 专项推送 ({args.only.strip()})"
+        skip_pool = False
     else:
         jobs = _default_jobs()
         heading = "猫姐嘴替 · 五一/五月中/0401 已执行"
+        skip_pool = True
     ov = (args.pm_url or "").strip() or None
     run_version_progress_push(
         jobs,
         summary_heading=heading,
         report_filename=args.report,
         pm_url_override=ov,
+        skip_demand_pool_in_batch=skip_pool,
     )
 
 
