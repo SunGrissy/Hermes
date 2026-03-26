@@ -39,6 +39,30 @@ def _strip_release_checklist_block(text: str) -> str:
     """从 suffix Markdown 中移除「发版检查」段落（含标题到下一个 --- 或末尾）。"""
     return re.sub(r"(?:---\s*\n\s*)?####\s*\*?\*?发版检查.*?(?=\n---|\Z)", "", text, flags=re.DOTALL).strip()
 
+
+def _replace_pipeline_node_block_with_local(suffix: str, pipe_md: str) -> str:
+    """用本机 pm-system 渲染的「管线节点待办」覆盖接口返回的同名块。
+
+    接口 bundle 与 `build_version_checklist_markdown_bundle` 一致时，第一段为
+    ``---\\n\\n#### **管线节点待办** ...``，其后接 ``\\n\\n---\\n\\n`` 发版检查等。
+    若服务端未部署最新 `pipeline_node_checklist_render`，仍应与本机 dingtalk 依赖一致。
+    """
+    if not pipe_md or not suffix:
+        return suffix
+    pipe_md = pipe_md.strip()
+    norm = suffix.replace("\r\n", "\n")
+    # 非贪婪到「下一段」分隔符前，或整段仅为管线时到文末
+    pat = r"(?ms)^---\s*\n\s*#### \*\*管线节点待办\*\*.*?(?=\n\n---\n\n|\Z)"
+    repl = f"---\n\n{pipe_md}\n\n"
+    out = re.sub(pat, repl, norm, count=1)
+    if out != norm:
+        return out
+    pat2 = r"(?ms)#### \*\*管线节点待办\*\*.*?(?=\n\n---\n\n|\Z)"
+    out = re.sub(pat2, repl, norm, count=1)
+    if out != norm:
+        return out
+    return f"---\n\n{pipe_md}\n\n---\n\n{norm.strip()}"
+
 DESKTOP_CFG = os.path.join(_DIR, "digest_config.json")
 
 
@@ -65,27 +89,39 @@ def _load_default_progress_webhook() -> str:
         return ""
 
 
-def _pipeline_not_released(v: dict) -> bool:
-    ps = v.get("pipelineStatus") or v.get("pipeline_status") or {}
-    return not bool(ps.get("release"))
+def _explicit_planning_ddl(v: dict) -> date | None:
+    """仅使用规划节点在 PM 里填写的 DDL（pipelineDdls.planning）。
 
-
-def _eff_planning_ddl(v: dict) -> date | None:
+    不再用 startDate-7 天推算：否则会把「规划 DDL 填在六月」的版本，在 startDate 较近时误判进 28 天窗口。
+    """
     ddls = v.get("pipelineDdls") or v.get("pipeline_ddls") or {}
+    if not isinstance(ddls, dict):
+        return None
     raw = ddls.get("planning")
     if raw:
         return _parse_iso_date(raw)
-    sd = _parse_iso_date(v.get("startDate"))
-    if sd:
-        return sd + timedelta(days=-7)
     return None
 
 
-def _version_matches_scheduled_window(v: dict, today: date) -> bool:
-    """规划（首个节点）DDL：距今 <=28 天或已过期，且发版节点未完成。"""
-    if not _pipeline_not_released(v):
+def _version_eligible_for_scheduled_pipeline_reminder(v: dict) -> bool:
+    """定时管线提醒：排除已发布版本、需求池、以及管线「发版」节点已完成的版本。"""
+    ph = str(v.get("phase") or "").strip().lower()
+    if ph == "released":
         return False
-    d = _eff_planning_ddl(v)
+    vt = str(v.get("versionType") or v.get("version_type") or "").strip().lower()
+    if vt == "demand_pool":
+        return False
+    ps = v.get("pipelineStatus") or v.get("pipeline_status") or {}
+    if bool(ps.get("release")):
+        return False
+    return True
+
+
+def _version_matches_scheduled_window(v: dict, today: date) -> bool:
+    """规划节点 DDL：距今 <=28 天或已过期；且未发版（phase + 管线发版节点）。"""
+    if not _version_eligible_for_scheduled_pipeline_reminder(v):
+        return False
+    d = _explicit_planning_ddl(v)
     if d is None:
         return False
     delta = (d - today).days
@@ -374,34 +410,26 @@ def _build_entry_suffix(
         except Exception as e:
             print(f"WARN: checklist blocks: {e}", flush=True)
 
-        if suffix and "管线节点待办" not in suffix:
-            try:
-                v_duck = version_duck_from_pm_api(target)
-                feats = features_duck_from_pm_api(target.get("features") or [])
-                pipe_md = render_pipeline_node_checklists_markdown(
-                    None,
-                    v_duck,
-                    features_override=feats,
-                    suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
-                )
-                if pipe_md:
-                    suffix = f"---\n\n{pipe_md}\n\n---\n\n{suffix.strip()}"
-            except Exception as e:
-                print(f"WARN: merge pipeline checklist: {e}", flush=True)
-        elif not suffix:
-            try:
-                v_duck = version_duck_from_pm_api(target)
-                feats = features_duck_from_pm_api(target.get("features") or [])
-                pipe_md = render_pipeline_node_checklists_markdown(
-                    None,
-                    v_duck,
-                    features_override=feats,
-                    suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
-                )
-                if pipe_md:
-                    suffix = f"---\n\n{pipe_md}"
-            except Exception as e:
-                print(f"WARN: local pipeline checklist: {e}", flush=True)
+        pipe_md = None
+        try:
+            v_duck = version_duck_from_pm_api(target)
+            feats = features_duck_from_pm_api(target.get("features") or [])
+            pipe_md = render_pipeline_node_checklists_markdown(
+                None,
+                v_duck,
+                features_override=feats,
+                suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
+            )
+        except Exception as e:
+            print(f"WARN: local pipeline checklist: {e}", flush=True)
+
+        if pipe_md:
+            if suffix and "管线节点待办" in suffix:
+                suffix = _replace_pipeline_node_block_with_local(suffix, pipe_md)
+            elif suffix:
+                suffix = f"---\n\n{pipe_md}\n\n---\n\n{suffix.strip()}"
+            else:
+                suffix = f"---\n\n{pipe_md}"
 
         ps = target.get("pipelineStatus") or target.get("pipeline_status") or {}
         fi = _first_incomplete_main_stage_index(ps)
@@ -630,7 +658,7 @@ def main() -> None:
     ap.add_argument(
         "--auto-scheduled",
         action="store_true",
-        help="按规划节点窗口筛选版本：规划 DDL 距今 <=28 天或已到期、且未发版；Webhook 空则用 webhook_config.default",
+        help="按规划节点窗口筛选：仅用 pipelineDdls.planning；距今<=28天或已过期；排除 phase=released、管线发版已完成、demand_pool；Webhook 空则用 default",
     )
     ap.add_argument(
         "--report",
@@ -658,7 +686,7 @@ def main() -> None:
         names = _scheduled_version_names(data_all.get("versions") or [])
         if not names:
             print(
-                "AUTO_SCHEDULED: no versions match (planning DDL within 28d or overdue, release not done)",
+                "AUTO_SCHEDULED: no versions match (explicit planning DDL within 28d or overdue, not released)",
                 flush=True,
             )
             raise SystemExit(0)

@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-26] 定时管线 + 专项 suffix：规划窗口 / 任务名 1945 / 管线待办本机覆盖接口
+
+### 状态：待验收
+
+### 本次工作内容
+
+- `_push_versions_webhook_at_dm.py`：`--auto-scheduled` 排除 `phase=released`、管线发版已完成、`demand_pool`；规划 DDL **仅** `pipelineDdls.planning`（去掉 startDate-7 推算）
+- **专项 / 定时推送**：拉到 `version-checklist-blocks` 后仍用本机 `render_pipeline_node_checklists_markdown` **覆盖**「管线节点待办」段，阻塞/关注与**本机 pm-system** 一致（不再被服务端旧逻辑带偏）
+- `register_pipeline_notify_task.ps1` / `register_pipeline_notify_schtasks.ps1`：晚间任务名 **`MyAgents_PipelineNotify_1945`**，并清理旧名 **`_1615`**
+- `版本与管线推送说明.md`：与上同步
+
+---
+
 ## [2026-03-26] VersionDigest / 专项 Webhook：与 pm-system 管线待办语义对齐；子模块 a79ca66；根仓提交推送 tygit
 
 ### 状态：验收通过（已推送 tygit）

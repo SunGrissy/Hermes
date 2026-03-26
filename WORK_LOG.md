@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-03-27] - 钉钉专项：管线待办本机覆盖接口块；定时筛选与计划任务 1945
+
+**状态**: 验收通过
+
+**内容**:
+- `dingtalk-desktop`：`version-checklist-blocks` 返回后仍用本机 `render_pipeline_node_checklists_markdown` 覆盖「管线节点待办」；`--auto-scheduled` 规划 DDL / 已发布过滤；晚间计划任务名 `MyAgents_PipelineNotify_1945`；说明与 `WORK_LOG` 更新（见子模块目录 `dingtalk-desktop/WORK_LOG.md`）
+
+---
+
 ## [2026-03-26] - VersionDigest / 钉钉管线推送；pm-system 管线待办阻塞与关注拆分
 
 **状态**: 验收通过

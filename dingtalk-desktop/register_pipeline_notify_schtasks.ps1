@@ -10,10 +10,10 @@ if (-not (Test-Path $Runner)) {
 }
 
 $TaskNameMorning = "MyAgents_PipelineNotify_0915"
-# 任务名含 1615 为历史命名；实际触发 19:45
-$TaskNameAfternoon = "MyAgents_PipelineNotify_1615"
+$TaskNameAfternoon = "MyAgents_PipelineNotify_1945"
 $Tr = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$Runner`""
 
+schtasks /Delete /TN "MyAgents_PipelineNotify_1615" /F 2>$null
 schtasks /Create /F /TN $TaskNameMorning /SC WEEKLY /D MON,TUE,WED,THU,FRI,SAT /ST 09:15 /TR $Tr /RL HIGHEST 2>&1
 schtasks /Create /F /TN $TaskNameAfternoon /SC WEEKLY /D MON,TUE,WED,THU,FRI,SAT /ST 19:45 /TR $Tr /RL HIGHEST 2>&1
 

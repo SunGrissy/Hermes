@@ -3,9 +3,16 @@
 # 若需「以最高权限运行」，请改用 register_pipeline_notify_schtasks.ps1（管理员执行）
 
 $taskMorning = "MyAgents_PipelineNotify_0915"
-# 任务名保留 _1615 历史标识；触发时间已为 19:45
-$taskAfternoon = "MyAgents_PipelineNotify_1615"
+$taskAfternoon = "MyAgents_PipelineNotify_1945"
 $scriptPath = Join-Path $PSScriptRoot "run_pipeline_notify_scheduled.ps1"
+
+foreach ($legacyName in @("MyAgents_PipelineNotify_1615")) {
+    $t = Get-ScheduledTask -TaskName $legacyName -ErrorAction SilentlyContinue
+    if ($t) {
+        Unregister-ScheduledTask -TaskName $legacyName -Confirm:$false
+        Write-Host "removed legacy task: $legacyName"
+    }
+}
 
 if (-not (Test-Path $scriptPath)) {
     Write-Error "Missing $scriptPath"
