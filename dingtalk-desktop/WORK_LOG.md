@@ -1,5 +1,16 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-26] VersionDigest / 专项 Webhook：与 pm-system 管线待办语义对齐；子模块 a79ca66；根仓提交推送 tygit
+
+### 状态：验收通过（已推送 tygit）
+
+### 本次工作内容
+
+- `_push_versions_webhook_at_dm.py`：合并冲突已解决；`pm-system` 子模块已推送并与需求池五维健康、`render_demand_pool_version_block_markdown` 行为一致
+- 文档：`README.md`、`版本与管线推送说明.md`；`WORK_LOG` 条目收口
+
+---
+
 ## [2026-03-25] 查岗/上班啦/修复：列表摘要、口令始终回执、大门自检与查岗对齐
 
 ### 状态：验收通过（已推送 tygit）
@@ -15,7 +26,7 @@
 
 ## [2026-03-25] 定时筛选：规划 DDL <=28 天或已到期；digest 全局 APM
 
-### 状态：待验收
+### 状态：验收通过（已推送 tygit）
 
 ### 本次工作内容
 
@@ -26,7 +37,7 @@
 
 ## [2026-03-25] 定时管线提醒：--auto-scheduled、默认 Webhook、注册计划任务脚本
 
-### 状态：待验收
+### 状态：验收通过（已推送 tygit）
 
 ### 本次工作内容
 

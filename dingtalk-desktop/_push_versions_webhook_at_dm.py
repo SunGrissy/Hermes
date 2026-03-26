@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""一次性批量：按 digest_config.pm_system_url 拉版本 → 专项 Markdown → 各版本 progressNotifyWebhooks 推送并 @ PLD+PM。"""
+"""一次性批量：按 digest_config.pm_system_url 拉版本 → 专项 Markdown → Webhook 推送并 @ PM/PLD/PLE/PLT/PLQA。"""
 from __future__ import annotations
 
 import argparse
@@ -8,13 +8,12 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_DIR, ".."))
 _PM_BACKEND = os.path.join(_ROOT, "pm-system", "backend")
 sys.path.insert(0, _PM_BACKEND)
-os.chdir(_PM_BACKEND)
 
 import re
 
@@ -32,6 +31,10 @@ from app.services.version_progress_notify import enrich_pipeline_for_version, re
 _ACCEPTANCE_IDX = next(i for i, (sid, _) in enumerate(PIPELINE_STAGES) if sid == "acceptance")
 
 
+class VersionProgressRenderError(Exception):
+    """专项版本 Markdown 拼装失败（缺版本、dashboard 无数据等）。"""
+
+
 def _strip_release_checklist_block(text: str) -> str:
     """从 suffix Markdown 中移除「发版检查」段落（含标题到下一个 --- 或末尾）。"""
     return re.sub(r"(?:---\s*\n\s*)?####\s*\*?\*?发版检查.*?(?=\n---|\Z)", "", text, flags=re.DOTALL).strip()
@@ -46,6 +49,61 @@ def _parse_iso_date(value):
         return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
     except ValueError:
         return None
+
+
+WEBHOOK_CFG = os.path.join(_DIR, "webhook_config.json")
+
+
+def _load_default_progress_webhook() -> str:
+    if not os.path.isfile(WEBHOOK_CFG):
+        return ""
+    try:
+        with open(WEBHOOK_CFG, "r", encoding="utf-8") as f:
+            j = json.load(f)
+        return str(j.get("default") or "").strip()
+    except (OSError, json.JSONDecodeError):
+        return ""
+
+
+def _pipeline_not_released(v: dict) -> bool:
+    ps = v.get("pipelineStatus") or v.get("pipeline_status") or {}
+    return not bool(ps.get("release"))
+
+
+def _eff_planning_ddl(v: dict) -> date | None:
+    ddls = v.get("pipelineDdls") or v.get("pipeline_ddls") or {}
+    raw = ddls.get("planning")
+    if raw:
+        return _parse_iso_date(raw)
+    sd = _parse_iso_date(v.get("startDate"))
+    if sd:
+        return sd + timedelta(days=-7)
+    return None
+
+
+def _version_matches_scheduled_window(v: dict, today: date) -> bool:
+    """规划（首个节点）DDL：距今 <=28 天或已过期，且发版节点未完成。"""
+    if not _pipeline_not_released(v):
+        return False
+    d = _eff_planning_ddl(v)
+    if d is None:
+        return False
+    delta = (d - today).days
+    return delta <= 28
+
+
+def _scheduled_version_names(versions: list) -> list[str]:
+    today = date.today()
+    out: list[str] = []
+    for v in versions or []:
+        if not isinstance(v, dict):
+            continue
+        name = str(v.get("name") or "").strip()
+        if not name:
+            continue
+        if _version_matches_scheduled_window(v, today):
+            out.append(name)
+    return sorted(set(out))
 
 
 def _extract_data(payload: dict) -> dict:
@@ -73,6 +131,13 @@ class _RemoteVersionLike:
         self.pld_user_id = remote_version.get("pldUserId")
         self.ple_user_id = remote_version.get("pleUserId")
         self.plt_user_id = remote_version.get("pltUserId")
+        self.plt_f_user_id = remote_version.get("pltFUserId")
+        self.plt_b_user_id = remote_version.get("pltBUserId")
+        if not self.plt_f_user_id and self.plt_user_id:
+            self.plt_f_user_id = self.plt_user_id
+        self.plqa_user_id = remote_version.get("plqaUserId") or remote_version.get(
+            "plqa_user_id"
+        )
         self.start_date = _parse_iso_date(remote_version.get("startDate"))
         self.release_date = _parse_iso_date(remote_version.get("releaseDate"))
 
@@ -202,43 +267,86 @@ def _enrich_feature_summary(entry: dict, raw_features: list) -> None:
         fs["blockedDetails"] = _blocked_details_from_dicts(feats)
 
 
-def _render_one(
+def _pipeline_at_mobiles(cfg: dict, users: list, raw: dict) -> list[str]:
+    pm_uid = str((cfg.get("default_pipeline_pm_user_id") or "")).strip()
+    apm_uid = str((cfg.get("default_pipeline_apm_user_id") or "")).strip()
+    plt_f = raw.get("pltFUserId") or raw.get("plt_user_id")
+    plt_b = raw.get("pltBUserId") or raw.get("plt_b_user_id")
+    if not plt_f and raw.get("pltUserId"):
+        plt_f = raw.get("pltUserId")
+    order = [
+        pm_uid,
+        apm_uid,
+        raw.get("pldUserId"),
+        raw.get("pleUserId"),
+        plt_f,
+        plt_b,
+        raw.get("plqaUserId") or raw.get("plqa_user_id"),
+    ]
+    seen: set[str] = set()
+    out: list[str] = []
+    for uid in order:
+        if not uid:
+            continue
+        u = _user_by_id(users, str(uid))
+        m = _dingtalk_mobile(u)
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def _resolve_progress_webhooks(target: dict) -> list[str]:
+    urls = target.get("progressNotifyWebhooks") or target.get("progress_notify_webhooks") or []
+    if isinstance(urls, str):
+        urls = [urls]
+    urls = [str(u).strip() for u in urls if str(u).strip()]
+    if not urls:
+        dw = _load_default_progress_webhook()
+        if dw:
+            urls = [dw]
+    return urls
+
+
+def _build_entry_suffix(
     pm_url: str,
     api_key: str | None,
     version_name: str,
     *,
     force_pld_user_id: str | None = None,
-    pld_name: str = "",
-    pm_name: str = "",
-) -> tuple[str, str, list[str]]:
+    cfg: dict | None = None,
+    data_all: dict | None = None,
+    users: list | None = None,
+) -> tuple[dict, str, str, dict]:
     pm_url = pm_url.rstrip("/")
-    data_all = _extract_data(_api_get_json(f"{pm_url}/api/data", api_key))
+    cfg = cfg or {}
+    if data_all is None:
+        data_all = _extract_data(_api_get_json(f"{pm_url}/api/data", api_key))
+    if users is None:
+        users = data_all.get("users") or []
     versions = data_all.get("versions") or []
     target = next((v for v in versions if str(v.get("name", "")) == version_name), None)
     if not target:
-        raise SystemExit(f"ERROR: version {version_name!r} not found")
+        raise VersionProgressRenderError(f"version {version_name!r} not found")
 
     if force_pld_user_id:
         target = {**target, "pldUserId": force_pld_user_id}
 
     vid = str(target.get("id") or "").strip()
     if not vid:
-        raise SystemExit(f"ERROR: version {version_name} missing id")
-
-    urls = target.get("progressNotifyWebhooks") or target.get("progress_notify_webhooks") or []
-    if isinstance(urls, str):
-        urls = [urls]
-    urls = [str(u).strip() for u in urls if str(u).strip()]
-    if not urls:
-        raise SystemExit(f"ERROR: version {version_name} has empty progressNotifyWebhooks")
+        raise VersionProgressRenderError(f"version {version_name} missing id")
 
     dashboard = _extract_data(_api_get_json(f"{pm_url}/api/dashboard?version_id={vid}", api_key))
     active = dashboard.get("activeVersions") or []
     if not active:
-        raise SystemExit(f"ERROR: dashboard has no active version for id={vid}")
+        raise VersionProgressRenderError(f"dashboard has no active version for id={vid}")
     entry = active[0]
     vt = str(target.get("versionType") or target.get("version_type") or "").strip()
     entry["versionType"] = vt
+    pm_uid = str((cfg.get("default_pipeline_pm_user_id") or "")).strip()
+    pld_id_eff = force_pld_user_id or target.get("pldUserId") or ""
+    entry["_pld_name"] = (_user_by_id(users, str(pld_id_eff)) or {}).get("name") or ""
+    entry["_pm_name"] = (_user_by_id(users, pm_uid) or {}).get("name") or ""
     entry["startDate"] = target.get("startDate")
     entry["nodeManualChecks"] = (
         target.get("nodeManualChecks") or target.get("node_manual_checks") or {}
@@ -246,8 +354,6 @@ def _render_one(
     _enrich_feature_summary(entry, target.get("features") or [])
     rvl = _RemoteVersionLike(target)
     enrich_pipeline_for_version(entry, rvl)
-    entry["_pld_name"] = pld_name
-    entry["_pm_name"] = pm_name
 
     suffix = ""
     if vt == "demand_pool":
@@ -302,6 +408,87 @@ def _render_one(
         if fi is not None and fi < _ACCEPTANCE_IDX and suffix:
             suffix = _strip_release_checklist_block(suffix)
 
+    return entry, suffix.strip(), vid, target
+
+
+def render_multi_version_digest_markdown(
+    pm_url: str,
+    api_key: str | None,
+    version_names: list[str],
+    cfg: dict,
+    *,
+    log_to_stdout: bool = True,
+) -> tuple[str, list[str], int]:
+    """与定时管线推送同源：多版本合并为一条 Markdown；@ 人为各版本管线角色手机号去重并集。"""
+    pm_url = pm_url.rstrip("/")
+    data_all = _extract_data(_api_get_json(f"{pm_url}/api/data", api_key))
+    users = data_all.get("users") or []
+    entries: list = []
+    sfx_by_id: dict[str, str] = {}
+    at_out: list[str] = []
+    seen_m: set[str] = set()
+    for vname in version_names:
+        vn = str(vname or "").strip()
+        if not vn:
+            continue
+        try:
+            entry, suffix, vid, target = _build_entry_suffix(
+                pm_url,
+                api_key,
+                vn,
+                force_pld_user_id=None,
+                cfg=cfg,
+                data_all=data_all,
+                users=users,
+            )
+        except VersionProgressRenderError as e:
+            if log_to_stdout:
+                print(f"[version-digest-body] skip {vn}: {e}", flush=True)
+            continue
+        entries.append(entry)
+        if suffix:
+            sfx_by_id[vid] = suffix
+        for m in _pipeline_at_mobiles(cfg, users, target):
+            if m not in seen_m:
+                seen_m.add(m)
+                at_out.append(m)
+    if not entries:
+        return "", [], 0
+    md = render_version_status_markdown(
+        entries,
+        checklist_suffix_by_id=sfx_by_id if sfx_by_id else None,
+    )
+    return md, at_out, len(entries)
+
+
+def _render_one(
+    pm_url: str,
+    api_key: str | None,
+    version_name: str,
+    *,
+    force_pld_user_id: str | None = None,
+    cfg: dict | None = None,
+    data_all: dict | None = None,
+    users: list | None = None,
+) -> tuple[str, str, list[str]]:
+    try:
+        entry, suffix, vid, target = _build_entry_suffix(
+            pm_url,
+            api_key,
+            version_name,
+            force_pld_user_id=force_pld_user_id,
+            cfg=cfg,
+            data_all=data_all,
+            users=users,
+        )
+    except VersionProgressRenderError as e:
+        raise SystemExit(f"ERROR: {e}") from e
+    urls = _resolve_progress_webhooks(target)
+    if not urls:
+        raise SystemExit(
+            f"ERROR: version {version_name} has empty progressNotifyWebhooks "
+            "and webhook_config.json default is empty"
+        )
     sfx_map = {vid: suffix} if suffix else None
     md = render_version_status_markdown([entry], checklist_suffix_by_id=sfx_map)
     return vid, md, urls
@@ -378,11 +565,6 @@ def run_version_progress_push(
     users = data_all.get("users") or []
     report_lines: list[str] = []
 
-    pm_uid = (cfg.get("default_pipeline_pm_user_id") or "").strip()
-    pm_user = _user_by_id(users, pm_uid) if pm_uid else None
-    pm_mobile = _dingtalk_mobile(pm_user)
-    pm_name_resolved = (pm_user or {}).get("name") or pm_uid or ""
-
     for vname, force_pld in jobs:
         print(f"=== {vname} ===", flush=True)
         raw = next(
@@ -396,30 +578,23 @@ def run_version_progress_push(
             report_lines.append(f"- **{vname}** 跳过（需求池不在默认推送列表）")
             continue
         pld_id = force_pld or raw.get("pldUserId") or ""
-        pl_user = _user_by_id(users, str(pld_id)) if pld_id else None
-        mobile = _dingtalk_mobile(pl_user)
-        pl_name = (pl_user or {}).get("name") or pld_id or ""
+        pl_name = (_user_by_id(users, str(pld_id)) or {}).get("name") if pld_id else ""
 
         vid, md, urls = _render_one(
             pm_url,
             api_key,
             vname,
             force_pld_user_id=force_pld,
-            pld_name=pl_name,
-            pm_name=pm_name_resolved,
+            cfg=cfg,
+            data_all=data_all,
+            users=users,
         )
 
+        at_list = _pipeline_at_mobiles(cfg, users, raw if not force_pld else {**raw, "pldUserId": force_pld})
         print(
-            f"pld={pl_name or '?'} id={pld_id} mobile={mobile!r} "
-            f"pm={pm_name_resolved or '?'} pm_mobile={pm_mobile!r} webhooks={len(urls)}",
+            f"pld={pl_name or '?'} id={pld_id} at={len(at_list)} webhooks={len(urls)}",
             flush=True,
         )
-
-        at_list: list[str] = []
-        if mobile:
-            at_list.append(mobile)
-        if pm_mobile and pm_mobile not in at_list:
-            at_list.append(pm_mobile)
         ok_wh = True
         for i, wh in enumerate(urls, 1):
             try:
@@ -453,6 +628,11 @@ def main() -> None:
         help="仅推送指定版本名，逗号分隔（无此项时推送默认列表：五一版、五月中、0401）",
     )
     ap.add_argument(
+        "--auto-scheduled",
+        action="store_true",
+        help="按规划节点窗口筛选版本：规划 DDL 距今 <=28 天或已到期、且未发版；Webhook 空则用 webhook_config.default",
+    )
+    ap.add_argument(
         "--report",
         default="_version_push_report.md",
         help="写入 logs/ 下的报告文件名",
@@ -463,6 +643,34 @@ def main() -> None:
         help="覆盖本次运行的 PM API 基址（否则：digest_config.pm_system_url > PM_SYSTEM_URL > 172 兜底）",
     )
     args = ap.parse_args()
+    ov = (args.pm_url or "").strip() or None
+    if args.auto_scheduled:
+        with open(DESKTOP_CFG, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        pm_url = (
+            ov
+            or (cfg.get("pm_system_url") or "").strip()
+            or (os.environ.get("PM_SYSTEM_URL") or "").strip()
+            or "http://172.16.3.197:8000"
+        ).rstrip("/")
+        api_key = (cfg.get("pm_system_api_key") or "").strip() or None
+        data_all = _extract_data(_api_get_json(f"{pm_url}/api/data", api_key))
+        names = _scheduled_version_names(data_all.get("versions") or [])
+        if not names:
+            print(
+                "AUTO_SCHEDULED: no versions match (planning DDL within 28d or overdue, release not done)",
+                flush=True,
+            )
+            raise SystemExit(0)
+        jobs = [(n, None) for n in names]
+        heading = f"猫姐嘴替 · 定时管线提醒 ({','.join(names)})"
+        run_version_progress_push(
+            jobs,
+            summary_heading=heading,
+            report_filename=args.report or "_pipeline_scheduled_report.md",
+            pm_url_override=ov,
+        )
+        return
     if (args.only or "").strip():
         jobs = [(n.strip(), None) for n in args.only.split(",") if n.strip()]
         heading = f"猫姐嘴替 · 专项推送 ({args.only.strip()})"

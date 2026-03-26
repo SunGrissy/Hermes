@@ -11,7 +11,11 @@ import urllib.error
 import urllib.request
 
 _ROOT = os.path.dirname(os.path.abspath(__file__))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 _WS = os.path.abspath(os.path.join(_ROOT, ".."))
+
+from lib.daemon_spawn import start_daemon_background  # noqa: E402
 _SEND = os.path.join(
     _WS, ".cursor", "skills", "cursor-to-dingtalk", "scripts", "send_result_webhook.py"
 )
@@ -60,16 +64,8 @@ def main() -> int:
     subprocess.run([ex, os.path.join(_ROOT, "kill_old_daemon.py")], cwd=_ROOT)
 
     time.sleep(2)
-    print("[2] start daemon.py", flush=True)
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
-    subprocess.Popen(
-        [ex, "daemon.py"],
-        cwd=_ROOT,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=flags,
-    )
+    print("[2] start daemon.py（将新开控制台窗口，便于看日志）", flush=True)
+    start_daemon_background(cwd=_ROOT, argv=[ex, "daemon.py"])
 
     ok, detail = _wait_daemon_ready(120)
     print("[3] health:", ok, detail[:200] if detail else "", flush=True)

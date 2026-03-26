@@ -24,7 +24,7 @@ _ROOT     = os.path.join(_THIS_DIR, '..')
 _CHECKLIST_DIR = os.path.join(_ROOT, '..', 'performeval', '面试', '简历初筛')
 
 sys.path.insert(0, _ROOT)
-from db.store import is_resume_processed, save_resume_result
+from db.store import is_resume_processed, save_resume_result, try_claim_resume_llm_slot
 
 DAEMON_URL = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 
@@ -655,7 +655,10 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
     tag = '应届' if is_fresh else '社招'
     print(f'[resume_screen] 猜测岗位: {role}, 候选人类型: {tag}, 清单: {"有" if checklist else "无"}')
 
-    # 3. LLM 初筛
+    # 3. LLM 初筛（调用前 DB 占位，避免轮询在 save 之前再次进入导致双份 webhook）
+    if not try_claim_resume_llm_slot(msg_id, group_cid, sender_uid, file_name, file_path):
+        print(f'[resume_screen] 跳过重复初筛(已有记录或并发占位): msg_id={msg_id!r} file={file_name!r}')
+        return False
     system_prompt, user_prompt = _build_prompt(resume_text, role, checklist, is_fresh=is_fresh)
     llm_output = _call_llm(user_prompt, system=system_prompt)
     print(f'[resume_screen] LLM输出:\n{llm_output}')

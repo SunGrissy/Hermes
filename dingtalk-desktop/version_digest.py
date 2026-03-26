@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """Version status digest - fetch from PmSystem dashboard and push via webhook.
 
+正文与定时管线任务同源：`_push_versions_webhook_at_dm` 的 `render_version_status_markdown`
++ 管线 checklist / 内部清单后缀；仍发往 `digest_config.json` 的 version_digest_webhooks。
+@ 人按 `version_digest_webhook_at_policy` 与 webhook 下标一一对应（见配置说明），不再对三群使用同一套管线 @。
+
 Usage:
     py version_digest.py              # fetch + send
     py version_digest.py --dry-run    # fetch + print only
@@ -19,6 +23,8 @@ from typing import Any, Dict, List, Optional, Tuple
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _CONFIG_PATH = os.path.join(_DIR, 'digest_config.json')
 _TEMPLATE_PATH = os.path.join(_DIR, 'message_templates.json')
+# VersionDigest 文末固定引导 PM 打开前台（与定时管线 digest 的 pm_system_url 可不同）
+VERSION_DIGEST_PM_DETAIL_URL = 'http://192.168.20.160:8112/index.html'
 
 _DEFAULT_TEMPLATE = {
     'title': '## 版本状态 [{timestamp}]',
@@ -146,8 +152,20 @@ def _load_config():
         return {}
 
 
-def _collect_version_digest_webhooks(config: dict) -> List[str]:
-    """版本状态推送目标：优先 version_digest_webhooks；否则主 URL + version_digest_webhook_extra；再无则 webhook_url。"""
+def _load_webhook_config() -> dict:
+    path = os.path.join(_DIR, 'webhook_config.json')
+    if not os.path.isfile(path):
+        return {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            j = json.load(f)
+        return j if isinstance(j, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _collect_version_digest_webhooks_urls_only(config: dict) -> List[str]:
+    """仅解析 URL 列表（未用 webhook_config 键名时）。"""
     raw = config.get('version_digest_webhooks')
     urls: List[str] = []
     if isinstance(raw, list):
@@ -185,6 +203,145 @@ def _collect_version_digest_webhooks(config: dict) -> List[str]:
     return out
 
 
+def _collect_version_digest_targets(config: dict) -> Tuple[List[str], List[Optional[str]]]:
+    """返回 (urls, webhook_config 键名)；键名为 None 表示走 legacy URL 列表 + 下标对齐 @ 策略。"""
+    wc = _load_webhook_config()
+    keys = config.get('version_digest_webhook_keys')
+    if isinstance(keys, list) and keys:
+        urls: List[str] = []
+        key_out: List[Optional[str]] = []
+        for k in keys:
+            rawk = str(k).strip()
+            if not rawk:
+                continue
+            u = str(wc.get(rawk) or '').strip()
+            if u:
+                urls.append(u)
+                key_out.append(rawk)
+            else:
+                print(
+                    f'[version-digest] webhook_config.json 缺少键 {rawk!r}，已跳过',
+                    flush=True,
+                )
+        if urls:
+            return urls, key_out
+    urls = _collect_version_digest_webhooks_urls_only(config)
+    return urls, [None] * len(urls)
+
+
+def _collect_version_digest_webhooks(config: dict) -> List[str]:
+    """版本状态推送 URL 列表（兼容旧调用）。"""
+    urls, _ = _collect_version_digest_targets(config)
+    return urls
+
+
+def _dingtalk_mobile_from_user(u: Optional[dict]) -> str:
+    if not u or not isinstance(u, dict):
+        return ''
+    ext = u.get('externalIds') or u.get('external_ids') or {}
+    if not isinstance(ext, dict):
+        ext = {}
+    return (str(ext.get('dingtalk_mobile') or '').strip()) or (str(u.get('phone') or '').strip())
+
+
+def _normalize_person_name(s: str) -> str:
+    return str(s or '').replace(' ', '').strip()
+
+
+def _policy_for_target(
+    config: dict, index: int, wc_key: Optional[str],
+) -> Optional[str]:
+    """优先 version_digest_webhook_at[键名]；否则 legacy 的 version_digest_webhook_at_policy 数组下标。"""
+    d = config.get('version_digest_webhook_at')
+    if isinstance(d, dict) and wc_key:
+        if wc_key in d:
+            v = d.get(wc_key)
+            if v is None:
+                return None
+            s = str(v).strip()
+            return s if s else None
+    arr = config.get('version_digest_webhook_at_policy')
+    if isinstance(arr, list) and index < len(arr):
+        return str(arr[index]).strip()
+    return None
+
+
+def _ops_member_names_for_digest(config: dict) -> List[str]:
+    explicit = config.get('version_digest_ops_member_names')
+    if isinstance(explicit, list) and explicit:
+        return [_normalize_person_name(x) for x in explicit if _normalize_person_name(x)]
+    mr = config.get('member_roles') or {}
+    for key in ('operations_team', 'operations'):
+        ot = mr.get(key)
+        if isinstance(ot, dict):
+            mem = ot.get('members')
+            if isinstance(mem, list):
+                return [_normalize_person_name(x) for x in mem if _normalize_person_name(x)]
+    return []
+
+
+def _at_mobiles_pm_apm(config: dict, users: List[dict]) -> List[str]:
+    by_id = {str(u.get('id') or ''): u for u in users if u.get('id')}
+    out: List[str] = []
+    seen: set = set()
+    for uid in (config.get('default_pipeline_pm_user_id'), config.get('default_pipeline_apm_user_id')):
+        u = by_id.get(str(uid or '').strip())
+        m = _dingtalk_mobile_from_user(u)
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def _at_mobiles_ops_team(config: dict, users: List[dict]) -> List[str]:
+    want = {_normalize_person_name(n) for n in _ops_member_names_for_digest(config)}
+    if not want:
+        return []
+    out: List[str] = []
+    seen: set = set()
+    for u in users:
+        if not isinstance(u, dict):
+            continue
+        uname = _normalize_person_name(str(u.get('name') or ''))
+        if uname not in want:
+            continue
+        m = _dingtalk_mobile_from_user(u)
+        if m and m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def _build_version_digest_at_per_url(
+    config: dict,
+    users: List[dict],
+    webhook_urls: List[str],
+    wc_keys: List[Optional[str]],
+    legacy_pipeline_at: List[str],
+) -> List[Optional[List[str]]]:
+    """每个 webhook 一份 @ 手机号列表；None 表示不圈人。wc_keys 与 webhook_config 键名对齐。"""
+    n = len(webhook_urls)
+    out: List[Optional[List[str]]] = []
+    for i in range(n):
+        k = wc_keys[i] if i < len(wc_keys) else None
+        pol = _policy_for_target(config, i, k)
+        if pol is None or str(pol).strip() == '':
+            out.append(list(legacy_pipeline_at))
+            continue
+        p = str(pol).strip().lower()
+        if p in ('none', 'off', 'no', '-', 'empty'):
+            out.append(None)
+        elif p in ('pm_apm', 'pmo', 'pm_apm_only'):
+            out.append(_at_mobiles_pm_apm(config, users))
+        elif p in ('ops_team', 'ops', 'operations'):
+            out.append(_at_mobiles_ops_team(config, users))
+        elif p in ('pipeline', 'full', 'all', 'legacy'):
+            out.append(list(legacy_pipeline_at))
+        else:
+            out.append(list(legacy_pipeline_at))
+    return out
+
+
 def _send_digest_to_webhooks(
     text: str,
     webhook_urls: List[str],
@@ -192,12 +349,38 @@ def _send_digest_to_webhooks(
     quiet: bool,
     at_mobiles: Optional[List[str]] = None,
 ) -> dict:
-    """同一正文依次 POST；全部成功才算 success。"""
+    """同一正文依次 POST（如异常通知）；全部成功才算 success。"""
     if not webhook_urls:
         return {'success': False, 'error': 'no_webhook'}
     last_err = None
     for idx, url in enumerate(webhook_urls):
         r = send_via_webhook(text, url, quiet=quiet, at_mobiles=at_mobiles)
+        if not r.get('success'):
+            last_err = r.get('error') or 'send failed'
+            if not quiet:
+                print(f'[send] webhook #{idx + 1} failed: {last_err}', flush=True)
+    if last_err is None:
+        return {'success': True}
+    return {'success': False, 'error': last_err}
+
+
+def _send_digest_body_to_webhooks(
+    digest_body: str,
+    webhook_urls: List[str],
+    at_mobiles_per_url: List[Optional[List[str]]],
+    *,
+    quiet: bool,
+) -> dict:
+    """digest_body 不含 @ 行；按 webhook 下标附加对应 @ 后发送。"""
+    if not webhook_urls:
+        return {'success': False, 'error': 'no_webhook'}
+    last_err = None
+    for idx, url in enumerate(webhook_urls):
+        raw = at_mobiles_per_url[idx] if idx < len(at_mobiles_per_url) else []
+        if raw is None:
+            raw = []
+        full = append_dingtalk_at_line(digest_body, raw)
+        r = send_via_webhook(full, url, quiet=quiet, at_mobiles=raw if raw else None)
         if not r.get('success'):
             last_err = r.get('error') or 'send failed'
             if not quiet:
@@ -247,12 +430,12 @@ def fetch_pm_users(pm_url: str, api_key=None) -> List[dict]:
 
 
 def collect_at_mobiles_for_versions(versions: List[dict], users: List[dict]) -> List[str]:
-    """汇总当前摘要中各版本 PLD/PLE/PLT 对应成员的钉钉手机号（去重）。"""
+    """汇总当前摘要中各版本 PLD/PLE/PLT-F/PLT-B 对应成员的钉钉手机号（去重）。"""
     by_id = {str(u.get('id') or ''): u for u in users if u.get('id')}
     out: List[str] = []
     seen: set = set()
     for v in versions:
-        for key in ('_pld', '_ple', '_plt'):
+        for key in ('_pld', '_ple', '_plt_f', '_plt_b', '_plt'):
             uid = v.get(key) or ''
             if not uid:
                 continue
@@ -274,6 +457,15 @@ def append_dingtalk_at_line(markdown: str, mobiles: List[str]) -> str:
         return markdown
     line = ' '.join(f'@{m}' for m in mobiles)
     return markdown.rstrip() + '\n\n' + line
+
+
+def append_pm_detail_footer(markdown: str, url: str = VERSION_DIGEST_PM_DETAIL_URL) -> str:
+    """文末增加 PM 查看版本详情链接（钉钉 Markdown）。"""
+    u = (url or '').strip()
+    if not u:
+        return markdown
+    block = f'\n\n---\n\n请 PM 前往 [查看版本详情]({u})。'
+    return markdown.rstrip() + block
 
 
 def fetch_dashboard(pm_url, api_key=None):
@@ -425,7 +617,9 @@ def _fallback_from_json(pm_url):
             '_pipeline_status': v.get('pipelineStatus', {}),
             '_pld': v.get('pldUserId', ''),
             '_ple': v.get('pleUserId', ''),
-            '_plt': v.get('pltUserId', ''),
+            '_plt_f': v.get('pltFUserId', '') or v.get('pltUserId', ''),
+            '_plt_b': v.get('pltBUserId', ''),
+            '_plt': v.get('pltFUserId', '') or v.get('pltBUserId', '') or v.get('pltUserId', ''),
         }
         result.append(entry)
     return result
@@ -459,7 +653,11 @@ def enrich_pipeline(pm_url, version):
     version['_pipeline_status'] = status
     version.setdefault('_pld', detail.get('pld_user_id') or detail.get('pldUserId', ''))
     version.setdefault('_ple', detail.get('ple_user_id') or detail.get('pleUserId', ''))
-    version.setdefault('_plt', detail.get('plt_user_id') or detail.get('pltUserId', ''))
+    plt_f = detail.get('plt_f_user_id') or detail.get('pltFUserId') or detail.get('plt_user_id') or detail.get('pltUserId', '')
+    plt_b = detail.get('plt_b_user_id') or detail.get('pltBUserId', '')
+    version.setdefault('_plt_f', plt_f)
+    version.setdefault('_plt_b', plt_b)
+    version.setdefault('_plt', plt_f or plt_b)
 
     today = date.today()
     overdue: List[str] = []
@@ -761,7 +959,7 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
     pm_url = config.get('pm_system_url', 'http://127.0.0.1:8000').rstrip('/')
     api_key = config.get('pm_system_api_key', '')
     limit = config.get('version_digest_limit', 3)
-    webhook_urls = _collect_version_digest_webhooks(config)
+    webhook_urls, wc_keys = _collect_version_digest_targets(config)
 
     if log_to_stdout:
         print(f'[version-digest] fetching from {pm_url}', flush=True)
@@ -809,43 +1007,70 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
     if log_to_stdout:
         print(f'[version-digest] {len(versions)} active version(s)', flush=True)
 
-    for v in versions:
-        v['_api_key'] = api_key or None
-        enrich_pipeline(pm_url, v)
+    version_names = [
+        str(v.get('name') or '').strip() for v in versions if str(v.get('name') or '').strip()
+    ]
+    try:
+        import _push_versions_webhook_at_dm as _pvd
+    except Exception as e:
+        if log_to_stdout:
+            print(f'[error] load progress digest module: {e}', flush=True)
+        return {
+            'ok': False,
+            'versions_count': len(versions),
+            'digest': '',
+            'error': str(e),
+        }
 
-    vids = [str(v.get('id') or '') for v in versions]
-    vids = [x for x in vids if x]
-    cl_map = (
-        fetch_checklist_blocks(pm_url, vids, api_key=api_key or None)
-        if vids
-        else {}
+    digest, at_ms, n_built = _pvd.render_multi_version_digest_markdown(
+        pm_url,
+        api_key or None,
+        version_names,
+        config,
+        log_to_stdout=log_to_stdout,
     )
+    if n_built == 0:
+        if log_to_stdout:
+            print('[error] version digest body: no version rendered', flush=True)
+        return {
+            'ok': False,
+            'versions_count': 0,
+            'digest': '',
+            'error': 'digest_body_failed',
+        }
 
-    digest = render_digest(versions, checklist_by_id=cl_map)
+    digest = append_pm_detail_footer(digest)
     pm_users = fetch_pm_users(pm_url, api_key=api_key or None)
-    at_ms = collect_at_mobiles_for_versions(versions, pm_users)
-    digest_to_send = append_dingtalk_at_line(digest, at_ms)
+    at_per_url = _build_version_digest_at_per_url(
+        config, pm_users, webhook_urls, wc_keys, at_ms,
+    )
 
     if log_to_stdout:
         try:
-            print(f'\n{digest_to_send}\n', flush=True)
+            print(f'\n{digest}\n', flush=True)
+            pairs = list(zip(wc_keys or [None] * len(webhook_urls), webhook_urls))
+            print(f'[version-digest] webhooks: {pairs}', flush=True)
+            at_map = config.get('version_digest_webhook_at')
+            if isinstance(at_map, dict) and at_map:
+                print(f'[version-digest] @ 策略: {at_map}', flush=True)
         except UnicodeEncodeError:
             enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
-            safe = (digest_to_send + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
+            safe = (digest + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
             print(f'\n{safe}\n', flush=True)
 
     if not send_webhook:
-        return {'ok': True, 'versions_count': len(versions), 'digest': digest_to_send, 'error': None}
+        return {'ok': True, 'versions_count': n_built, 'digest': digest, 'error': None}
 
     if not webhook_urls:
         if log_to_stdout:
             print('[version-digest] no webhook configured, skipping send', flush=True)
-        return {'ok': False, 'versions_count': len(versions), 'digest': digest_to_send,
+        return {'ok': False, 'versions_count': n_built, 'digest': digest,
                 'error': 'no_webhook'}
 
     quiet = not log_to_stdout
-    result = _send_digest_to_webhooks(
-        digest_to_send, webhook_urls, quiet=quiet, at_mobiles=at_ms or None)
+    result = _send_digest_body_to_webhooks(
+        digest, webhook_urls, at_per_url, quiet=quiet,
+    )
     ok = bool(result and result.get('success'))
     if log_to_stdout:
         if ok:
@@ -853,7 +1078,7 @@ def run_version_digest_send(*, send_webhook=True, log_to_stdout=True):
         else:
             print('[version-digest] send failed (one or more webhooks)', flush=True)
     err = None if ok else (result or {}).get('error', 'send failed')
-    return {'ok': ok, 'versions_count': len(versions), 'digest': digest_to_send, 'error': err}
+    return {'ok': ok, 'versions_count': n_built, 'digest': digest, 'error': err}
 
 
 def main():

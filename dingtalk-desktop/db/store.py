@@ -144,6 +144,11 @@ def init_db():
             c.execute("DELETE FROM topic_items WHERE status = 'deleted'")
         except Exception:
             pass
+        # 简历初筛：异常退出时可能残留 LLM 前占位，启动时清掉以免永久跳过
+        try:
+            c.execute("DELETE FROM resume_screen_log WHERE verdict = '__processing__'")
+        except Exception:
+            pass
         c.commit()
         c.close()
 
@@ -189,6 +194,28 @@ def is_resume_processed(msg_id):
         ).fetchone()
         c.close()
         return row is not None
+
+
+def try_claim_resume_llm_slot(msg_id, group_cid, sender_uid, file_name, file_path):
+    """在调用 LLM 前原子占位（INSERT OR IGNORE）。
+
+    skill_router 轮询间隔短于 LLM 耗时且 save 在 LLM 之后才写库时，仅靠 is_resume_processed
+    会误判「未处理」而跑两次。抢到返回 True；已有任意行（含占位/终态）则返回 False。
+    """
+    with _lock:
+        c = _conn()
+        cur = c.execute(
+            "INSERT OR IGNORE INTO resume_screen_log "
+            "(msg_id, group_cid, sender_uid, file_name, file_path, "
+            " role_guess, verdict, summary, reply_sent, ts_saved) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (str(msg_id), group_cid, sender_uid, file_name, file_path or '',
+             '—', '__processing__', 'LLM占位', 0, int(datetime.now().timestamp())),
+        )
+        ok = cur.rowcount > 0
+        c.commit()
+        c.close()
+        return ok
 
 
 def save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,

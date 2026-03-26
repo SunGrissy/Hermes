@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-03-26] - VersionDigest / 钉钉管线推送；pm-system 管线待办阻塞与关注拆分
+
+**状态**: 验收通过
+
+**内容**:
+- `dingtalk-desktop`：专项 Webhook 与 VersionDigest 拼装、定时管线 PowerShell、`README` 与 `版本与管线推送说明.md`、`WORK_LOG` 收口；`_push_versions_webhook_at_dm.py` 合并冲突已解决
+- `proc_manager.py`：进程列表与 desk_ops 调用相关能力
+- 子模块 `pm-system`：管线节点待办「阻塞/关注」语义（commit a79ca66）
+
+---
+
 ## [2026-03-25] - 简历初筛：主策L4接入与社招按岗位Prompt修复
 
 **状态**: 待推送

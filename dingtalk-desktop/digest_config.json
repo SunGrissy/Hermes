@@ -1,5 +1,6 @@
 {
   "default_pipeline_pm_user_id": "u021",
+  "default_pipeline_apm_user_id": "u079",
   "team_members": [
     "胡亚飞",
     "李思奕",
@@ -30,61 +31,98 @@
   "report_cids": [
     {
       "cid": "75777026600",
-      "name": "😈PMO 根据地"
+      "name": "😈PMO 根据地",
+      "digest_group": "pipeline"
     },
     {
       "cid": "71552826630",
-      "name": "🐱泊霆汇报直通车"
+      "name": "🐱泊霆汇报直通车",
+      "digest_group": "pipeline"
     },
     {
       "cid": "71409801410",
-      "name": "🐱建博汇报直通车"
+      "name": "🐱建博汇报直通车",
+      "digest_group": "ue"
     },
     {
       "cid": "57664562745",
-      "name": "游戏策划（综合）小分队"
+      "name": "游戏策划（综合）小分队",
+      "digest_group": "pipeline"
     },
     {
       "cid": "52400369574",
-      "name": "人财双全小分队"
+      "name": "人财双全小分队",
+      "digest_group": "pipeline"
     },
     {
       "cid": "55073079110",
-      "name": "某阴谋团伙"
+      "name": "某阴谋团伙",
+      "digest_group": "_default"
     },
     {
       "cid": "73809939435",
-      "name": "🐱崔哥日报直通车"
+      "name": "🐱崔哥日报直通车",
+      "digest_group": "ue"
     },
     {
       "cid": "72720439606",
-      "name": "🐱鹏锐汇报直通车"
+      "name": "🐱鹏锐汇报直通车",
+      "digest_group": "pipeline"
     },
     {
       "cid": "75777049720",
-      "name": "🐱君怡日报直通车"
+      "name": "🐱君怡日报直通车",
+      "digest_group": "tech"
     },
     {
       "cid": "73472166912",
-      "name": "🐱杨琳汇报直通车"
+      "name": "🐱杨琳汇报直通车",
+      "digest_group": "numeric"
     },
     {
       "cid": "75297169312",
-      "name": "🐱涛哥日报直通车"
+      "name": "🐱涛哥日报直通车",
+      "digest_group": "tech"
     },
     {
       "cid": "74897307474",
-      "name": "🐱思奕汇报直通车"
+      "name": "🐱思奕汇报直通车",
+      "digest_group": "pipeline"
     },
     {
       "cid": "61952667675",
-      "name": "数值小分队"
+      "name": "数值小分队",
+      "digest_group": "numeric"
     },
     {
       "cid": "47857575121",
-      "name": "4S"
+      "name": "4S",
+      "digest_group": "combat"
     }
   ],
+  "digest_group_labels": {
+    "tech": "技术",
+    "combat": "战斗",
+    "numeric": "数值",
+    "pipeline": "PLD和PM管线",
+    "ue": "UE",
+    "_default": "默认分组"
+  },
+  "digest_group_order": [
+    "tech",
+    "combat",
+    "numeric",
+    "pipeline",
+    "ue",
+    "_default"
+  ],
+  "digest_run": {
+    "_note": "run_daily_digest.ps1 读取；ps1_notify_level: minimal 仅开始+汇总+致命失败，少刷助理群；use_progress_webhook false 时不传 --notify-default，避免与 PS1 双通道刷屏",
+    "max_seconds_per_group": 480,
+    "inter_group_wait_seconds": 15,
+    "ps1_notify_level": "minimal",
+    "use_progress_webhook": false
+  },
   "member_roles": {
     "tech_leader": {
       "members": ["杨玉涛", "车君怡"],
@@ -122,7 +160,23 @@
   "pm_system_url": "http://192.168.20.160:8112",
   "pm_system_api_key": "jluAsEdnr40fHjg7E88t",
   "version_digest_limit": 3,
-  "_note_version_digest_webhooks": "版本状态同一 Markdown 依次推送到下列群；机器人自定义关键词均为「小秘书提醒」。也可用 version_digest_webhook + version_digest_webhook_extra 代替本数组。",
+  "_note_version_digest_webhooks": "版本汇总推送：优先 version_digest_webhook_keys + webhook_config.json 键名解析 URL；未配置 keys 时仍可用 version_digest_webhooks 直填 URL（此时 @ 用 version_digest_webhook_at_policy 数组与 URL 顺序对齐）。机器人关键词均为「小秘书提醒」。",
+  "_note_version_digest_webhook_at": "键名与 webhook_config.json 一致。pm_apm=仅圈 PM+APM；none=不圈；ops_team=圈 version_digest_ops_member_names。未写明的键或旧版仅 URL 列表时回退为管线全角色 @。",
+  "version_digest_webhook_keys": [
+    "version_digest_pmo",
+    "version_digest_assistant",
+    "version_digest_pld"
+  ],
+  "version_digest_webhook_at": {
+    "version_digest_pmo": "pm_apm",
+    "version_digest_assistant": "none",
+    "version_digest_pld": "ops_team"
+  },
+  "version_digest_ops_member_names": [
+    "崔忠仁",
+    "刘泊霆",
+    "杨琳"
+  ],
   "version_digest_webhooks": [
     "https://oapi.dingtalk.com/robot/send?access_token=bbfd047b27aa532ffb63efd05c9db6a7dd38d646a6c07f2009e78c93bc7f8057",
     "https://oapi.dingtalk.com/robot/send?access_token=454440d2f30976530212cfe9dd3b0d6906a58d06467b61eb9eee2602124e8ba1",
@@ -167,7 +221,9 @@
     "person_lookup_aliases": ["洋哥", "崔哥", "UX", "战斗","崔忠仁","刘泊霆","张旭哲","王翕然","赵宇驰","车君怡","张颖","张梦君","郑杉","李振源","穆建博","吕佳悦","毛永林","程家叙","孙悦","龚锦","杨琳"],
     "_note_person_lookup": "群内仅发「洋哥」「找洋哥」等（须与列表完全一致）→ 列出正文含该词的进行中备忘与愿望",
     "desk_ops_enabled": true,
-    "_note_desk_ops": "检查大门|大门检查；重启大门|大门重启；拉今天/昨天/260319/20260319/N天日报 → report_digest 带 --full-content --notify-default（过程通知走 webhook default）；开始/完成仍走 memo webhook（设 desk_ops_enabled false 关闭）",
+    "_note_desk_ops": "启动PM / 启动 PM（中间可空格，PM 大小写均可）→ taskkill + quick_start_headless.bat，约 8s 后探活并 webhook。查看进程 / 关进程 N；检查大门；重启大门；拉日报 digest-group；设 desk_ops_enabled false 关闭",
+    "services_status_check": [],
+    "_note_services_status_check": "非空数组则完全替换内置巡检项。上班啦自动拉起：Windows 默认 **新开控制台** 看日志；无头设 STATUS_CHECK_START_HEADLESS=1 则静默并写 logs/autostart_*.log。daemon 由脚本拉起时同理会新开窗口；无头设 DINGTALK_DAEMON_HEADLESS=1 写 logs/daemon_console.log。端口已监听跳过 start、daemon 防重复等见前文。查岗只读；全绿不推钉钉。",
     "wish_assignee": "愿望单",
     "wish_module": "愿望单",
     "task_reminder_base": "http://192.168.20.114:8111",
@@ -185,6 +241,7 @@
     "_note_doc_review_progress": "预审进度心跳：每隔 N 秒推送一条（阶段+已等待秒数）；设为 0 关闭",
     "doc_review_progress_interval_seconds": 30
   },
+  "_note_recruit_resume": "recruit_cids 会话里 ct=502 PDF 会走简历初筛；本人发给 HR 的 PDF 由 skill_router 按 is_self/uid 排除；文件名含面试评价/述职等内部材料关键词也会跳过（见 skill_router _RESUME_SKIP_NAME_SUBSTRINGS）。时间窗：仅看本机 PDF 的 mtime（下载/落盘）是否在近 48h；无本机文件时不做时间挡，早期发送的简历可先进 pipeline，下载后再用 mtime 判。",
   "recruit_cids": [
     {
       "cid": "73137527367",

@@ -20,6 +20,7 @@ import sys
 import io
 import json
 import time
+import re
 import argparse
 import urllib.request
 from datetime import datetime, timedelta
@@ -132,6 +133,8 @@ def _resolve_llm_config():
         model or 'gpt-4o-mini',
     )
 
+# [AgentDgst Task] 开始时间: 2026-03-25 00:00
+# [AgentDgst Task] 任务目标: DIGEST-001 分组拉取与顺序编排
 LLM_API_KEY, LLM_API_BASE, LLM_MODEL = _resolve_llm_config()
 
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'digest_config.json')
@@ -194,6 +197,141 @@ def _save_config(config):
     with open(_CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
     print(f'[config] saved to {_CONFIG_PATH}', flush=True)
+
+
+def _normalize_group_id(raw):
+    gid = str(raw or '').strip().lower()
+    return gid if gid else '_default'
+
+
+def _resolve_report_group(entry):
+    if isinstance(entry, dict):
+        return _normalize_group_id(entry.get('digest_group', '_default'))
+    return '_default'
+
+
+def _build_grouped_report_cids(config):
+    grouped = {}
+    for entry in config.get('report_cids', []):
+        gid = _resolve_report_group(entry)
+        grouped.setdefault(gid, []).append(entry)
+
+    configured_order = [
+        _normalize_group_id(x) for x in (config.get('digest_group_order') or [])
+    ]
+    labels = config.get('digest_group_labels') or {}
+
+    ordered = []
+    seen = set()
+    for gid in configured_order:
+        if gid in grouped and gid not in seen:
+            ordered.append(gid)
+            seen.add(gid)
+
+    rest = [gid for gid in grouped.keys() if gid not in seen]
+    rest_non_default = [gid for gid in rest if gid != '_default']
+    rest_default = [gid for gid in rest if gid == '_default']
+    ordered.extend(rest_non_default)
+    ordered.extend(rest_default)
+
+    return {
+        'grouped': grouped,
+        'order': ordered,
+        'labels': labels,
+    }
+
+
+def _pick_report_cids(config, digest_group=None):
+    info = _build_grouped_report_cids(config)
+    grouped = info['grouped']
+    labels = info['labels']
+    if not digest_group:
+        return {
+            'group_id': None,
+            'group_label': '全量',
+            'report_cids': config.get('report_cids', []),
+            'group_count': len(info['order']),
+        }
+
+    gid = _normalize_group_id(digest_group)
+    if gid not in grouped:
+        return {
+            'error': f'unknown digest group: {gid}',
+            'known_groups': info['order'],
+        }
+    return {
+        'group_id': gid,
+        'group_label': labels.get(gid, gid),
+        'report_cids': grouped.get(gid, []),
+        'group_count': len(info['order']),
+    }
+
+
+def _print_digest_groups(config):
+    info = _build_grouped_report_cids(config)
+    labels = info['labels']
+    print('[groups] digest groups:', flush=True)
+    for gid in info['order']:
+        glabel = labels.get(gid, gid)
+        size = len(info['grouped'].get(gid, []))
+        print(f'  - {gid} ({_safe(glabel)}): {size} groups', flush=True)
+
+
+def _derive_watch_members(group_id, config):
+    team = list(config.get('team_members', []) or [])
+    if not group_id:
+        return team
+
+    roles = config.get('member_roles', {}) or {}
+    team_set = set(team)
+    selected = set()
+
+    role_key_map = {
+        'tech': ['tech_leader'],
+        'combat': ['combat'],
+        'pipeline': ['pipeline_pm', 'apm', 'pld_candidate', 'qa_lead'],
+        'ue': ['ue_designer', 'art_director'],
+        'numeric': [],
+    }
+
+    for role_key in role_key_map.get(group_id, []):
+        role_info = roles.get(role_key, {})
+        for name in role_info.get('members', []) or []:
+            if not team_set or name in team_set:
+                selected.add(name)
+
+    if not selected:
+        for role_key, role_info in roles.items():
+            focus = str(role_info.get('focus', '') or '')
+            marker = f'{role_key} {focus}'
+            hit = False
+            if group_id == 'tech':
+                hit = ('技术' in marker) or ('tech' in role_key.lower())
+            elif group_id == 'combat':
+                hit = '战斗' in marker
+            elif group_id == 'pipeline':
+                hit = ('管线' in marker) or ('APM' in marker) or ('PM' in marker) or ('QA' in marker)
+            elif group_id == 'ue':
+                hit = ('UE' in marker) or ('体验' in marker) or ('主美' in marker)
+            elif group_id == 'numeric':
+                hit = ('数值' in marker)
+            if not hit:
+                continue
+            for name in role_info.get('members', []) or []:
+                if not team_set or name in team_set:
+                    selected.add(name)
+
+    if not selected:
+        grouped = _build_grouped_report_cids(config).get('grouped', {})
+        hints = []
+        for entry in grouped.get(group_id, []):
+            name = entry.get('name', '') if isinstance(entry, dict) else ''
+            hints.extend(re.findall(r'[\u4e00-\u9fff]{2,}', name))
+        for member in team:
+            if any(member in h or h in member for h in hints):
+                selected.add(member)
+
+    return sorted(selected)
 
 
 def _daemon_request(path, body=None):
@@ -420,7 +558,8 @@ def _extract_report_text(m):
     return m.get('text', '') or ''
 
 
-def analyze_reports(messages, team_members, target_date, member_roles=None):
+def analyze_reports(messages, team_members, target_date, member_roles=None,
+                    watch_members=None, group_context=None):
     if not LLM_API_KEY:
         print('[warn] LLM_API_KEY not set, skipping analysis', flush=True)
         return _fallback_analysis(messages, team_members, target_date)
@@ -441,10 +580,12 @@ def analyze_reports(messages, team_members, target_date, member_roles=None):
         submitters.add(sender)
         report_texts.append(f'[{sender}]\n{text[:text_limit]}')
 
-    missing = [n for n in team_members if n not in submitters] if team_members else []
+    watch_scope = watch_members if watch_members is not None else team_members
+    missing = [n for n in watch_scope if n not in submitters] if watch_scope else []
 
     prompt = _build_analysis_prompt(
-        report_texts, list(submitters), missing, target_date, member_roles)
+        report_texts, list(submitters), missing, target_date, member_roles,
+        group_context=group_context)
 
     try:
         result = _call_llm(prompt)
@@ -456,24 +597,24 @@ def analyze_reports(messages, team_members, target_date, member_roles=None):
             if cleaned.endswith('```'):
                 cleaned = cleaned[:-3].strip()
         parsed = json.loads(cleaned)
-        team_set = set(team_members) if team_members else set()
+        team_set = set(watch_scope) if watch_scope else set()
         team_submitters = submitters & team_set if team_set else submitters
         parsed['submission'] = {
             'submitted': sorted(team_submitters),
             'missing': sorted(missing),
-            'total': len(team_members) if team_members else len(submitters),
+            'total': len(watch_scope) if watch_scope else len(submitters),
             'submitted_count': len(team_submitters),
         }
         return parsed
     except (json.JSONDecodeError, Exception) as e:
         print(f'[warn] LLM parse error: {e}, using fallback', flush=True)
-        analysis = _fallback_analysis(messages, team_members, target_date)
+        analysis = _fallback_analysis(messages, watch_scope, target_date)
         analysis['llm_raw'] = result if 'result' in dir() else ''
         return analysis
 
 
 def _build_analysis_prompt(report_texts, submitters, missing, target_date,
-                           member_roles=None):
+                           member_roles=None, group_context=None):
     reports_block = '\n---\n'.join(report_texts[:40])
     missing_str = ', '.join(missing) if missing else '(none)'
 
@@ -500,8 +641,18 @@ def _build_analysis_prompt(report_texts, submitters, missing, target_date,
         tech_leaders = tl.get('members', [])
     tech_str = '、'.join(tech_leaders) if tech_leaders else '技术leader'
 
+    group_line = ''
+    if group_context:
+        glabel = group_context.get('label', '')
+        gid = group_context.get('id', '')
+        group_line = (
+            f'\n## 分组范围\n'
+            f'仅分析分组【{glabel or gid}】内的日报，不要推断其他分组成员状态。\n'
+        )
+
     return f"""你是一位游戏研发团队的管理助手。以下是 {target_date} 收到的团队日报。
 请从制作人视角分析这些日报，输出 JSON 格式结果。
+{group_line}
 
 ## 分析维度
 
@@ -592,7 +743,7 @@ def _fallback_analysis(messages, team_members, target_date):
     }
 
 
-def format_digest(analysis, target_date):
+def format_digest(analysis, target_date, group_label=None):
     tmpl = _load_report_template()
     secs = tmpl.get('sections', {})
     sub_tmpl = tmpl.get('submission', {})
@@ -605,7 +756,10 @@ def format_digest(analysis, target_date):
         window_str = ''
 
     title_fmt = tmpl.get('title', '{date} 日报摘要 {window}')
-    lines = [title_fmt.format(date=target_date, window=window_str)]
+    title = title_fmt.format(date=target_date, window=window_str)
+    if group_label:
+        title = f'{title} · {group_label}'
+    lines = [title]
 
     sub = analysis.get('submission', {})
     total = sub.get('total', 0)
@@ -903,6 +1057,15 @@ def fetch_full_contents(messages):
     print(f'[full-content] enriched {enriched}/{len(messages)} reports'
           f'{f", {skipped_error} skipped (expired URL)" if skipped_error else ""}',
           flush=True)
+    # 供 run_daily_digest.ps1 汇总卡解析（单行、ASCII key）
+    print(
+        '[digest-meta] '
+        f'full_content_enriched={enriched} '
+        f'full_content_with_url={total_url} '
+        f'full_content_messages={len(messages)} '
+        f'full_content_skipped_error={skipped_error}',
+        flush=True,
+    )
     return messages
 
 
@@ -1153,7 +1316,23 @@ def main():
         metavar='TS',
         help='Fetch upper bound YYYY-MM-DD HH:MM:SS (use with --after)',
     )
+    parser.add_argument(
+        '--digest-group',
+        default=None,
+        help='Only run one digest group (configured by report_cids[].digest_group)',
+    )
+    parser.add_argument(
+        '--list-digest-groups',
+        action='store_true',
+        help='List configured digest groups and exit',
+    )
     args = parser.parse_args()
+
+    config = _load_config()
+
+    if args.list_digest_groups:
+        _print_digest_groups(config)
+        return 0
 
     if args.discover:
         use_marker = args.marker if args.marker else (False if args.name else None)
@@ -1175,8 +1354,13 @@ def main():
         return
 
     if args.fetch_only:
-        cfg = _load_config()
-        report_cids = cfg.get('report_cids', [])
+        pick = _pick_report_cids(config, args.digest_group)
+        if pick.get('error'):
+            print(f"[error] {pick.get('error')}", flush=True)
+            print(f"[error] known groups: {', '.join(pick.get('known_groups', []))}", flush=True)
+            return 1
+        report_cids = pick.get('report_cids', [])
+        group_label = pick.get('group_label', '全量')
         wh = _load_default_webhook_url()
         if not wh and not args.dry_run:
             print('[error] fetch-only needs webhook_config.json "default" URL (or --dry-run)',
@@ -1213,7 +1397,7 @@ def main():
         td_log = datetime.strptime(after_str.split()[0], '%Y-%m-%d').strftime(
             '%Y-%m-%d')
 
-        print(f'[fetch-only] window={win_label}', flush=True)
+        print(f'[fetch-only] group={_safe(group_label)}, window={win_label}', flush=True)
         messages = fetch_reports(
             td_log, report_cids, after_str=after_str, before_str=before_str)
         jsapi_n = len(messages)
@@ -1241,11 +1425,19 @@ def main():
         return 1
 
     target_date = args.date or datetime.now().strftime('%Y-%m-%d')
-    config = _load_config()
     team = config.get('team_members', [])
     notify = config.get('notify_target', '') or NOTIFY_TARGET
     webhook_url = config.get('webhook_url', '') or ''
-    report_cids = config.get('report_cids', [])
+    pick = _pick_report_cids(config, args.digest_group)
+    if pick.get('error'):
+        print(f"[error] {pick.get('error')}", flush=True)
+        print(f"[error] known groups: {', '.join(pick.get('known_groups', []))}", flush=True)
+        return 1
+    group_id = pick.get('group_id')
+    group_label = pick.get('group_label', '全量')
+    report_cids = pick.get('report_cids', [])
+    watch_members = _derive_watch_members(group_id, config)
+    scope_members = watch_members if group_id else team
 
     env_notify = os.environ.get('REPORT_DIGEST_NOTIFY_DEFAULT', '').strip().lower()
     want_progress = bool(args.notify_default or env_notify in ('1', 'true', 'yes', 'on'))
@@ -1257,7 +1449,8 @@ def main():
                 '日报进度',
                 [
                     f'任务开始 · 统计日期 **{target_date}**',
-                    f'团队 **{len(team)}** 人，监听群 **{len(report_cids)}**',
+                    f'分组 **{_safe(group_label)}** · 监听群 **{len(report_cids)}**',
+                    f'统计成员 **{len(scope_members)}** 人',
                     '时间窗口：当日 **18:30** → 次日 **12:00**',
                 ],
             )
@@ -1265,8 +1458,8 @@ def main():
             print('[warn] --notify-default set but webhook_config default URL is empty',
                   flush=True)
 
-    print(f'[report-digest] date={target_date}, team={len(team)} members, '
-          f'groups={len(report_cids)}', flush=True)
+    print(f'[report-digest] date={target_date}, group={group_id or "all"}, '
+          f'members={len(scope_members)}, groups={len(report_cids)}', flush=True)
 
     messages = fetch_reports(target_date, report_cids)
     jsapi_count = len(messages)
@@ -1292,8 +1485,14 @@ def main():
     if _PROGRESS_WEBHOOK_URL:
         _notify_progress('LLM分析', ['正在汇总日报并请求模型，请稍候…'])
 
-    analysis = analyze_reports(messages, team, target_date)
-    digest_text = format_digest(analysis, target_date)
+    analysis = analyze_reports(
+        messages,
+        team,
+        target_date,
+        watch_members=watch_members if group_id else team,
+        group_context={'id': group_id, 'label': group_label} if group_id else None,
+    )
+    digest_text = format_digest(analysis, target_date, group_label=group_label if group_id else None)
 
     print('\n' + digest_text + '\n', flush=True)
 
