@@ -373,8 +373,53 @@ def _build_prompt(resume_text: str, role: str, checklist: str,
     return system, user
 
 
+# 行级解析：标签 → 内部字段名（顺序长的优先，如「详细理由」先于「理由」）
+_LINE_TO_FIELD = [
+    ('详细理由', 'reason'),
+    ('结论', 'verdict'),
+    ('核心判定', 'core'),
+    ('理由', 'reason'),
+    ('亮点', 'highlights'),
+    ('红线', 'redlines'),
+    ('建议考察', 'focus'),
+    ('潜力信号', 'potential'),
+    ('L4评估', 'l4_assess'),
+    ('L3评估', 'l3_assess'),
+    ('定级判断', 'level'),
+]
+
+
+def _parse_llm_output_lines(text: str) -> dict:
+    """按行解析「标签：内容」，兼容编号、Markdown 残留。"""
+    out = {}
+    if not text:
+        return out
+    for raw in text.splitlines():
+        line = raw.strip().replace('**', '').strip()
+        line = re.sub(r'^\d+[\.\)、]\s*', '', line)
+        if not line:
+            continue
+        m = re.match(r'^(.+?)[：:]\s*(.*)$', line)
+        if not m:
+            continue
+        key = m.group(1).strip()
+        key = re.sub(r'^#+\s*', '', key)
+        key = re.sub(r'^[\d\.\s、]+', '', key).strip()
+        val = m.group(2).strip()
+        if not val:
+            continue
+        for cn, field in _LINE_TO_FIELD:
+            if key == cn or key.endswith(cn):
+                if field not in out or not out.get(field):
+                    out[field] = val
+                break
+    return out
+
+
 def _parse_llm_output(text: str) -> dict:
     """从 LLM 输出中解析结构化字段"""
+    # 模型常输出 **结论**：…；单行正则易漏；行级解析作补全。
+    text = (text or '').replace('**', '').strip()
     result = {
         'verdict': '待定',
         'core': '',
@@ -382,15 +427,15 @@ def _parse_llm_output(text: str) -> dict:
         'highlights': '',
         'redlines': '',
         'focus': '',
-        'potential': '',   # 应届生专用：潜力信号
-        'l4_assess': '',   # 主策专用：L4 能力评估
-        'l3_assess': '',   # 社招专用：L3 架构能力评估
-        'level': '',       # 社招专用：定级判断
+        'potential': '',
+        'l4_assess': '',
+        'l3_assess': '',
+        'level': '',
     }
     patterns = {
         'verdict':    r'结论[：:]\s*(.+)',
         'core':       r'核心判定[：:]\s*(.+)',
-        'reason':     r'理由[：:]\s*(.+)',
+        'reason':     r'(?:理由|详细理由)[：:]\s*(.+)',
         'highlights': r'亮点[：:]\s*(.+)',
         'redlines':   r'红线[：:]\s*(.+)',
         'focus':      r'建议考察[：:]\s*(.+)',
@@ -403,7 +448,20 @@ def _parse_llm_output(text: str) -> dict:
         m = re.search(pat, text)
         if m:
             result[key] = m.group(1).strip()
+    line_hit = _parse_llm_output_lines(text)
+    for k, v in line_hit.items():
+        if not v:
+            continue
+        if not result.get(k) or (k == 'verdict' and result[k] == '待定'):
+            result[k] = v
     return result
+
+
+def _sanitize_dingtalk_field(s: str) -> str:
+    """正文里未闭合的 * 会导致钉钉 Markdown 整段不展示，星号转全角。"""
+    if not s:
+        return ''
+    return str(s).replace('*', '＊')
 
 
 # ── 加载 webhook 配置 ────────────────────────────────────────
@@ -470,25 +528,33 @@ def _load_resume_template() -> dict:
 
 _DEFAULT_TEMPLATE = {
     'title': {
-        'pass':    '✅ 简历初筛通过 | {candidate} · {role}',
+        'pass':    '✅ 简历初筛通过 | {candidate} · {role} · {level}',
         'pending': '❓ 简历初筛待定 | {candidate} · {role}',
         'fail':    '❌ 简历初筛不通过 | {candidate} · {role}',
     },
+    'title_fresh': {
+        'pass':    '✅ 应届初筛通过 | {candidate} · {role} · {level}',
+        'pending': '❓ 应届初筛待定 | {candidate} · {role}',
+        'fail':    '❌ 应届初筛不通过 | {candidate} · {role}',
+    },
     'lines': [
-        {'key': 'core',       'show': True,  'tpl': '** **核心判定：** {core}'},
-        {'key': 'l4_assess',  'show': True,  'tpl': '** **L4评估：** {l4_assess}'},
-        {'key': 'l3_assess',  'show': True,  'tpl': '** **L3评估：** {l3_assess}'},
-        {'key': 'level',      'show': True,  'tpl': '** **定级判断：** {level}'},
-        {'key': 'highlights', 'show': True,  'tpl': '** **亮点：** {highlights}'},
-        {'key': 'redlines',   'show': True,  'tpl': '** **红线：** {redlines}'},
-        {'key': 'reason',     'show': True,  'tpl': '** **详细理由：** {reason}'},
+        {'key': 'core',       'show': True,  'tpl': '核心判定：{core}'},
+        {'key': 'l4_assess',  'show': True,  'tpl': 'L4评估：{l4_assess}'},
+        {'key': 'l3_assess',  'show': True,  'tpl': 'L3评估：{l3_assess}'},
+        {'key': 'level',      'show': True,  'tpl': '定级判断：{level}'},
+        {'key': 'highlights', 'show': True,  'tpl': '亮点：{highlights}'},
+        {'key': 'redlines',   'show': True,  'tpl': '红线：{redlines}'},
+        {'key': 'reason',     'show': True,  'tpl': '理由：{reason}'},
     ],
 }
 
 
 def _format_reply(file_name: str, role: str, parsed: dict,
-                  is_fresh: bool = False, source_name: str = '') -> tuple:
-    """从 message_templates.json 读模板，返回 (title, markdown_text)。"""
+                  is_fresh: bool = False, source_name: str = '', llm_raw: str = '') -> tuple:
+    """从 message_templates.json 读模板，返回 (title, markdown_text)。
+
+    正文避免 ###、--- 及未闭合 **，防止钉钉 Markdown 只显示标题与来源。
+    """
     tpl = _load_resume_template() or _DEFAULT_TEMPLATE
     candidate = file_name.replace('.pdf', '').replace('.PDF', '')
 
@@ -496,9 +562,13 @@ def _format_reply(file_name: str, role: str, parsed: dict,
     title_section = 'title_fresh' if is_fresh else 'title'
     title_tpl = tpl.get(title_section, tpl.get('title', _DEFAULT_TEMPLATE['title'])).get(
         verdict_key, '{candidate} · {role}')
-    title = title_tpl.format(candidate=candidate, role=role)
+    level_title = (parsed.get('level') or '').strip() or '无定级'
+    if '{level}' in title_tpl:
+        title = title_tpl.format(candidate=candidate, role=role, level=level_title)
+    else:
+        title = title_tpl.format(candidate=candidate, role=role)
 
-    ctx = {
+    raw_ctx = {
         'candidate':  candidate,
         'role':       role,
         'source':     source_name,
@@ -511,28 +581,36 @@ def _format_reply(file_name: str, role: str, parsed: dict,
         'redlines':   parsed.get('redlines', ''),
         'reason':     parsed.get('reason', ''),
     }
+    ctx = {k: _sanitize_dingtalk_field(v) if k != 'candidate' and k != 'role' and k != 'source' else v
+           for k, v in raw_ctx.items()}
 
     lines_key = 'fresh_lines' if is_fresh else 'lines'
     line_defs = tpl.get(lines_key, _DEFAULT_TEMPLATE['lines'])
 
-    body_lines = [f'### {title}', '---']
-
-    # 来源行（有值才显示）
+    body_lines = []
     if source_name:
-        source_tpl = tpl.get('source_line', '► **来源：** {source}')
-        body_lines.append('\n' + source_tpl.format(**ctx))
+        source_tpl = tpl.get('source_line', '来源：{source}')
+        body_lines.append(source_tpl.format(**ctx))
+        body_lines.append('')
 
+    detail_count = 0
     for item in line_defs:
         if not item.get('show', True):
             continue
-        val = ctx.get(item['key'], '')
+        val = raw_ctx.get(item['key'], '')
         if not val or val == '无':
             continue
-        body_lines.append('\n' + item['tpl'].format(**ctx))
+        detail_count += 1
+        body_lines.append(item['tpl'].format(**ctx))
+        body_lines.append('')
 
-    body_lines.append('\n---')
+    if detail_count == 0 and (llm_raw or '').strip():
+        snippet = (llm_raw or '').replace('**', '').strip()[:2800]
+        body_lines.append('【模型输出】')
+        body_lines.append(snippet)
+
     body_lines.append(_load_footer())
-    return title, '\n'.join(body_lines)
+    return title, '\n'.join(body_lines).strip()
 
 
 def _load_footer() -> str:
@@ -670,14 +748,16 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
     # 5. 发消息 + 入库
     #    通过 → 详细格式；待定/不通过 → ❓/❌ 通知（含核心判定）
     if parsed['verdict'] != '通过':
-        title, notify_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh, source_name=source_name)
+        title, notify_text = _format_reply(
+            file_name, role, parsed, is_fresh=is_fresh, source_name=source_name, llm_raw=llm_output)
         sent = _send_via_webhook(title, notify_text)
         print(f'[resume_screen] 结论={parsed["verdict"]}，通知已发: {"成功" if sent else "失败"}')
         save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
                            role, parsed['verdict'], summary, reply_sent=sent)
         return False
 
-    title, reply_text = _format_reply(file_name, role, parsed, is_fresh=is_fresh, source_name=source_name)
+    title, reply_text = _format_reply(
+        file_name, role, parsed, is_fresh=is_fresh, source_name=source_name, llm_raw=llm_output)
     sent = _send_via_webhook(title, reply_text)
     print(f'[resume_screen] 消息发送: {"成功" if sent else "失败"}')
 

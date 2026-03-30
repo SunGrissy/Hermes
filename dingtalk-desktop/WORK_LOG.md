@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-03-30] 待发变更入库：模板与简历技能、260330 可分发包、daemon_spawn、Webhook 说明
+
+### 状态：已提交（待推送）
+
+### 本次工作内容
+
+- `message_templates.json`、`skills/resume_screen.py`：待发修改一并入库
+- `dingtalk-desktop260330/`：独立可分发 skill 源码（不含 zip 构建产物）
+- `lib/daemon_spawn.py`：守护进程拉起辅助
+- `WEBHOOK_关键词说明.md`：机器人关键词说明
+
+---
+
 ## [2026-03-26] 定时管线 + 专项 suffix：规划窗口 / 任务名 1945 / 管线待办本机覆盖接口
 
 ### 状态：待验收

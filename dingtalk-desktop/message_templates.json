@@ -133,34 +133,34 @@
 
   "resume_screen": {
     "title": {
-      "pass":    "✅ 简历初筛通过 | {candidate} · {role}",
+      "pass":    "✅ 简历初筛通过 | {candidate} · {role} · {level}",
       "pending": "❓ 简历初筛待定 | {candidate} · {role}",
       "fail":    "❌ 简历初筛不通过 | {candidate} · {role}"
     },
 
     "title_fresh": {
-      "pass":    "✅ 应届初筛通过 | {candidate} · {role}",
+      "pass":    "✅ 应届初筛通过 | {candidate} · {role} · {level}",
       "pending": "❓ 应届初筛待定 | {candidate} · {role}",
       "fail":    "❌ 应届初筛不通过 | {candidate} · {role}"
     },
 
     "lines": [
-      { "key": "core",       "show": true, "tpl": "❗ **核心判定：** {core}" },
-      { "key": "l3_assess",  "show": true, "tpl": "🏗 **L3评估：** {l3_assess}" },
-      { "key": "level",      "show": true, "tpl": "📊 **定级判断：** {level}" },
-      { "key": "highlights", "show": true, "tpl": "✅ **亮点：** {highlights}" },
-      { "key": "redlines",   "show": true, "tpl": "❌ **红线：** {redlines}" },
-      { "key": "reason",     "show": true, "tpl": "▶ **理由：** {reason}" }
+      { "key": "core",       "show": true, "tpl": "❗ 核心判定：{core}" },
+      { "key": "l3_assess",  "show": true, "tpl": "🏗 L3评估：{l3_assess}" },
+      { "key": "level",      "show": true, "tpl": "📊 定级判断：{level}" },
+      { "key": "highlights", "show": true, "tpl": "✅ 亮点：{highlights}" },
+      { "key": "redlines",   "show": true, "tpl": "❌ 红线：{redlines}" },
+      { "key": "reason",     "show": true, "tpl": "▶ 理由：{reason}" }
     ],
 
     "fresh_lines": [
-      { "key": "core",      "show": true, "tpl": "❗ **核心判定：** {core}" },
-      { "key": "potential", "show": true, "tpl": "✅ **潜力信号：** {potential}" },
-      { "key": "redlines",  "show": true, "tpl": "❌ **红线：** {redlines}" },
-      { "key": "reason",    "show": true, "tpl": "▶ **理由：** {reason}" }
+      { "key": "core",      "show": true, "tpl": "❗ 核心判定：{core}" },
+      { "key": "potential", "show": true, "tpl": "✅ 潜力信号：{potential}" },
+      { "key": "redlines",  "show": true, "tpl": "❌ 红线：{redlines}" },
+      { "key": "reason",    "show": true, "tpl": "▶ 理由：{reason}" }
     ],
 
-    "source_line": "► **来源：** {source}",
+    "source_line": "来源：{source}",
 
     "footer": "###### ※ 小秘书提醒"
   },
