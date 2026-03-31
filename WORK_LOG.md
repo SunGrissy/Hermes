@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-03-31] - cci_system：部署文档澄清、Dockerfile.api
+
+**状态**: 已提交
+
+**内容**:
+- 子模块 `cci_system`：`DEPLOYMENT.md` / `DEPLOYMENT_ENGINEER_REMINDER.md` 强调 Streamlit 与 TD API 分进程；新增 `Dockerfile.api` + `requirements-api.txt`；`run_api.bat` 启动提示（见子模块提交）
+
+---
+
 ## [2026-03-31] - pm-system：设计到落地看板交付（子模块指针）
 
 **状态**: 已提交
