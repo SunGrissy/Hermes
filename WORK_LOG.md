@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-03-31] - pm-system：设计到落地看板交付（子模块指针）
+
+**状态**: 已提交
+
+**内容**:
+- 子模块 `pm-system`：设计到落地看板、移除宣讲会话 UI、`APP_VERSION` 1.0.108（见子模块 `pm-system/WORK_LOG.md`）
+
+---
+
 ## [2026-03-31] - cci_system：TD Report API（8502）与 Streamlit「TD 报表」拉取
 
 **状态**: 已提交
