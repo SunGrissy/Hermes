@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-03-31] - cci_system：TD Report API（8502）与 Streamlit「TD 报表」拉取
+
+**状态**: 已提交
+
+**内容**:
+- 子模块 `cci_system`：FastAPI `POST/GET` 报表接口、文档与部署说明；Streamlit 增加「TD 报表」模式（`CCI_API_BASE_URL` 拉 JSON）；`requirements` 含 `requests` 等（见子模块提交说明）
+
+---
+
 ## [2026-03-27] - 钉钉专项：管线待办本机覆盖接口块；定时筛选与计划任务 1945
 
 **状态**: 验收通过

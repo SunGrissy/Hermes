@@ -13,7 +13,8 @@ MyAgents 工作空间包含多个独立服务。本 Skill 记录各项目的端�
 |------|------|------|--------|----------|
 | **PmSystemApp** | 后端 8000 | `backend/main.py` + `index.html` | FastAPI + 原生 JS | `quick_start.bat` |
 | **PerformEval** | 8112 | `backend/main.py` + `index.html` | FastAPI + 原生 JS | `run.bat` |
-| **CCI-ScoreSystem** | 8501 (默认) | `app.py` | Streamlit | `启动.bat` |
+| **CCI-ScoreSystem（Streamlit）** | 8501 (默认) | `app.py` | Streamlit | `启动.bat` |
+| **CCI-ScoreSystem（TD 报表 API）** | 8502 (默认) | `api.app:app` | FastAPI | `run_api.bat` |
 | **TaskReminderApp** | 8000 | `server.py` + `TaskReminder.html` | FastAPI | `python server.py` |
 | **FileCleanerTool** | 无（GUI） | `gui.py` | Python + customtkinter | `run.bat` |
 | **TeamScore** | 无（脚本） | 各子目录 `.py` | Python 脚本集 | 手动运行 |
@@ -33,7 +34,9 @@ PmSystemApp (8000) 与 TaskReminderApp (8000) 端口冲突，不能同时启动�
 | PmSystemApp | `GET /api/version` | 版本信息 |
 | PerformEval | `GET /api/health` | 200 |
 | PerformEval | `GET /api/version` | 版本信息 |
-| CCI-ScoreSystem | 无 | 访问首页 200 |
+| CCI-ScoreSystem（Streamlit） | 无 | 访问首页 200 |
+| CCI-ScoreSystem（TD 报表 API） | `GET /api/health` | `{"status":"ok","app":"cci-td-report-api",...}` |
+| CCI-ScoreSystem（TD 报表 API） | `GET /api/version` | 版本信息 + 关键文件 mtime |
 | TaskReminderApp | 无 | 访问首页 200 |
 | dingtalk-desktop | `GET /api/health` | `{"status":"ok","app":"dingtalk-daemon"}` |
 | dingtalk-desktop | `GET /api/version` | 版本信息 + 文件修改时间 |
@@ -47,7 +50,7 @@ fastapi, uvicorn[standard], sqlalchemy, pydantic, pydantic-settings, email-valid
 fastapi>=0.104.0, uvicorn[standard]>=0.24.0, sqlalchemy>=2.0.0, pydantic>=2.5.0, pydantic-settings>=2.1.0, aiosqlite>=0.19.0, python-multipart>=0.0.6, openpyxl>=3.1.0
 
 ### CCI-ScoreSystem (`cci_system/requirements.txt`)
-streamlit>=1.28.0, pandas>=2.0.0, matplotlib>=3.7.0, openpyxl>=3.1.0, xlsxwriter>=3.1.0
+streamlit, pandas, matplotlib, openpyxl, xlsxwriter, fastapi, uvicorn, httpx（与 TestClient 兼容见文件内 httpx 上限）
 
 ### FileCleanerTool (`FileCleanerTool/requirements.txt`)
 customtkinter, packaging
@@ -66,8 +69,11 @@ cd pm-system && quick_start.bat
 cd performeval && run.bat
 # 或手动：cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8112 --reload
 
-# CCI-ScoreSystem
+# CCI-ScoreSystem（Streamlit 工具）
 cd cci_system && streamlit run app.py --server.headless=true
+
+# CCI-ScoreSystem（TD 报表 API，契约见 cci_system/TD_CCI_REPORT_API.md）
+cd cci_system && py -m uvicorn api.app:app --host 0.0.0.0 --port 8502
 
 # TaskReminderApp
 cd task_reminder && python server.py
