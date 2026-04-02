@@ -800,3 +800,15 @@
 - 版本快报（group）改为仅读各版本 `progressNotifyWebhooks` 发送，不再依赖 `webhook_config` 的 group 路由
 - PLD 快报改为按版本拆条发送；新增过滤范围日志，便于排查“未推送/被过滤”问题
 - `pm-system/version_progress_notify.py`：未发版标题统一为“距下一节点剩余时间”，待复盘场景去除管线快报“发版检查/查看详情”，版本快报快照去除容量并补充草稿/开发中
+
+## [2026-04-02] - [VersionDigest 单任务运行与文档同步]
+
+**状态**: 验收通过
+
+**内容**:
+- `dingtalk-desktop/digest_config.json`：早报数据源切换为 `http://192.168.20.160:8112`
+- `dingtalk-desktop/register_version_digest_task.ps1`：注册脚本默认触发时间改为 09:40（当前系统任务仍以计划任务器实际配置为准）
+- 文档同步：`README.md`、`版本与管线推送说明.md`、`docs/pipeline-push.md` 明确当前仅保留 `VersionDigest` 自动推送，`PipelineNotify` 两条任务已停用
+
+**备注**:
+- 本次未改动 `pm-system` 后端代码；后端口径修复已在此前提交并推送（`pm-system` `d96bd2e`）
