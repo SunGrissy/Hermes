@@ -790,3 +790,13 @@
 - `dingtalk-desktop/daemon.py`：`/fetch_report_content` 增加 `timeout` 参数与异常回传，AliDocs 场景补充滚动/重试/fallback 抽取逻辑
 - 新增运维脚本：`kill_old_daemon.py`、`run_doc_review_once.py`、`restart_fetch_notify_assistant.py`，用于重启、单次预审与抓取结果钉钉通知
 - `palace/palace_engine/engine.py`、`palace/roles/boundary.yaml`：成功指标识别规则补充同义词与 missing 判定约束，减少“有指标误判缺失”
+
+## [2026-04-02] - [早报推送口径修复（PMO/管线/PLD/版本快报）]
+
+**状态**: 验收通过
+
+**内容**:
+- `dingtalk-desktop/version_digest.py`：修复 PM/PLD/group 规划 DDL 过滤口径，并统一基于有效 planning DDL 计算（显式值优先，缺失时按 start/release 推算）
+- 版本快报（group）改为仅读各版本 `progressNotifyWebhooks` 发送，不再依赖 `webhook_config` 的 group 路由
+- PLD 快报改为按版本拆条发送；新增过滤范围日志，便于排查“未推送/被过滤”问题
+- `pm-system/version_progress_notify.py`：未发版标题统一为“距下一节点剩余时间”，待复盘场景去除管线快报“发版检查/查看详情”，版本快报快照去除容量并补充草稿/开发中
