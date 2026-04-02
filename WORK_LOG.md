@@ -812,3 +812,11 @@
 
 **备注**:
 - 本次未改动 `pm-system` 后端代码；后端口径修复已在此前提交并推送（`pm-system` `d96bd2e`）
+
+## [2026-04-02] - [补提 digest_config 数据源配置]
+
+**状态**: 验收通过
+
+**内容**:
+- 补提交 `dingtalk-desktop/digest_config.json` 当前生效配置（`pm_system_url=http://192.168.20.160:8112`）
+- 与 `VersionDigest` 单任务运行口径保持一致，避免本地有效配置未入库

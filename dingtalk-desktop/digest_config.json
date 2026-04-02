@@ -28,6 +28,8 @@
   ],
   "notify_target": "73216314617",
   "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117",
+  "report_inbox_cid": "46459012:420217003",
+  "_note_report_inbox_cid": "钉钉日志收件箱会话 CID；非空时 report_digest 优先从该 CID 拉 ct=300 全文，不走 CEF 详情页。留空则回退旧路径（群卡片+monitor+可选 CEF）。",
   "report_cids": [
     {
       "cid": "75777026600",
@@ -160,8 +162,30 @@
   "pm_system_url": "http://192.168.20.160:8112",
   "pm_system_api_key": "jluAsEdnr40fHjg7E88t",
   "version_digest_limit": 3,
+  "version_digest_producer_planning_days": 30,
+  "_note_version_digest_producer_planning_days": "PMO 早报：除活跃版本前 N 名外，额外纳入「规划节点 DDL 距今 <= 该天数」的活跃版本。",
+  "version_evening_pipeline_followup_max_days_remaining": 45,
+  "_note_version_evening_pipeline_followup": "晚间「管线节点待办无进展」提示：仅当距发版剩余天数<=该值（或未定）时输出；更远则省略，减少远发版期噪音。",
   "_note_version_digest_webhooks": "版本汇总推送：优先 version_digest_webhook_keys + webhook_config.json 键名解析 URL；未配置 keys 时仍可用 version_digest_webhooks 直填 URL（此时 @ 用 version_digest_webhook_at_policy 数组与 URL 顺序对齐）。机器人关键词均为「小秘书提醒」。",
   "_note_version_digest_webhook_at": "键名与 webhook_config.json 一致。pm_apm=仅圈 PM+APM；none=不圈；ops_team=圈 version_digest_ops_member_names。未写明的键或旧版仅 URL 列表时回退为管线全角色 @。",
+  "_note_version_digest_audience": "早间快照按 webhook 键分流正文：version_digest_audience_by_key 值为 full(全量)/producer(同 full)/pm/pld/group。PM 版隐藏 PLD 行动项，PLD 版隐藏 PM 行动项，group 版压缩数据快照与管线块。版本 progressNotifyWebhooks 走 version_digest_progress_webhook_audience（默认 group）。",
+  "version_digest_audience_by_key": {
+    "version_digest_pmo": "pm",
+    "version_digest_assistant": "producer",
+    "version_digest_pld": "pld"
+  },
+  "version_digest_progress_webhook_audience": "group",
+  "version_digest_send_interval_seconds": 1,
+  "_note_version_digest_send_interval": "早间多 webhook 依次 POST 的间隔秒数，避免钉钉限频；0 为无间隔。",
+  "version_digest_assistant_batch": {
+    "webhook_key": "version_digest_assistant",
+    "may_day_version_name": "五一版",
+    "slot12_audience": "producer",
+    "slot3_audience": "full",
+    "slot4_audience": "pm",
+    "send_interval_seconds": 1
+  },
+  "_note_version_digest_assistant_batch": "管理员手动连发助理群：活跃版本取前3中的第1、2名各一条；第3、4条为 may_day_version_name（默认五一版），受众分 slot3/slot4；不写 state。命令：py version_digest.py --assistant-batch [--dry-run]",
   "version_digest_webhook_keys": [
     "version_digest_pmo",
     "version_digest_assistant",
@@ -170,7 +194,8 @@
   "version_digest_webhook_at": {
     "version_digest_pmo": "pm_apm",
     "version_digest_assistant": "none",
-    "version_digest_pld": "ops_team"
+    "version_digest_pld": "ops_team",
+    "__progress__": "pipeline"
   },
   "version_digest_ops_member_names": [
     "崔忠仁",
@@ -241,7 +266,46 @@
     "_note_doc_review_progress": "预审进度心跳：每隔 N 秒推送一条（阶段+已等待秒数）；设为 0 关闭",
     "doc_review_progress_interval_seconds": 30
   },
-  "_note_recruit_resume": "recruit_cids 会话里 ct=502 PDF 会走简历初筛；本人发给 HR 的 PDF 由 skill_router 按 is_self/uid 排除；文件名含面试评价/述职等内部材料关键词也会跳过（见 skill_router _RESUME_SKIP_NAME_SUBSTRINGS）。时间窗：仅看本机 PDF 的 mtime（下载/落盘）是否在近 48h；无本机文件时不做时间挡，早期发送的简历可先进 pipeline，下载后再用 mtime 判。",
+  "_note_recruit_resume": "recruit_cids 会话里 ct=502 PDF 会走简历初筛；本人发给 HR 的 PDF 由 skill_router 按 is_self/uid 排除；文件名先过 resume_name_filter 第一层门禁（block 命中直接跳过，allow 用于快速识别简历命名，unknown_policy 控制未命中 allow 的处理）。时间窗：仅看本机 PDF 的 mtime（下载/落盘）是否在近 48h；无本机文件时不做时间挡，早期发送的简历可先进 pipeline，下载后再用 mtime 判。",
+  "resume_name_filter": {
+    "_note": "简历文件名第一层门禁：block_keywords 命中即跳过；allow_keywords 用于识别明确简历命名；unknown_policy 支持 pass(未知放行)/skip(未知全拦)/skip_non_name(未知里仅姓名式命名放行，推荐)。",
+    "allow_keywords": [
+      "简历",
+      "个人简历",
+      "resume",
+      "cv",
+      "应聘",
+      "求职"
+    ],
+    "block_keywords": [
+      "面试评价",
+      "面试结论",
+      "面试清单",
+      "面试记录",
+      "面试反馈",
+      "述职",
+      "二次审核",
+      "审核意见",
+      "入职定级",
+      "录用审批",
+      "背调",
+      "调查报告",
+      "调研报告",
+      "报告",
+      "总结",
+      "复盘",
+      "会议纪要",
+      "汇报",
+      "周报",
+      "月报",
+      "季度总结",
+      "年度总结",
+      "预算",
+      "招标",
+      "合同"
+    ],
+    "unknown_policy": "skip_non_name"
+  },
   "recruit_cids": [
     {
       "cid": "73137527367",
