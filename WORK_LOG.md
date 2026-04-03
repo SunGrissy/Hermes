@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-02] - pm-system：假日/调休从服务端配置拉取（子模块指针）
+
+**状态**: 已提交
+
+**内容**:
+- 子模块 `pm-system`：`data:loaded` 后拉取 `/api/config/holidays` 与 `workdays`、空列表语义与产能一致、`APP_VERSION` 1.0.110（见子模块 `pm-system/WORK_LOG.md`）
+
+---
+
 ## [2026-03-31] - cci_system：部署文档澄清、Dockerfile.api
 
 **状态**: 已提交
