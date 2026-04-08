@@ -1,11 +1,20 @@
 # Work Log - MyAgents Root
 
+## [2026-04-08] - md-reader：大纲侧栏、Mermaid 渲染（子模块指针）
+
+**状态**: 验收通过
+
+**内容**:
+- 子模块 `md-reader`：阅读区左侧文档大纲（TOC）、折叠与滚动高亮；` ```mermaid ` 代码块与 Mermaid 10 渲染；`APP_VERSION` 2.1.7；README 补充分享链接与 `/read` 说明（见子模块提交）
+
+---
+
 ## [2026-04-02] - pm-system：假日/调休从服务端配置拉取（子模块指针）
 
 **状态**: 已提交
 
 **内容**:
-- 子模块 `pm-system`：`data:loaded` 后拉取 `/api/config/holidays` 与 `workdays`、空列表语义与产能一致、`APP_VERSION` 1.0.110（见子模块 `pm-system/WORK_LOG.md`）
+- 子模块 `pm-system`：`data:loaded` 后拉取 `/api/config/holidays` 与 `workdays`、空列表语义与产能一致、`APP_VERSION` 1.0.110（见子模块 `[[pm-system/WORK_LOG]]`）
 
 ---
 
@@ -14,7 +23,7 @@
 **状态**: 已提交
 
 **内容**:
-- 子模块 `cci_system`：`DEPLOYMENT.md` / `DEPLOYMENT_ENGINEER_REMINDER.md` 强调 Streamlit 与 TD API 分进程；新增 `Dockerfile.api` + `requirements-api.txt`；`run_api.bat` 启动提示（见子模块提交）
+- 子模块 `cci_system`：`[[DEPLOYMENT]]` / `DEPLOYMENT_ENGINEER_REMINDER.md` 强调 Streamlit 与 TD API 分进程；新增 `Dockerfile.api` + `requirements-api.txt`；`run_api.bat` 启动提示（见子模块提交）
 
 ---
 
