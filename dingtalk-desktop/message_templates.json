@@ -20,6 +20,112 @@
     "footer":    "###### <font color=\"#94a3b8\">※ 小秘书提醒</font>"
   },
 
+  "version_release": {
+    "_note": "版本状态首次检测到 released 时发送。line_3_snapshot/line_3_change 区分在早间或晚间触发。",
+    "title": "## 版本已发布 | {version_name}",
+    "line_1": "----",
+    "line_2": "该版本状态已变更为 **已发布**。",
+    "line_3_snapshot": "今日早间检测到发布状态，今日晚间起不再推送该版本消息。",
+    "line_3_change": "今日晚间检测到发布状态，明日早间起不再推送该版本消息。",
+    "footer": "###### ※ 小秘书提醒 · {timestamp}"
+  },
+
+  "version_online": {
+    "_note": "发版流程引导（release 分支）整组完成时发送“版本已上线”一次性通知。",
+    "title": "## 版本已上线 | {version_name}",
+    "line_1": "----",
+    "line_2": "发版流程引导已全部完成，版本已上线。",
+    "line_3_snapshot": "请 {pm_mention} 准备发版复盘，请 {pld_mention} 预约版本数据复盘。今日晚间起不再推送该版本消息。",
+    "line_3_change": "请 {pm_mention} 准备发版复盘，请 {pld_mention} 预约版本数据复盘。明日早间起不再推送该版本消息。",
+    "footer": "###### ※ 小秘书提醒 · {timestamp}"
+  },
+
+  "version_change": {
+    "_note": "晚间今日变化消息模板。标题建议带版本名，时间建议放 footer。",
+    "title": "## 今日变化 | {version_name}",
+    "progress_header": "### 今日实际进展",
+    "action_header": "### 行动提醒",
+    "stale_header": "### 连续无变化",
+    "no_change_line": "今日暂无显著变化。",
+    "lead_with_progress": "{version_name}：有推进，但仍需处理",
+    "lead_no_progress": "{version_name}：今日无推进",
+    "progress_fmt_done": "完成+{count}",
+    "progress_fmt_dor_ready": "DoR通过+{count}",
+    "progress_fmt_assigned": "已指派+{count}",
+    "progress_fmt_manual_checked": "节点勾选+{count}",
+    "progress_fmt_in_progress": "开发中+{count}",
+    "progress_fmt_testing": "测试中+{count}",
+    "progress_fmt_draft_drop": "草稿减少{count}",
+    "progress_fmt_delivery_groups": "交付检查完成+{count}（{names}）",
+    "progress_fmt_delivery_cat_complete": "<font color=\"#166534\">**{label}完成**</font>：{count}项（{names}）",
+    "progress_fmt_delivery_cat_progress": "<font color=\"#1e40af\">**{label}有进展**</font>：{count}项（{names}）",
+    "action_fmt_blocked_names": "阻塞：{names}",
+    "action_fmt_blocked_count": "阻塞 {count} 项",
+    "action_fmt_unassigned": "未指派负责人 {count} 项 {pm_mention}",
+    "action_fmt_dor_names": "DoR 未就绪：{names} {pld_mention}",
+    "action_fmt_dor_count": "DoR 未就绪 {count} 项 {pld_mention}",
+    "stale_fmt": "{version_name}：连续 {days} 个工作日无推进{detail}",
+    "stale_detail_dor": "（DoR 未就绪：{names}）",
+    "quiet_day_header": "### 看板无数据变化",
+    "quiet_day_line1": "相对今日早间基线，未检测到有效进度变化。",
+    "quiet_day_line2": "{pm_mention} 请核对团队实际进展是否已在 PMS 中体现；若已推进但未同步，请尽快更新状态、节点与交付项，避免看板与事实脱节。",
+    "followup_header": "### 早间关注暂无进展",
+    "followup_pld_stale": "{pld_mention} 早间「PLD 行动项」（DoR）相对早间基线无变化，请抓紧推进。",
+    "followup_pm_stale": "{pm_mention} 早间「PM 行动项」相对早间基线无变化，请抓紧跟进。",
+    "followup_pipeline_stale": "早间「管线节点待办」相对早间基线无进展，请核对阻塞项与节点勾选。",
+    "followup_combined_stale": "早间「PLD 行动项」「PM 行动项」「管线节点待办」相对早间基线均无变化；若线下已推进，请同步更新 PMS。",
+    "footer": "###### ※ 小秘书提醒 · {timestamp}"
+  },
+
+  "pmo_evening": {
+    "_note": "PMO晚报（制作人向）。不 @ 任何人。body_layout 控制全文排版。",
+    "dingtalk_title": "PMO晚报[{mmdd}]",
+    "body_layout": "{heading}\n\n{sep}\n\n{hdr_progress}\n\n{sec_progress}\n\n{sep}\n\n{hdr_risk}\n\n{sec_risk}\n\n{sep}\n\n{footer}",
+    "heading": "## PMO晚报[{mmdd}]",
+    "separator": "---",
+    "section_progress_header": "## <font color=\"#166534\">今日实际进展</font>",
+    "section_risk_header": "## <font color=\"#b45309\">风险预警</font>",
+    "version_label": "**【{version}】**",
+    "bullet": "\u2022 ",
+    "body_progress_quiet": "\u2022 暂无相对早间的新增可量化进展。",
+    "body_progress_first_run": "\u2022 首次运行已建基线，明日起对比晚间变化。",
+    "body_progress_empty": "\u2022 暂无相对早间的新增可量化进展。",
+    "suffix_risk_no_change": "<font color=\"#6b7280\">（没变化项）</font>",
+    "suffix_risk_stale": "<font color=\"#dc2626\">（连续无变化风险）</font>",
+    "suffix_risk_pending": "<font color=\"#b45309\">（待跟进）</font>",
+    "calendar_err_line": "\u2022 工作日历读取异常：{detail}",
+    "body_risk_empty": "\u2022 暂无需要单独预警的「相对早间无变化」项。",
+    "footer": "###### ※ 小秘书提醒 · {mmdd} {hhmm}"
+  },
+
+  "pm_evening": {
+    "_note": "管线晚报完整消息结构。body_layout 控制全文排版，{heading}/{sep}/{hdr_action}/{sec_action}/{hdr_progress}/{sec_progress}/{hdr_followup}/{sec_followup}/{footer} 由渲染函数填充。",
+    "dingtalk_title": "管线晚报[{mmdd}]",
+    "body_layout": "{heading}\n\n{sep}\n\n{hdr_action}\n\n{sec_action}\n\n{sep}\n\n{hdr_progress}\n\n{sec_progress}\n\n{sep}\n\n{hdr_followup}\n\n{sec_followup}\n\n{sep}\n\n{footer}",
+    "heading": "## 管线晚报[{mmdd}]",
+    "separator": "---",
+    "section_action_header": "## <font color=\"#b45309\">需处理事项</font>",
+    "section_progress_header": "## <font color=\"#166534\">今日进展</font>",
+    "section_followup_header": "## <font color=\"#1e40af\">跟进提醒</font>",
+    "version_label": "**【{version}】**",
+    "version_summary": "<font color=\"#6b7280\">距发版{days_remaining}天 · 进度 {done}/{total}</font>",
+    "version_summary_no_date": "<font color=\"#6b7280\">进度 {done}/{total}</font>",
+    "emoji_critical": "\u274c",
+    "emoji_warning": "\u26a0\ufe0f",
+    "emoji_ok": "\u2705",
+    "color_blocked": "#dc2626",
+    "color_unassigned": "#b45309",
+    "color_dor": "#6b7280",
+    "bullet": "\u2022 ",
+    "body_action_empty": "\u2705 当前各版本无阻塞、未指派、DoR 缺口项。",
+    "body_progress_quiet": "\u2022 暂无相对早间的新增可量化进展。",
+    "body_progress_first_run": "\u2022 首次运行已建基线，明日起对比晚间变化。",
+    "body_progress_empty": "\u2022 暂无相对早间的新增可量化进展。",
+    "body_followup_empty": "\u2022 暂无需跟进的无变化项。",
+    "calendar_err_line": "\u2022 工作日历读取异常：{detail}",
+    "footer": "###### ※ 小秘书提醒 · {mmdd} {hhmm}"
+  },
+
   "report_digest": {
     "title": "### {date} 日报摘要 {window}",
 
@@ -163,6 +269,20 @@
     "source_line": "来源：{source}",
 
     "footer": "###### ※ 小秘书提醒"
+  },
+
+  "interview_review": {
+    "_note": "招聘面试纪要自动评价：未识别候选人时询问绑定；绑定后自动调用 Palace 生成评价并通知。",
+    "ask_bind_title": "❓ 面试纪要待绑定候选人",
+    "ask_bind_text": "检测到招聘面试纪要：{file_name}\n\n未识别到候选人姓名，请回复：**绑定候选人 张三**\n\n###### ※ 小秘书提醒",
+    "bind_ok_title": "✅ 候选人已绑定",
+    "bind_ok_text": "已绑定候选人：**{candidate}**，正在生成面试评价。\n\n###### ※ 小秘书提醒",
+    "bind_fail_title": "⚠️ 绑定失败",
+    "bind_fail_text": "当前没有待绑定的招聘面试任务，请先下载“招聘面试”文件。\n\n###### ※ 小秘书提醒",
+    "result_ok_title": "✅ 面试评价已生成",
+    "result_ok_text": "候选人：**{candidate}**\n评价文件：`{output_path}`\n\n###### ※ 小秘书提醒",
+    "result_fail_title": "❌ 面试评价生成失败",
+    "result_fail_text": "候选人：**{candidate}**\n原因：{detail}\n\n###### ※ 小秘书提醒"
   },
 
   "status_check": {

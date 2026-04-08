@@ -13,6 +13,9 @@ Usage:
     py version_digest.py --assistant-batch        # 助理群连发4条（见 version_digest_assistant_batch）
     py version_digest.py --audience-sweep           # 助理群连发4条：同版本×四受众（核对标题）
     py version_digest.py --output x.md  # save to file
+    py version_digest.py --ignore-workday  # 假日也发（补发）
+    py version_digest.py --mode pmo-evening --dry-run  # PMO晚报（默认同早间 producer 机器人，见 digest_config）
+    py version_digest.py --mode pm-evening --dry-run   # 管线晚报（PMO 群 @ PM+APM，行动视角）
 """
 import argparse
 import hashlib
@@ -24,6 +27,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, date, timedelta
+from collections import defaultdict
 from typing import Any, Dict, List, Optional, Tuple
 
 # [AgentVchg Task] 开始时间: 2026-04-01 20:20
@@ -317,6 +321,109 @@ def _load_change_template() -> dict:
     except Exception:
         pass
     return default
+
+
+def _load_pmo_evening_template() -> dict:
+    default = {
+        'dingtalk_title': '小秘书提醒 · PMO晚报[{mmdd}]',
+        'body_layout': (
+            '{heading}\n\n{sep}\n\n{hdr_progress}\n\n{sec_progress}\n\n'
+            '{sep}\n\n{hdr_risk}\n\n{sec_risk}\n\n'
+            '{sep}\n\n{footer}'
+        ),
+        'heading': '## PMO晚报[{mmdd}]',
+        'separator': '---',
+        'section_progress_header': '## <font color="#166534">今日实际进展</font>',
+        'section_risk_header': '## <font color="#b45309">风险预警</font>',
+        'footer': '###### \u203b 小秘书提醒 \u00b7 {mmdd} {hhmm}',
+        'version_label': '**\u3010{version}\u3011**',
+        'bullet': '\u2022 ',
+        'body_progress_quiet': '\u2022 暂无相对早间的新增可量化进展。',
+        'body_progress_first_run': '\u2022 首次运行已建基线，明日起对比晚间变化。',
+        'body_progress_empty': '\u2022 暂无相对早间的新增可量化进展。',
+        'suffix_risk_no_change': '<font color="#6b7280">（没变化项）</font>',
+        'suffix_risk_stale': '<font color="#dc2626">（连续无变化风险）</font>',
+        'suffix_risk_pending': '<font color="#b45309">（待跟进）</font>',
+        'calendar_err_line': '\u2022 工作日历读取异常：{detail}',
+        'body_risk_empty': '\u2022 暂无需要单独预警的「相对早间无变化」项。',
+    }
+    try:
+        if os.path.isfile(_TEMPLATE_PATH):
+            with open(_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+                root = json.load(f)
+            obj = root.get('pmo_evening') if isinstance(root, dict) else None
+            if isinstance(obj, dict):
+                out = dict(default)
+                out.update(obj)
+                return out
+    except Exception:
+        pass
+    return default
+
+
+def _load_pm_evening_template() -> dict:
+    default = {
+        'dingtalk_title': '小秘书提醒 · 管线晚报[{mmdd}]',
+        'body_layout': (
+            '{heading}\n\n{sep}\n\n{hdr_action}\n\n{sec_action}\n\n'
+            '{sep}\n\n{hdr_progress}\n\n{sec_progress}\n\n'
+            '{sep}\n\n{hdr_followup}\n\n{sec_followup}\n\n'
+            '{sep}\n\n{footer}'
+        ),
+        'heading': '## 管线晚报[{mmdd}]',
+        'separator': '---',
+        'section_action_header': '## <font color="#b45309">需处理事项</font>',
+        'section_progress_header': '## <font color="#166534">今日进展</font>',
+        'section_followup_header': '## <font color="#1e40af">跟进提醒</font>',
+        'version_label': '**\u3010{version}\u3011**',
+        'version_summary': '<font color="#6b7280">距发版{days_remaining}天 \u00b7 进度 {done}/{total}</font>',
+        'version_summary_no_date': '<font color="#6b7280">进度 {done}/{total}</font>',
+        'emoji_critical': '\u274c',
+        'emoji_warning': '\u26a0\ufe0f',
+        'emoji_ok': '\u2705',
+        'color_blocked': '#dc2626',
+        'color_unassigned': '#b45309',
+        'color_dor': '#6b7280',
+        'bullet': '\u2022 ',
+        'body_action_empty': '\u2705 当前各版本无阻塞、未指派、DoR 缺口项。',
+        'body_progress_quiet': '\u2022 暂无相对早间的新增可量化进展。',
+        'body_progress_first_run': '\u2022 首次运行已建基线，明日起对比晚间变化。',
+        'body_progress_empty': '\u2022 暂无相对早间的新增可量化进展。',
+        'body_followup_empty': '\u2022 暂无需跟进的无变化项。',
+        'calendar_err_line': '\u2022 工作日历读取异常：{detail}',
+        'footer': '###### ※ 小秘书提醒 · {mmdd} {hhmm}',
+    }
+    try:
+        if os.path.isfile(_TEMPLATE_PATH):
+            with open(_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+                root = json.load(f)
+            obj = root.get('pm_evening') if isinstance(root, dict) else None
+            if isinstance(obj, dict):
+                out = dict(default)
+                out.update(obj)
+                return out
+    except Exception:
+        pass
+    return default
+
+
+def _fmt_pm_evening(tpl: dict, key: str, default: str, **kwargs) -> str:
+    raw = str(tpl.get(key) or default)
+    try:
+        return raw.format(**kwargs)
+    except Exception:
+        return default
+
+
+def _fmt_pmo_evening(tpl: dict, key: str, default: str, **kwargs) -> str:
+    raw = str(tpl.get(key) or default)
+    try:
+        return raw.format(**kwargs)
+    except Exception:
+        try:
+            return default.format(**kwargs)
+        except Exception:
+            return raw
 
 
 def _fmt_change_tpl(tpl: dict, key: str, default: str, **kwargs) -> str:
@@ -644,6 +751,69 @@ def _count_workdays_between(start_date: date, end_date: date, holidays: set, wor
             cnt += 1
         cur += timedelta(days=1)
     return cnt
+
+
+def _parse_holiday_ranges_from_pm(raw: Any) -> List[Tuple[str, str]]:
+    """PM 配置 holidays：多为 [{start,end,...}, ...]；兼容 ['YYYY-MM-DD', ...]。"""
+    out: List[Tuple[str, str]] = []
+    if not raw:
+        return out
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict):
+                s = str(item.get('start') or '')[:10]
+                e = str(item.get('end') or s)[:10]
+                if s:
+                    out.append((s, e or s))
+            elif isinstance(item, str) and item.strip():
+                s = item.strip()[:10]
+                out.append((s, s))
+    return out
+
+
+def _parse_workdays_set_from_pm(raw: Any) -> set:
+    """PM 配置 workdays：调休上班日，字符串日期列表。"""
+    if isinstance(raw, list):
+        return {str(x)[:10] for x in raw if str(x).strip()}
+    if isinstance(raw, dict) and isinstance(raw.get('items'), list):
+        return {str(x)[:10] for x in raw['items'] if str(x).strip()}
+    return set()
+
+
+def _fetch_pm_calendar_for_workday(
+    pm_url: str, api_key: Optional[str],
+) -> Tuple[List[Tuple[str, str]], set, Optional[str]]:
+    """拉取 PM holidays 区间 + workdays，用于早间是否推送。失败时 err 非空。"""
+    try:
+        base = pm_url.rstrip('/')
+        h_resp = _api_get(f'{base}/api/config/holidays', api_key=api_key)
+        w_resp = _api_get(f'{base}/api/config/workdays', api_key=api_key)
+        h_raw = h_resp.get('data') if isinstance(h_resp, dict) else None
+        w_raw = w_resp.get('data') if isinstance(w_resp, dict) else None
+        return _parse_holiday_ranges_from_pm(h_raw), _parse_workdays_set_from_pm(w_raw), None
+    except Exception as e:
+        return [], set(), str(e)
+
+
+def _is_pm_calendar_workday(
+    d: date,
+    holiday_ranges: List[Tuple[str, str]],
+    workdays: set,
+) -> bool:
+    """与 pm-system VersionPlanningView.isWorkday 一致：调休 -> 上班；区间内 -> 假日；周末 -> 非工作日。"""
+    ds = d.strftime('%Y-%m-%d')
+    if ds in workdays:
+        return True
+    for s, e in holiday_ranges:
+        if s <= ds <= e:
+            return False
+    if d.weekday() >= 5:
+        return False
+    return True
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, '').strip().lower() in ('1', 'true', 'yes', 'on')
 
 
 def _delivery_category_labels() -> Dict[str, str]:
@@ -3247,10 +3417,13 @@ def run_version_digest_send(
     version_id: Optional[str] = None,
     version_name: Optional[str] = None,
     audience_override: Optional[str] = None,
+    ignore_workday: bool = False,
 ):
     """拉取活跃版本、渲染摘要；可选发 webhook。供 skill_router 与 CLI 共用。
 
     audience_override：仅 dry-run 单测某受众正文（pm/pld/group/full/producer），不用于生产多群发送。
+    早间且 send_webhook：默认按 PM /api/config/holidays + workdays 判断「非法定假、调休算上班」；非工作日不发送。
+    ignore_workday / 环境变量 VERSION_DIGEST_IGNORE_WORKDAY：跳过上述判断（补发调试用）。
     多群分流：digest_config.version_digest_audience_by_key + version_digest_progress_webhook_audience。
     版本快报（group）：多版本早间从各版本 progressNotifyWebhooks POST；不读 webhook_config 的 group 行。
 
@@ -3292,6 +3465,39 @@ def run_version_digest_send(
         import _push_versions_webhook_at_dm as _pvd
     except Exception as e:
         return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+
+    if (
+        mark_morning
+        and send_webhook
+        and not ignore_workday
+        and not _env_truthy('VERSION_DIGEST_IGNORE_WORKDAY')
+    ):
+        ranges, work_set, cal_err = _fetch_pm_calendar_for_workday(pm_url, api_key or None)
+        today_d = date.today()
+        if cal_err:
+            if log_to_stdout:
+                print(
+                    f'[version-digest] calendar fetch failed ({cal_err}); '
+                    f'fallback: Mon-Fri only (weekends off)',
+                    flush=True,
+                )
+            is_work = today_d.weekday() < 5
+        else:
+            is_work = _is_pm_calendar_workday(today_d, ranges, work_set)
+        if not is_work:
+            if log_to_stdout:
+                print(
+                    '[version-digest] skip snapshot: non-workday (PM holidays/workdays)',
+                    flush=True,
+                )
+            return {
+                'ok': True,
+                'versions_count': 0,
+                'digest': '',
+                'error': None,
+                'skipped': True,
+                'reason': 'non_workday',
+            }
 
     state_path = _state_path_from_config(config)
     state = _load_state(state_path)
@@ -3497,6 +3703,8 @@ def run_version_digest_send(
     )
     need_raw = set(raw_audiences_for_cache)
     need_raw.add('full')
+    if mark_morning:
+        need_raw.add('producer')
     digest_cache: Dict[str, str] = {}
     at_ms: List[str] = []
     n_built_max = 0
@@ -3593,6 +3801,14 @@ def run_version_digest_send(
                     'digest': digest,
                     'metrics': metrics_map,
                 }
+                mp_body = str(digest_cache.get('producer') or '').strip()
+                if mp_body:
+                    state['morning_producer'] = {
+                        'date': today_s,
+                        'hash': _sha256_text(mp_body),
+                        'digest': mp_body,
+                        'metrics': metrics_map,
+                    }
             state['latest_metrics'] = metrics_map
             if not str(state.get('last_changed_date') or '').strip():
                 state['last_changed_date'] = today_s
@@ -3614,6 +3830,14 @@ def run_version_digest_send(
                         'digest': digest,
                         'metrics': metrics_map,
                     }
+                    mp_body_s = str(digest_cache.get('producer') or '').strip()
+                    if mp_body_s:
+                        scoped['morning_producer'] = {
+                            'date': today_s,
+                            'hash': _sha256_text(mp_body_s),
+                            'digest': mp_body_s,
+                            'metrics': metrics_map,
+                        }
                 scoped['latest_metrics'] = metrics_map
                 if not str(scoped.get('last_changed_date') or '').strip():
                     scoped['last_changed_date'] = today_s
@@ -3763,6 +3987,910 @@ def run_version_digest_send(
         else:
             print(f'[version-digest] partial or failed: {err}', flush=True)
     return {'ok': ok, 'versions_count': n_built_max, 'digest': digest, 'error': err}
+
+
+def _dingtalk_markdown_title_pmo_evening() -> str:
+    t = _load_pmo_evening_template()
+    mmdd = datetime.now().strftime('%m/%d')
+    return _fmt_pmo_evening(t, 'dingtalk_title', '小秘书提醒 · PMO晚报[{mmdd}]', mmdd=mmdd)
+
+
+def _pmo_evening_split_vn_prefix(line: str, name_set: set) -> Optional[Tuple[str, str]]:
+    """若行首为「某版本名：」且版本名在集合中，返回 (版本名, 余下正文)。"""
+    s = str(line or '').strip()
+    if '：' not in s:
+        return None
+    for vn in sorted(name_set, key=len, reverse=True):
+        p = f'{vn}：'
+        if s.startswith(p):
+            return vn, s[len(p) :].strip()
+    return None
+
+
+_RE_AT_PHONE = __import__('re').compile(r'\s*@\d{10,15}')
+_RE_AT_MENTION = __import__('re').compile(r'\s*@[A-Za-z\u4e00-\u9fff]+')
+
+
+def _strip_at_mentions(s: str) -> str:
+    """移除正文中的 @手机号 和 @PLD / @张梦君 等标记（给制作人看，不需要 @）。"""
+    out = _RE_AT_PHONE.sub('', s)
+    out = _RE_AT_MENTION.sub('', out)
+    return out.strip()
+
+
+def _render_pmo_evening_markdown(
+    *,
+    names_order: List[str],
+    change_facts: Dict[str, Any],
+    has_baseline: bool,
+    quiet: bool,
+    calendar_err: Optional[str] = None,
+) -> str:
+    """PMO 晚报正文：文案见 message_templates.json · pmo_evening。"""
+    t = _load_pmo_evening_template()
+    mmdd = datetime.now().strftime('%m/%d')
+    hhmm = datetime.now().strftime('%H:%M')
+    suf_nc = str(t.get('suffix_risk_no_change') or '（没变化项）')
+    suf_st = str(t.get('suffix_risk_stale') or '（连续无变化风险）')
+    suf_pd = str(t.get('suffix_risk_pending') or '（待跟进）')
+    bullet = str(t.get('bullet') or _VD_BULLET)
+    sep = str(t.get('separator') or '---')
+    vl_tpl = str(t.get('version_label') or '**【{version}】**')
+    facts = change_facts or {}
+    progress_lines = list(facts.get('progress') or [])
+    followup = list(facts.get('followup_stale') or [])
+    stale_a = list(facts.get('stale_alert') or [])
+    no_change = list(facts.get('no_change') or [])
+
+    names_order = [str(x or '').strip() for x in names_order if str(x or '').strip()]
+    name_set = set(names_order)
+    multi = len(names_order) > 1
+
+    prog_by: Dict[str, List[str]] = {n: [] for n in names_order}
+    extra_prog: List[str] = []
+    for line in progress_lines:
+        raw = _strip_at_mentions(str(line).strip())
+        if not raw:
+            continue
+        if multi:
+            sp = _pmo_evening_split_vn_prefix(raw, name_set)
+            if sp:
+                vn, rest = sp
+                prog_by[vn].append(rest)
+                continue
+            extra_prog.append(raw)
+        else:
+            if names_order:
+                prog_by[names_order[0]].append(raw)
+            else:
+                extra_prog.append(raw)
+
+    sec1_lines: List[str] = []
+    for vn in names_order:
+        parts = [p for p in prog_by.get(vn) or [] if p]
+        if parts:
+            try:
+                sec1_lines.append(vl_tpl.format(version=vn))
+            except Exception:
+                sec1_lines.append(f'**【{vn}】**')
+            for p in parts:
+                sec1_lines.append(f'{bullet}{p}')
+    for ep in extra_prog:
+        sec1_lines.append(f'{bullet}{ep}')
+
+    if quiet:
+        sec1_body = str(t.get('body_progress_quiet') or f'{bullet}暂无相对早间的新增可量化进展。')
+    elif not sec1_lines:
+        if not has_baseline:
+            sec1_body = _fmt_pmo_evening(
+                t, 'body_progress_first_run', f'{bullet}首次运行已建基线，明日起对比晚间变化。',
+                bullet=bullet,
+            )
+        else:
+            sec1_body = str(t.get('body_progress_empty') or f'{bullet}暂无相对早间的新增可量化进展。')
+    else:
+        sec1_body = '\n\n'.join(sec1_lines)
+
+    risk_by: Dict[str, List[str]] = defaultdict(list)
+
+    def _add_risk(vn_key: str, text: str) -> None:
+        tx = _strip_at_mentions(str(text or '').strip())
+        if not tx:
+            return
+        vn_key = str(vn_key or '').strip()
+        if vn_key in name_set:
+            risk_by[vn_key].append(tx)
+        else:
+            risk_by['__unmapped__'].append(tx)
+
+    for line in followup:
+        s = _strip_at_mentions(str(line).strip())
+        if not s:
+            continue
+        sp = _pmo_evening_split_vn_prefix(s, name_set)
+        if sp:
+            vn, rest = sp
+            _add_risk(vn, f'{rest}{suf_nc}')
+        elif '：' in s:
+            vn, rest = s.split('：', 1)
+            _add_risk(vn.strip(), f'{rest.strip()}{suf_nc}')
+        else:
+            _add_risk(names_order[0] if names_order else '', f'{s}{suf_nc}')
+
+    for line in stale_a:
+        s = _strip_at_mentions(str(line).strip())
+        if not s:
+            continue
+        sp = _pmo_evening_split_vn_prefix(s, name_set)
+        if sp:
+            vn, rest = sp
+            _add_risk(vn, f'{rest}{suf_st}')
+        elif '：' in s:
+            vn, rest = s.split('：', 1)
+            _add_risk(vn.strip(), f'{rest.strip()}{suf_st}')
+        else:
+            _add_risk(names_order[0] if names_order else '', s)
+
+    for block in no_change:
+        blk = _strip_at_mentions(str(block).strip())
+        if not blk:
+            continue
+        first_ln, _, rest_blk = blk.partition('\n')
+        if '：' in first_ln:
+            vn, lead = first_ln.split('：', 1)
+            vn = vn.strip()
+            tail = _strip_at_mentions(
+                (lead.strip() + (' ' + rest_blk.replace('\n', ' ') if rest_blk else '')).strip()
+            )
+            _add_risk(vn, f'{tail}{suf_pd}')
+        else:
+            _add_risk(names_order[0] if names_order else '', f'{blk}{suf_pd}')
+
+    if calendar_err:
+        risk_by['__meta__'].append(
+            _fmt_pmo_evening(t, 'calendar_err_line', f'{bullet}工作日历读取异常：{{detail}}', detail=str(calendar_err))
+        )
+
+    sec2_lines: List[str] = []
+    for vn in names_order:
+        rs = [x for x in risk_by.get(vn) or [] if x]
+        if rs:
+            try:
+                sec2_lines.append(vl_tpl.format(version=vn))
+            except Exception:
+                sec2_lines.append(f'**【{vn}】**')
+            for r in rs:
+                sec2_lines.append(f'{bullet}{r}')
+    um = [x for x in risk_by.get('__unmapped__') or [] if x]
+    for u in um:
+        sec2_lines.append(f'{bullet}{u}')
+    meta = [x for x in risk_by.get('__meta__') or [] if x]
+    for m in meta:
+        sec2_lines.append(m)
+
+    empty_risk = str(t.get('body_risk_empty') or f'{bullet}暂无需要单独预警的「相对早间无变化」项。')
+    if sec2_lines:
+        sec2_body = '\n\n'.join(sec2_lines)
+    else:
+        sec2_body = empty_risk
+
+    heading = _fmt_pmo_evening(t, 'heading', '## PMO晚报[{mmdd}]', mmdd=mmdd)
+    hdr_p = str(t.get('section_progress_header') or '## <font color="#166534">今日实际进展</font>')
+    hdr_r = str(t.get('section_risk_header') or '## <font color="#b45309">风险预警</font>')
+    foot = _fmt_pmo_evening(t, 'footer', '###### ※ 小秘书提醒 · {mmdd} {hhmm}', mmdd=mmdd, hhmm=hhmm)
+
+    layout = str(
+        t.get('body_layout')
+        or '{heading}\n\n{sep}\n\n{hdr_progress}\n\n{sec_progress}\n\n'
+           '{sep}\n\n{hdr_risk}\n\n{sec_risk}\n\n'
+           '{sep}\n\n{footer}'
+    )
+    try:
+        return layout.format(
+            heading=heading,
+            sep=sep,
+            hdr_progress=hdr_p,
+            sec_progress=sec1_body,
+            hdr_risk=hdr_r,
+            sec_risk=sec2_body,
+            footer=foot,
+        )
+    except Exception:
+        return (
+            f'{heading}\n\n{sep}\n\n{hdr_p}\n\n{sec1_body}\n\n'
+            f'{sep}\n\n{hdr_r}\n\n{sec2_body}\n\n'
+            f'{sep}\n\n{foot}'
+        )
+
+
+def _dingtalk_markdown_title_pm_evening() -> str:
+    t = _load_pm_evening_template()
+    mmdd = datetime.now().strftime('%m/%d')
+    return _fmt_pm_evening(t, 'dingtalk_title', '小秘书提醒 · 管线晚报[{mmdd}]', mmdd=mmdd)
+
+
+def _render_pm_evening_markdown(
+    *,
+    names_order: List[str],
+    change_facts: Dict[str, Any],
+    current_metrics: Dict[str, dict],
+    has_baseline: bool,
+    quiet: bool,
+    calendar_err: Optional[str] = None,
+) -> str:
+    """PM 晚报正文：参照管线快报视觉风格重组 change_facts + current_metrics。"""
+    t = _load_pm_evening_template()
+    mmdd = datetime.now().strftime('%m/%d')
+    hhmm = datetime.now().strftime('%H:%M')
+    bullet = str(t.get('bullet') or _VD_BULLET)
+    sep = str(t.get('separator') or '---')
+    vl_tpl = str(t.get('version_label') or '**【{version}】**')
+    vs_tpl = str(t.get('version_summary') or '<font color="#6b7280">距发版{days_remaining}天 · 进度 {done}/{total}</font>')
+    vs_nd_tpl = str(t.get('version_summary_no_date') or '<font color="#6b7280">进度 {done}/{total}</font>')
+    em_crit = str(t.get('emoji_critical') or '\u274c')
+    em_warn = str(t.get('emoji_warning') or '\u26a0\ufe0f')
+    em_ok = str(t.get('emoji_ok') or '\u2705')
+    c_blocked = str(t.get('color_blocked') or '#dc2626')
+    c_unassigned = str(t.get('color_unassigned') or '#b45309')
+    c_dor = str(t.get('color_dor') or '#6b7280')
+
+    names_order = [str(x or '').strip() for x in names_order if str(x or '').strip()]
+    name_set = set(names_order)
+    metrics_by_name: Dict[str, dict] = {}
+    for m in (current_metrics or {}).values():
+        mn = str(m.get('name') or '').strip()
+        if mn:
+            metrics_by_name[mn] = m
+
+    # --- Section 1: 需处理事项 ---
+    action_lines: List[str] = []
+    for vn in names_order:
+        m = metrics_by_name.get(vn)
+        if not m:
+            continue
+        items: List[str] = []
+        has_blocked = m.get('blocked', 0) > 0
+        if has_blocked:
+            bnames = m.get('blocked_names') or []
+            txt = f'阻塞 {m["blocked"]} 项：{"、".join(bnames[:3])}' if bnames else f'阻塞 {m["blocked"]} 项'
+            items.append(f'<font color="{c_blocked}">{txt}</font>')
+        if m.get('unassigned', 0) > 0:
+            txt = f'未指派负责人 {m["unassigned"]} 项'
+            items.append(f'<font color="{c_unassigned}">{txt}</font>')
+        if m.get('dor_gap', 0) > 0:
+            dnames = m.get('dor_not_ready_names') or []
+            txt = f'DoR 未就绪 {m["dor_gap"]} 项：{"、".join(dnames[:3])}' if dnames else f'DoR 未就绪 {m["dor_gap"]} 项'
+            items.append(f'<font color="{c_dor}">{txt}</font>')
+        if not items:
+            continue
+        emoji = em_crit if has_blocked else em_warn
+        dr = m.get('days_remaining')
+        done = m.get('done', 0)
+        total = m.get('total', 0)
+        try:
+            vlabel = vl_tpl.format(version=vn)
+        except Exception:
+            vlabel = f'**【{vn}】**'
+        if dr is not None:
+            try:
+                vsummary = vs_tpl.format(days_remaining=dr, done=done, total=total)
+            except Exception:
+                vsummary = f'距发版{dr}天 \u00b7 进度 {done}/{total}'
+        else:
+            try:
+                vsummary = vs_nd_tpl.format(done=done, total=total)
+            except Exception:
+                vsummary = f'进度 {done}/{total}'
+        action_lines.append(f'{emoji} {vlabel} {vsummary}')
+        for item in items:
+            action_lines.append(f'{bullet}{item}')
+
+    if not action_lines:
+        sec1_body = str(t.get('body_action_empty') or f'{em_ok} 当前各版本无阻塞、未指派、DoR 缺口项。')
+    else:
+        sec1_body = '\n\n'.join(action_lines)
+
+    # --- Section 2: 今日进展 ---
+    facts = change_facts or {}
+    progress_lines = list(facts.get('progress') or [])
+    multi = len(names_order) > 1
+
+    prog_by: Dict[str, List[str]] = {n: [] for n in names_order}
+    extra_prog: List[str] = []
+    for line in progress_lines:
+        raw = _strip_at_mentions(str(line).strip())
+        if not raw:
+            continue
+        if multi:
+            sp = _pmo_evening_split_vn_prefix(raw, name_set)
+            if sp:
+                vn, rest = sp
+                prog_by[vn].append(rest)
+                continue
+            extra_prog.append(raw)
+        else:
+            if names_order:
+                prog_by[names_order[0]].append(raw)
+            else:
+                extra_prog.append(raw)
+
+    sec2_lines: List[str] = []
+    for vn in names_order:
+        parts = [p for p in prog_by.get(vn) or [] if p]
+        if parts:
+            try:
+                sec2_lines.append(vl_tpl.format(version=vn))
+            except Exception:
+                sec2_lines.append(f'**【{vn}】**')
+            for p in parts:
+                sec2_lines.append(f'{bullet}{p}')
+    for ep in extra_prog:
+        sec2_lines.append(f'{bullet}{ep}')
+
+    if quiet:
+        sec2_body = str(t.get('body_progress_quiet') or f'{bullet}暂无相对早间的新增可量化进展。')
+    elif not sec2_lines:
+        if not has_baseline:
+            sec2_body = _fmt_pm_evening(
+                t, 'body_progress_first_run', f'{bullet}首次运行已建基线，明日起对比晚间变化。',
+                bullet=bullet,
+            )
+        else:
+            sec2_body = str(t.get('body_progress_empty') or f'{bullet}暂无相对早间的新增可量化进展。')
+    else:
+        sec2_body = '\n\n'.join(sec2_lines)
+
+    # --- Section 3: 跟进提醒（按版本分组） ---
+    followup = list(facts.get('followup_stale') or [])
+    stale_a = list(facts.get('stale_alert') or [])
+    no_change = list(facts.get('no_change') or [])
+
+    follow_by: Dict[str, List[str]] = defaultdict(list)
+
+    def _parse_follow_line(raw: str) -> None:
+        s = _strip_at_mentions(raw.strip())
+        if not s:
+            return
+        sp = _pmo_evening_split_vn_prefix(s, name_set)
+        if sp:
+            vn, rest = sp
+            for part in rest.split('   '):
+                p = part.strip().lstrip('- ').strip()
+                if p:
+                    follow_by[vn].append(p)
+            return
+        if '\uff1a' in s:
+            vn, rest = s.split('\uff1a', 1)
+            vn = vn.strip()
+            if vn in name_set:
+                for part in rest.split('   '):
+                    p = part.strip().lstrip('- ').strip()
+                    if p:
+                        follow_by[vn].append(p)
+                return
+        follow_by['__other__'].append(s)
+
+    for line in followup:
+        _parse_follow_line(str(line))
+    for line in stale_a:
+        _parse_follow_line(str(line))
+    _SKIP_LEADS = {'今日无推进', '无推进'}
+    for block in no_change:
+        blk = str(block).strip()
+        if not blk:
+            continue
+        first_ln, _, rest_blk = blk.partition('\n')
+        first_ln = _strip_at_mentions(first_ln.strip())
+        sub_items: List[str] = []
+        if rest_blk:
+            for sub in rest_blk.split('\n'):
+                p = _strip_at_mentions(sub.strip().lstrip('- ').strip())
+                if p:
+                    sub_items.append(p)
+        if '\uff1a' in first_ln:
+            vn, lead = first_ln.split('\uff1a', 1)
+            vn = vn.strip()
+            lead = lead.strip()
+            if vn in name_set:
+                if sub_items:
+                    merged = '\u3001'.join(sub_items)
+                    if lead and lead not in _SKIP_LEADS:
+                        follow_by[vn].append(f'{lead} \u2014 {merged}')
+                    else:
+                        follow_by[vn].append(merged)
+                elif lead:
+                    follow_by[vn].append(lead)
+                continue
+        if sub_items:
+            lead_t = first_ln.strip()
+            merged = '\u3001'.join(sub_items)
+            if lead_t and lead_t not in _SKIP_LEADS:
+                follow_by['__other__'].append(f'{lead_t} \u2014 {merged}')
+            else:
+                follow_by['__other__'].append(merged)
+        elif first_ln.strip():
+            _parse_follow_line(first_ln)
+
+    if calendar_err:
+        follow_by['__meta__'].append(
+            _fmt_pm_evening(t, 'calendar_err_line', f'{bullet}工作日历读取异常：{{detail}}', detail=str(calendar_err))
+        )
+
+    sec3_lines: List[str] = []
+    for vn in names_order:
+        items = [x for x in follow_by.get(vn) or [] if x]
+        if items:
+            try:
+                sec3_lines.append(vl_tpl.format(version=vn))
+            except Exception:
+                sec3_lines.append(f'**【{vn}】**')
+            for item in items:
+                sec3_lines.append(f'{bullet}{item}')
+    other = [x for x in follow_by.get('__other__') or [] if x]
+    for o in other:
+        sec3_lines.append(f'{bullet}{o}')
+    meta = [x for x in follow_by.get('__meta__') or [] if x]
+    for m in meta:
+        sec3_lines.append(m)
+
+    if sec3_lines:
+        sec3_body = '\n\n'.join(sec3_lines)
+    else:
+        sec3_body = str(t.get('body_followup_empty') or f'{bullet}暂无需跟进的无变化项。')
+
+    heading = _fmt_pm_evening(t, 'heading', '## 管线晚报[{mmdd}]', mmdd=mmdd)
+    hdr_a = str(t.get('section_action_header') or '## <font color="#b45309">需处理事项</font>')
+    hdr_p = str(t.get('section_progress_header') or '## <font color="#166534">今日进展</font>')
+    hdr_f = str(t.get('section_followup_header') or '## <font color="#1e40af">跟进提醒</font>')
+    foot = _fmt_pm_evening(t, 'footer', '###### ※ 小秘书提醒 · {mmdd} {hhmm}', mmdd=mmdd, hhmm=hhmm)
+
+    layout = str(
+        t.get('body_layout')
+        or '{heading}\n\n{sep}\n\n{hdr_action}\n\n{sec_action}\n\n'
+           '{sep}\n\n{hdr_progress}\n\n{sec_progress}\n\n'
+           '{sep}\n\n{hdr_followup}\n\n{sec_followup}\n\n'
+           '{sep}\n\n{footer}'
+    )
+    try:
+        return layout.format(
+            heading=heading,
+            sep=sep,
+            hdr_action=hdr_a,
+            sec_action=sec1_body,
+            hdr_progress=hdr_p,
+            sec_progress=sec2_body,
+            hdr_followup=hdr_f,
+            sec_followup=sec3_body,
+            footer=foot,
+        )
+    except Exception:
+        return (
+            f'{heading}\n\n{sep}\n\n{hdr_a}\n\n{sec1_body}\n\n'
+            f'{sep}\n\n{hdr_p}\n\n{sec2_body}\n\n'
+            f'{sep}\n\n{hdr_f}\n\n{sec3_body}\n\n'
+            f'{sep}\n\n{foot}'
+        )
+
+
+def run_pmo_evening_send(
+    *,
+    send_webhook: bool = True,
+    log_to_stdout: bool = True,
+    persist_state: bool = True,
+) -> dict:
+    """制作人向：与早间 producer 正文同源对比；POST 到 digest_config.version_digest_pmo_evening_webhook_key（默认 version_digest_assistant）。"""
+    config = _load_config()
+    pm_url = config.get('pm_system_url', 'http://127.0.0.1:8000').rstrip('/')
+    api_key = config.get('pm_system_api_key', '')
+    stale_threshold = int(config.get('version_change_stale_days', 3) or 3)
+    wc = _load_webhook_config()
+    wkey = str(config.get('version_digest_pmo_evening_webhook_key') or 'version_digest_assistant').strip()
+    evening_url = str(wc.get(wkey) or '').strip()
+    if not evening_url:
+        if log_to_stdout:
+            print(f'[pmo-evening] webhook_config 缺少 {wkey!r}，无法发送', flush=True)
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': 'no_evening_webhook'}
+
+    state_path = _state_path_from_config(config)
+    state = _load_state(state_path)
+    today_s = date.today().isoformat()
+
+    try:
+        all_versions = fetch_dashboard(pm_url, api_key=api_key or None)
+    except Exception as e:
+        if log_to_stdout:
+            print(f'[error] cannot reach PmSystem: {e}', flush=True)
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+    try:
+        import _push_versions_webhook_at_dm as _pvd
+    except Exception as e:
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+
+    if not all_versions:
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': 'empty_active_versions'}
+
+    versions = pick_versions(all_versions, None, version_id=None, version_name=None)
+    versions_by_id, users_by_id, pm_data_payload = fetch_pm_data_maps(
+        pm_url, api_key=api_key or None,
+    )
+    versions = merge_versions_with_data(versions, versions_by_id)
+    names_prod = _morning_names_from_merged(versions, 'producer', config)
+    if not names_prod:
+        if log_to_stdout:
+            print('[pmo-evening] producer 范围无版本，跳过', flush=True)
+        return {
+            'ok': True,
+            'versions_count': 0,
+            'digest': '',
+            'error': None,
+            'skipped': True,
+            'reason': 'no_producer_versions',
+        }
+
+    current_body, at_ms, n_built = _pvd.render_multi_version_digest_markdown(
+        pm_url,
+        api_key or None,
+        names_prod,
+        config,
+        log_to_stdout=log_to_stdout,
+        audience='producer',
+        data_all=pm_data_payload,
+    )
+    if n_built == 0 or not (current_body or '').strip():
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': 'digest_body_failed'}
+
+    current_hash = _sha256_text(current_body)
+    morning_p = state.get('morning_producer') if isinstance(state.get('morning_producer'), dict) else {}
+    morning_f = state.get('morning') if isinstance(state.get('morning'), dict) else {}
+    baseline_text = ''
+    baseline_metrics: Dict[str, dict] = {}
+    if str(morning_p.get('date') or '') == today_s:
+        baseline_text = str(morning_p.get('digest') or '')
+        if isinstance(morning_p.get('metrics'), dict):
+            baseline_metrics = dict(morning_p.get('metrics') or {})
+    if not baseline_text and str(morning_f.get('date') or '') == today_s:
+        baseline_text = str(morning_f.get('digest') or '')
+        if log_to_stdout:
+            print(
+                '[pmo-evening] 无 morning_producer，回退今日 morning 全量基线（对比口径可能偏宽）',
+                flush=True,
+            )
+        if isinstance(morning_f.get('metrics'), dict):
+            baseline_metrics = dict(morning_f.get('metrics') or {})
+    if not baseline_text:
+        baseline_text = str((state.get('latest') or {}).get('digest') or '')
+    latest_m = state.get('latest_metrics') if isinstance(state.get('latest_metrics'), dict) else None
+    if not baseline_metrics and latest_m:
+        baseline_metrics = dict(latest_m or {})
+    has_baseline = bool(baseline_text.strip())
+    changed = True
+    if has_baseline:
+        changed = _sha256_text(baseline_text) != current_hash
+
+    last_changed_s = str(state.get('last_changed_date') or '').strip() or today_s
+    if changed:
+        last_changed_s = today_s
+    stale_days: Optional[int] = None
+    holidays: List[str] = []
+    workdays: List[str] = []
+    calendar_err: Optional[str] = None
+    if not changed:
+        holidays, workdays, calendar_err = _fetch_workday_calendar(pm_url, api_key or None)
+        try:
+            start_d = datetime.strptime(last_changed_s[:10], '%Y-%m-%d').date()
+            end_d = date.today()
+            if calendar_err:
+                stale_days = None
+            else:
+                stale_days = _count_workdays_between(
+                    start_d,
+                    end_d,
+                    set(holidays),
+                    set(workdays),
+                )
+        except Exception:
+            stale_days = None
+    else:
+        stale_days = 0
+
+    current_metrics = _build_metrics_map(
+        versions,
+        users_by_id=users_by_id,
+        default_pm_user_id=str(config.get('default_pipeline_pm_user_id') or '').strip(),
+    )
+    change_facts = _build_change_facts(
+        baseline_map=baseline_metrics,
+        current_map=current_metrics,
+        stale_days=stale_days,
+        stale_threshold=stale_threshold,
+        config=config,
+    )
+    has_stale_content = bool(calendar_err) or bool(change_facts.get('stale_alert')) or (
+        stale_days is not None and stale_days >= stale_threshold
+    )
+    use_quiet_day = (
+        has_baseline
+        and not change_facts.get('progress')
+        and not change_facts.get('no_change')
+        and not change_facts.get('followup_stale')
+        and not has_stale_content
+    )
+    pm_users = fetch_pm_users(pm_url, api_key=api_key or None)
+    digest_kind = 'normal'
+    if use_quiet_day:
+        already_q = str(state.get('quiet_evening_pmo_sent_date') or '').strip() == today_s
+        if already_q:
+            if log_to_stdout:
+                print('[pmo-evening] 今日已发过 quiet，跳过', flush=True)
+            return {
+                'ok': True,
+                'versions_count': n_built,
+                'digest': '',
+                'error': None,
+                'skipped': True,
+                'reason': 'quiet_evening_pmo_already_sent',
+            }
+        digest_kind = 'quiet'
+        if log_to_stdout:
+            print('[pmo-evening] 无 delta，发制作人 PMO晚报（quiet）', flush=True)
+        digest = _render_pmo_evening_markdown(
+            names_order=names_prod,
+            change_facts=change_facts,
+            has_baseline=has_baseline,
+            quiet=True,
+            calendar_err=calendar_err,
+        )
+    else:
+        digest = _render_pmo_evening_markdown(
+            names_order=names_prod,
+            change_facts=change_facts,
+            has_baseline=has_baseline,
+            quiet=False,
+            calendar_err=calendar_err,
+        )
+    digest = digest.rstrip()
+
+    at_per_url: Dict[str, List[str]] = {}
+
+    if persist_state:
+        try:
+            state['schema_version'] = 1
+            state['latest_producer'] = {
+                'date': today_s,
+                'hash': current_hash,
+                'digest': current_body,
+            }
+            if digest_kind == 'quiet':
+                state['quiet_evening_pmo_sent_date'] = today_s
+            else:
+                state.pop('quiet_evening_pmo_sent_date', None)
+            _save_state(state_path, state)
+        except Exception as e:
+            if log_to_stdout:
+                print(f'[warn] save pmo-evening state failed: {e}', flush=True)
+
+    if log_to_stdout:
+        try:
+            print(f'\n{digest}\n', flush=True)
+        except UnicodeEncodeError:
+            enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+            safe = (digest + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
+            print(f'\n{safe}\n', flush=True)
+
+    if not send_webhook:
+        return {'ok': True, 'versions_count': n_built, 'digest': digest, 'error': None}
+
+    quiet = not log_to_stdout
+    result = _send_digest_body_to_webhooks(
+        digest,
+        [evening_url],
+        at_per_url,
+        quiet=quiet,
+        markdown_titles=[_dingtalk_markdown_title_pmo_evening()],
+    )
+    ok = bool(result and result.get('success'))
+    err = None if ok else (result or {}).get('error', 'send failed')
+    return {'ok': ok, 'versions_count': n_built, 'digest': digest, 'error': err}
+
+
+def run_pm_evening_send(
+    *,
+    send_webhook: bool = True,
+    log_to_stdout: bool = True,
+    persist_state: bool = True,
+) -> dict:
+    """PM 晚报：行动视角重组，推 PMO 群，@ PM+APM。"""
+    config = _load_config()
+    pm_url = config.get('pm_system_url', 'http://127.0.0.1:8000').rstrip('/')
+    api_key = config.get('pm_system_api_key', '')
+    stale_threshold = int(config.get('version_change_stale_days', 3) or 3)
+    wc = _load_webhook_config()
+    wkey = str(config.get('version_digest_pm_evening_webhook_key') or 'version_digest_pmo').strip()
+    evening_url = str(wc.get(wkey) or '').strip()
+    if not evening_url:
+        if log_to_stdout:
+            print(f'[pm-evening] webhook_config missing {wkey!r}', flush=True)
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': 'no_pm_evening_webhook'}
+
+    state_path = _state_path_from_config(config)
+    state = _load_state(state_path)
+    today_s = date.today().isoformat()
+
+    try:
+        all_versions = fetch_dashboard(pm_url, api_key=api_key or None)
+    except Exception as e:
+        if log_to_stdout:
+            print(f'[error] cannot reach PmSystem: {e}', flush=True)
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+    try:
+        import _push_versions_webhook_at_dm as _pvd
+    except Exception as e:
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': str(e)}
+
+    if not all_versions:
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': 'empty_active_versions'}
+
+    versions = pick_versions(all_versions, None, version_id=None, version_name=None)
+    versions_by_id, users_by_id, pm_data_payload = fetch_pm_data_maps(
+        pm_url, api_key=api_key or None,
+    )
+    versions = merge_versions_with_data(versions, versions_by_id)
+    names_pm = _morning_names_from_merged(versions, 'pm', config)
+    if not names_pm:
+        if log_to_stdout:
+            print('[pm-evening] pm scope has no versions, skip', flush=True)
+        return {'ok': True, 'versions_count': 0, 'digest': '', 'error': None, 'skipped': True}
+
+    current_body, at_ms, n_built = _pvd.render_multi_version_digest_markdown(
+        pm_url,
+        api_key or None,
+        names_pm,
+        config,
+        log_to_stdout=log_to_stdout,
+        audience='pm',
+        data_all=pm_data_payload,
+    )
+    if n_built == 0 or not (current_body or '').strip():
+        return {'ok': False, 'versions_count': 0, 'digest': '', 'error': 'digest_body_failed'}
+
+    current_hash = _sha256_text(current_body)
+    morning_f = state.get('morning') if isinstance(state.get('morning'), dict) else {}
+    baseline_text = ''
+    baseline_metrics: Dict[str, dict] = {}
+    if str(morning_f.get('date') or '') == today_s:
+        baseline_text = str(morning_f.get('digest') or '')
+        if isinstance(morning_f.get('metrics'), dict):
+            baseline_metrics = dict(morning_f.get('metrics') or {})
+    if not baseline_text:
+        if log_to_stdout:
+            print('[pm-evening] no morning baseline today, falling back to latest', flush=True)
+    if not baseline_text:
+        baseline_text = str((state.get('latest') or {}).get('digest') or '')
+    latest_m = state.get('latest_metrics') if isinstance(state.get('latest_metrics'), dict) else None
+    if not baseline_metrics and latest_m:
+        baseline_metrics = dict(latest_m or {})
+    has_baseline = bool(baseline_text.strip())
+    changed = True
+    if has_baseline:
+        changed = _sha256_text(baseline_text) != current_hash
+
+    last_changed_s = str(state.get('last_changed_date') or '').strip() or today_s
+    if changed:
+        last_changed_s = today_s
+    stale_days: Optional[int] = None
+    holidays: List[str] = []
+    workdays: List[str] = []
+    calendar_err: Optional[str] = None
+    if not changed:
+        holidays, workdays, calendar_err = _fetch_workday_calendar(pm_url, api_key or None)
+        try:
+            start_d = datetime.strptime(last_changed_s[:10], '%Y-%m-%d').date()
+            end_d = date.today()
+            if calendar_err:
+                stale_days = None
+            else:
+                stale_days = _count_workdays_between(start_d, end_d, set(holidays), set(workdays))
+        except Exception:
+            stale_days = None
+    else:
+        stale_days = 0
+
+    all_metrics = _build_metrics_map(
+        versions,
+        users_by_id=users_by_id,
+        default_pm_user_id=str(config.get('default_pipeline_pm_user_id') or '').strip(),
+    )
+    pm_name_set = set(names_pm)
+    current_metrics = {
+        k: v for k, v in all_metrics.items()
+        if str(v.get('name', '')).strip() in pm_name_set
+    }
+    baseline_metrics = {
+        k: v for k, v in baseline_metrics.items()
+        if str(v.get('name', '')).strip() in pm_name_set
+    }
+    change_facts = _build_change_facts(
+        baseline_map=baseline_metrics,
+        current_map=current_metrics,
+        stale_days=stale_days,
+        stale_threshold=stale_threshold,
+        config=config,
+    )
+
+    has_action_items = any(
+        (m.get('blocked', 0) > 0 or m.get('unassigned', 0) > 0 or m.get('dor_gap', 0) > 0)
+        for m in current_metrics.values()
+    )
+    use_quiet = (
+        has_baseline
+        and not change_facts.get('progress')
+        and not change_facts.get('followup_stale')
+        and not change_facts.get('stale_alert')
+        and not has_action_items
+    )
+
+    pm_users = fetch_pm_users(pm_url, api_key=api_key or None)
+    at_mobiles = _at_mobiles_pm_apm(config, pm_users)
+
+    if use_quiet:
+        already_q = str(state.get('quiet_evening_pm_sent_date') or '').strip() == today_s
+        if already_q:
+            if log_to_stdout:
+                print('[pm-evening] already sent quiet today, skip', flush=True)
+            return {'ok': True, 'versions_count': n_built, 'digest': '', 'skipped': True}
+        if log_to_stdout:
+            print('[pm-evening] no delta + no action items, sending quiet', flush=True)
+        digest = _render_pm_evening_markdown(
+            names_order=names_pm,
+            change_facts=change_facts,
+            current_metrics=current_metrics,
+            has_baseline=has_baseline,
+            quiet=True,
+            calendar_err=calendar_err,
+        )
+    else:
+        digest = _render_pm_evening_markdown(
+            names_order=names_pm,
+            change_facts=change_facts,
+            current_metrics=current_metrics,
+            has_baseline=has_baseline,
+            quiet=False,
+            calendar_err=calendar_err,
+        )
+    digest = digest.rstrip()
+
+    if persist_state:
+        try:
+            if use_quiet:
+                state['quiet_evening_pm_sent_date'] = today_s
+            else:
+                state.pop('quiet_evening_pm_sent_date', None)
+            _save_state(state_path, state)
+        except Exception as e:
+            if log_to_stdout:
+                print(f'[warn] save pm-evening state failed: {e}', flush=True)
+
+    if log_to_stdout:
+        try:
+            print(f'\n{digest}\n', flush=True)
+        except UnicodeEncodeError:
+            enc = getattr(sys.stdout, 'encoding', None) or 'utf-8'
+            safe = (digest + '\n').encode(enc, errors='replace').decode(enc, errors='replace')
+            print(f'\n{safe}\n', flush=True)
+
+    if not send_webhook:
+        return {'ok': True, 'versions_count': n_built, 'digest': digest, 'error': None}
+
+    quiet_flag = not log_to_stdout
+    title = _dingtalk_markdown_title_pm_evening()
+    result = send_via_webhook(
+        digest, evening_url, quiet=quiet_flag,
+        at_mobiles=at_mobiles or None,
+        markdown_title=title,
+    )
+    ok = bool(result and result.get('success'))
+    err = None if ok else (result or {}).get('error', 'send failed')
+    return {'ok': ok, 'versions_count': n_built, 'digest': digest, 'error': err}
 
 
 def run_version_change_send(
@@ -4132,9 +5260,9 @@ def main():
                         help='Save digest to file')
     parser.add_argument(
         '--mode',
-        choices=['snapshot', 'change'],
+        choices=['snapshot', 'change', 'pmo-evening', 'pm-evening'],
         default='snapshot',
-        help='snapshot=早间现状，change=傍晚今日变化',
+        help='snapshot=早间现状，change=傍晚今日变化，pmo-evening=制作人 PMO晚报，pm-evening=PM 晚报（PMO 群 @ PM）',
     )
     parser.add_argument(
         '--version-id',
@@ -4161,6 +5289,11 @@ def main():
         '--audience-sweep',
         action='store_true',
         help='助理群连发4条：与早间同一套版本筛选；可用 --version-name 将某版置顶进活跃列表',
+    )
+    parser.add_argument(
+        '--ignore-workday',
+        action='store_true',
+        help='早间快照忽略 PM 假日/调休日历仍发送（补发）；等价环境变量 VERSION_DIGEST_IGNORE_WORKDAY=1',
     )
     args = parser.parse_args()
     version_id = str(args.version_id or '').strip() or None
@@ -4215,7 +5348,19 @@ def main():
             raise SystemExit(1)
         return
 
-    if args.mode == 'change':
+    if args.mode == 'pmo-evening':
+        r = run_pmo_evening_send(
+            send_webhook=not args.dry_run,
+            log_to_stdout=True,
+            persist_state=not args.dry_run,
+        )
+    elif args.mode == 'pm-evening':
+        r = run_pm_evening_send(
+            send_webhook=not args.dry_run,
+            log_to_stdout=True,
+            persist_state=not args.dry_run,
+        )
+    elif args.mode == 'change':
         r = run_version_change_send(
             send_webhook=not args.dry_run,
             log_to_stdout=True,
@@ -4232,6 +5377,7 @@ def main():
             version_id=version_id,
             version_name=version_name,
             audience_override=ao if args.dry_run else None,
+            ignore_workday=bool(args.ignore_workday),
         )
 
     digest = r.get('digest') or ''

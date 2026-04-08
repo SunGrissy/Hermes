@@ -1,5 +1,17 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-04-09] PMO晚报 / 管线晚报（pmo-evening、pm-evening）与傍晚 18:00 计划任务
+
+### 状态：待推送（与根仓库同批）
+
+### 本次工作内容
+
+- `version_digest.py`：`--mode pmo-evening`、`--mode pm-evening`；`message_templates.json` 中 `pmo_evening` / `pm_evening` 全文布局与配色；`digest_config.json` 晚间 webhook 键
+- `run_evening_digest_both.ps1`（先 PMO 后管线）、`run_evening_pmo.ps1`、`run_evening_pm.ps1`
+- `register_evening_digest_task.ps1`：计划任务 `MyAgents_EveningDigest_1800` 每日 18:00
+
+---
+
 ## [2026-04-08] 日志助手定时汇总（work_report_assistant_run + 计划任务）
 
 ### 状态：已提交推送

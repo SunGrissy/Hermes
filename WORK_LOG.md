@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-09] - dingtalk-desktop：PMO晚报/管线晚报、傍晚 18:00 计划任务
+
+**状态**: 已提交
+
+**内容**:
+- `version_digest.py`：`pmo-evening`（制作人向）、`pm-evening`（管线晚报，pm 口径筛选与基线）；模板化正文、`message_templates.json` 中 `pm_evening` / `pmo_evening` 布局与配色
+- `digest_config.json`：晚间 webhook 键说明
+- `run_evening_digest_both.ps1`、`run_evening_pmo.ps1`、`run_evening_pm.ps1`；`register_evening_digest_task.ps1` 注册 `MyAgents_EveningDigest_1800` 每日 18:00
+
+---
+
 ## [2026-04-08] - md-reader：大纲侧栏、Mermaid 渲染（子模块指针）
 
 **状态**: 验收通过

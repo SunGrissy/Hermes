@@ -169,6 +169,10 @@
   "_note_version_digest_webhooks": "版本汇总推送：优先 version_digest_webhook_keys + webhook_config.json 键名解析 URL；未配置 keys 时仍可用 version_digest_webhooks 直填 URL（此时 @ 用 version_digest_webhook_at_policy 数组与 URL 顺序对齐）。机器人关键词均为「小秘书提醒」。",
   "_note_version_digest_webhook_at": "键名与 webhook_config.json 一致。pm_apm=仅圈 PM+APM；none=不圈；ops_team=圈 version_digest_ops_member_names。未写明的键或旧版仅 URL 列表时回退为管线全角色 @。",
   "_note_version_digest_audience": "早间快照按 webhook 键分流正文：version_digest_audience_by_key 值为 full(全量)/producer(同 full)/pm/pld/group。PM 版隐藏 PLD 行动项，PLD 版隐藏 PM 行动项，group 版压缩数据快照与管线块。版本 progressNotifyWebhooks 走 version_digest_progress_webhook_audience（默认 group）。",
+  "version_digest_pmo_evening_webhook_key": "version_digest_assistant",
+  "_note_version_digest_pmo_evening_webhook": "PMO晚报机器人：默认同早间 producer（制作人）早报 webhook_config 键 version_digest_assistant；可改为与早报相同的其他键。",
+  "version_digest_pm_evening_webhook_key": "version_digest_pmo",
+  "_note_version_digest_pm_evening_webhook": "PM晚报机器人：推送到 PMO 群（version_digest_pmo），@ PM+APM。",
   "version_digest_audience_by_key": {
     "version_digest_pmo": "pm",
     "version_digest_assistant": "producer",
@@ -265,6 +269,32 @@
     "doc_review_palace_timeout_seconds": 600,
     "_note_doc_review_progress": "预审进度心跳：每隔 N 秒推送一条（阶段+已等待秒数）；设为 0 关闭",
     "doc_review_progress_interval_seconds": 30
+  },
+  "aider_runner": {
+    "_note": "enabled=true 时：在 memo 技能群内发「aider 仓库别名 自然语言任务」或「代码助手 别名 …」异步执行本机 aider；默认关闭。repos 填别名到绝对路径；repo_roots_allow 限制目录；self_only 与 assistant_group_skill_uids/aliases 同源校验。inherit_palace_llm=true（默认）时从 palace/.env 读取 PALACE_API_BASE/PALACE_API_KEY 注入 Aider（OpenAI 兼容网关，与 Palace 同源）；PALACE_PROVIDER=mock 时不注入密钥。真机须 palace/.env 中 PALACE_PROVIDER=openai_compatible 并填写密钥。",
+    "enabled": true,
+    "inherit_palace_llm": true,
+    "litellm_model_prefix": "openai",
+    "_note_litellm_prefix": "PALACE_MODEL 无斜杠时传给 Aider 为 {prefix}/模型名，供 LiteLLM 走 OpenAI 兼容网关；裸名会报 LLM Provider NOT provided。若已在 palace 写全名如 openrouter/xxx 则不再加前缀。",
+    "aider_model": "minimax-m2.7",
+    "_note_aider_model": "若填写则仅钉钉 Aider 使用该模型，覆盖 PALACE_MODEL；不修改 palace/.env。留空则与 Palace 默认 PALACE_MODEL 一致。",
+    "palace_env_path": "d:/MyAgents/palace/.env",
+    "self_only": true,
+    "trigger_prefix": "aider",
+    "alternate_trigger": "代码助手",
+    "aider_bin": "aider",
+    "max_seconds": 600,
+    "max_output_chars": 10000,
+    "require_git": true,
+    "repo_roots_allow": [
+      "d:/MyAgents"
+    ],
+    "repos": {
+      "pm-system": "d:/MyAgents/pm-system",
+      "dingtalk-desktop": "d:/MyAgents/dingtalk-desktop",
+      "performeval": "d:/MyAgents/performeval"
+    },
+    "aider_extra_args": []
   },
   "_note_recruit_resume": "recruit_cids 会话里 ct=502 PDF 会走简历初筛；本人发给 HR 的 PDF 由 skill_router 按 is_self/uid 排除；文件名先过 resume_name_filter 第一层门禁（block 命中直接跳过，allow 用于快速识别简历命名，unknown_policy 控制未命中 allow 的处理）。时间窗：仅看本机 PDF 的 mtime（下载/落盘）是否在近 48h；无本机文件时不做时间挡，早期发送的简历可先进 pipeline，下载后再用 mtime 判。",
   "resume_name_filter": {
