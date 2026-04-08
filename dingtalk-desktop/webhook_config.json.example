@@ -1,10 +1,16 @@
 {
-  "_comment": "复制为 webhook_config.json，填入完整 webhook URL（含 access_token），勿提交。key 用途: cursor_session=Cursor会话结果, default=助理通用, interview_checklist=面试清单md-reader链接(助理通知群), version_digest=版本摘要, resume_notify=简历通知, memo_tracker=备忘, doc_review=文档预审",
+  "_comment": "复制为 webhook_config.json，填入完整 webhook URL（含 access_token），勿提交。key 用途: cursor_session=Cursor会话结果, default=助理通用, interview_checklist=面试清单md-reader链接(助理通知群), version_digest=版本摘要(兼容旧键), resume_notify=简历通知, hr=与 resume_notify 同 URL 时可复用 HR 机器人, memo_tracker=备忘, doc_review=文档预审, work_report_assistant=日志助手(可选，默认用 hr)",
+  "_comment_version_digest_keys": "早间多群分流：version_digest_pmo / version_digest_assistant / version_digest_pld，与 digest_config.version_digest_webhook_keys + version_digest_audience_by_key 对应。",
   "cursor_session": "",
   "default": "",
   "interview_checklist": "",
   "version_digest": "",
+  "version_digest_pmo": "",
+  "version_digest_assistant": "",
+  "version_digest_pld": "",
   "resume_notify": "",
+  "hr": "",
   "memo_tracker": "",
-  "doc_review": ""
+  "doc_review": "",
+  "work_report_assistant": ""
 }

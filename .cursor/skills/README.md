@@ -24,5 +24,6 @@
 | token-usage-analysis | Cursor 用量 CSV 分析、优化建议 |
 | vanilla-js-ui-patterns | 原生 JS 弹窗、Toast、表格等 UI 模式 |
 | webapp-testing | Playwright 本地 Web 应用测试 |
+| work-report-assistant | 日志助手 Chat API 定时汇总（早报/周报素材/体验提炼/AI 与体验） |
 
 每个 skill 目录含 `SKILL.md`（必选），部分带 `scripts/` 或 `reference.md`。

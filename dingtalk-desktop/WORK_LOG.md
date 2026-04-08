@@ -1,5 +1,52 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-04-08] 日志助手定时汇总（work_report_assistant_run + 计划任务）
+
+### 状态：已提交推送
+
+### 本次工作内容
+
+- `work_report_assistant_run.py`：四场景提示词、`/api/v1/chat`、回复分片、`send_result_webhook.py` 推送；周报素材/体验提炼/AI 周报格式与钉钉可读性迭代
+- `work_report_assistant_roster.json`：汇总名单与技组口径
+- `run_work_report_assistant.ps1`、`register_work_report_assistant_tasks.ps1`（Windows 计划任务四档）
+- `docs/work-report-assistant.md`；`.cursor/skills/work-report-assistant/SKILL.md`
+- `webhook_config.json.example`：补充 `hr` / `work_report_assistant` 键说明；本机 `webhook_config.json` 含 `hr` 不入库
+
+---
+
+## [2026-04-03] VersionDigest 定时 09:40 + 提权注册入口（elevated.cmd）
+
+### 状态：脚本/文档已更新
+
+### 本次工作内容
+
+- `run_version_digest.ps1`、`register_version_digest_task.ps1`：**每日 09:40**（与产品「早间」一致）
+- 新增 **`register_version_digest_task_elevated.cmd`**：双击经 UAC 提权后执行注册（非管理员终端下 `Register-ScheduledTask` 会拒绝访问）
+- `docs/version-digest-morning.md`、`README.md`：补充定时任务与提权说明
+
+---
+
+## [2026-04-03] VersionDigest：注册脚本时间与 run_version_digest 对齐 + 文档说明「本机须管理员注册」
+
+### 状态：已由当日后续条目覆盖（曾短暂改为 15:00，已回退 09:40）
+
+### 本次工作内容
+
+- （历史）`register_version_digest_task.ps1` 与 `run_version_digest` 对齐说明
+
+---
+
+## [2026-04-02] 早间 VersionDigest 行为文档化（version-digest-morning.md）
+
+### 状态：文档已落库（代码变更见同周期会话）
+
+### 本次工作内容
+
+- 新增 **`docs/version-digest-morning.md`**：受众与版本过滤、PLD 单条 / 版本快报多条、footer 与「请 PM」相对顺序、详情链接、`--audience-sweep` 注意点、配置项与变更摘要
+- **`README.md`**、**`版本与管线推送说明.md`**：增加该文档入口链接
+
+---
+
 ## [2026-03-30] 待发变更入库：模板与简历技能、260330 可分发包、daemon_spawn、Webhook 说明
 
 ### 状态：已提交（待推送）

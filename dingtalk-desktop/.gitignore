@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 webhook_config.json
+work_report_assistant_config.json
 # 0401 远端推送脚本本地状态（冷却/互斥）
 .send_0401_remote.running
 .send_0401_remote.last_ok
