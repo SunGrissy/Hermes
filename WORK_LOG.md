@@ -11,7 +11,7 @@
 
 ## [2026-04-09] - dingtalk-desktop：PMO晚报/管线晚报、傍晚 18:00 计划任务
 
-**状态**: 已提交
+**状态**: 已提交推送
 
 **内容**:
 - `version_digest.py`：`pmo-evening`（制作人向）、`pm-evening`（管线晚报，pm 口径筛选与基线）；模板化正文、`message_templates.json` 中 `pm_evening` / `pmo_evening` 布局与配色
