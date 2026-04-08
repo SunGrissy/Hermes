@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-09] - pm-system：并发同步结构性修复（子模块指针）
+
+**状态**: 已提交
+
+**内容**:
+- 子模块 `pm-system`：`dataRevision` 乐观锁消费侧修复（心跳 revision、POST 串行锁、409 递归防护、banner 基线不覆盖 localStorage）、`APP_VERSION` 1.0.112（见子模块 `WORK_LOG` 与提交 `4502f4c`）
+
+---
+
 ## [2026-04-09] - dingtalk-desktop：PMO晚报/管线晚报、傍晚 18:00 计划任务
 
 **状态**: 已提交
