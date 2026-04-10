@@ -839,6 +839,23 @@
 - PLD 快报改为按版本拆条发送；新增过滤范围日志，便于排查“未推送/被过滤”问题
 - `pm-system/version_progress_notify.py`：未发版标题统一为“距下一节点剩余时间”，待复盘场景去除管线快报“发版检查/查看详情”，版本快报快照去除容量并补充草稿/开发中
 
+## [2026-04-10] - [招聘工具链 SKILL 体系建设]
+
+**状态**: 验收通过
+
+**内容**:
+- 新建 `interview-checklist` SKILL：面试清单生成规范（模板结构、6 岗位核心能力标准、评分表）
+- 新建 `interview-evaluation` SKILL：面试评价规范（8 段式报告模板、评分标准、证据原则）
+- 更新 `resume-screening` SKILL + Rule：增加 reference/ 回退路径，支持自包含分享
+- 更新 `.cursor/skills/README.md`：补充招聘工具链①②③标注
+- 新建 `_recruitment-toolkit-README.md` + `_recruitment-toolkit-guide.md`：工具链技术说明 + 使用指南（Cursor / 非 Cursor 双路径）
+- 新建 `recruitment-toolkit/` 独立分发包：可直接发给同事的自包含目录
+
+**备注**:
+- 三个 SKILL 构成完整链路：简历初筛 → 面试清单 → 面试评价
+- 每个 SKILL 支持 reference/ 自包含机制，同事无需仓库全量即可使用
+- recruitment-toolkit/ 为分发副本，含 SKILL 文件 + 岗位清单 + 使用指南
+
 ## [2026-04-02] - [VersionDigest 单任务运行与文档同步]
 
 **状态**: 验收通过
