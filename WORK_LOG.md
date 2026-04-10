@@ -1,5 +1,17 @@
 # Work Log - MyAgents Root
 
+## [2026-04-10] - Skills：HTML 幻灯片、向上汇报、人机协作内容创作
+
+**状态**: 验收通过
+
+**内容**:
+- `.cursor/skills/html-slide-deck/SKILL.md`：HTML/CSS 演示文稿组件与流程（参考 `会议材料/孙懿@UE4-26Q1 AI提效思考和实践报告.html`）
+- `.cursor/skills/leadership-report-craft/SKILL.md`：思考作业/成果汇报、受众校准、概念穿线、敏感信息与收尾
+- `.cursor/skills/ai-content-collaboration/SKILL.md`：与 Agent 协作做内容的模式与高效反馈句式
+- `会议材料/孙懿@UE4-26Q1 AI提效思考和实践报告.html`：UE4 工作室 AI 提效思考与实践报告（幻灯片版，20 页）
+
+---
+
 ## [2026-04-10] - 日志助手 VP 启动包文档与 SKILL
 
 **状态**: 已提交
