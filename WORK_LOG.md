@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-10] - 日志助手 VP 启动包文档与 SKILL
+
+**状态**: 已提交
+
+**内容**:
+- `.cursor/skills/work-report-assistant/SKILL.md`：与启动包对齐的索引与说明
+- `workspace-docs/` 为独立 Git 仓（根 `.gitignore` 忽略），启动包与 `REPORT-ASSISTANT-SHOWCASE.md` 在该仓内提交（见该目录 `WORK_LOG`）
+
+---
+
 ## [2026-04-09] - pm-system：并发同步结构性修复（子模块指针）
 
 **状态**: 已提交
