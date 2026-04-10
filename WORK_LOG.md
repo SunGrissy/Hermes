@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-10] - Cursor Skills、Rules 与 dingtalk-desktop 同步提交
+
+**状态**: 验收通过
+
+**内容**:
+- `.cursor/skills/`：新增/更新多份 SKILL（含 pm-data-sync 等），`_author-novel-profile_local_backup`、`boss-precheck-review`、`digital-twin-voice`、`feature-what-review`、`producer-dialogue` 等
+- `.cursor/rules/digital-twin-voice.mdc`：数字分身表述规则
+- `dingtalk-desktop/`：daemon、digest、skill_router、resume_screen、aider_runner、mcp_server、计划任务脚本与文档等；`.venv_mcp/` 已加入根 `.gitignore` 不纳入版本库
+
+---
+
 ## [2026-04-10] - 会议材料：UE4 Q1 团队 AI 实践成果报告
 
 **状态**: 验收通过

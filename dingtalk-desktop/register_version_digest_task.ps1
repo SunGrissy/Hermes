@@ -1,6 +1,10 @@
 # register_version_digest_task.ps1
-# 以管理员权限运行此脚本即可注册定时任务
-# 右键 -> 用 PowerShell 运行（或在管理员 PowerShell 中执行）
+# Register Windows scheduled task "VersionDigest" -> run_version_digest.ps1 daily at 09:40
+# Requires: Run as Administrator (or use register_version_digest_task_elevated.cmd)
+#
+# Chinese help: 以管理员身份运行 PowerShell，cd 到本目录后执行 .\register_version_digest_task.ps1
+
+$ErrorActionPreference = 'Stop'
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $DigestScript = Join-Path $ScriptDir "run_version_digest.ps1"
@@ -20,13 +24,12 @@ Register-ScheduledTask `
     -Action $action `
     -Trigger $trigger `
     -Settings $settings `
-    -Description "每日09:40推送PmSystem版本状态到助理通知群" `
+    -Description "Daily 09:40 VersionDigest: run_version_digest.ps1 -> version_digest.py" `
     -RunLevel Highest `
     -Force
 
 Write-Host ""
-Write-Host "注册完成！任务名称: VersionDigest，每日 09:40 运行" -ForegroundColor Green
-Write-Host "脚本路径: $DigestScript" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "立即测试: Start-ScheduledTask -TaskName VersionDigest" -ForegroundColor Yellow
-Read-Host "按回车关闭"
+Write-Host "OK: Task VersionDigest registered, daily at 09:40" -ForegroundColor Green
+Write-Host "Script: $DigestScript" -ForegroundColor Cyan
+Write-Host "Test: Start-ScheduledTask -TaskName VersionDigest" -ForegroundColor Yellow
+if (-not $env:VERSION_DIGEST_REGISTER_NONINTERACTIVE) { Read-Host 'Press Enter to close' }

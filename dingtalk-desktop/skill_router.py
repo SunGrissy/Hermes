@@ -14,6 +14,7 @@
   - 助理通知群「上班啦」/「上班」→ 巡检并尝试拉起未就绪服务；**始终 webhook 摘要**（已在跑 / 已拉起恢复 / 仍异常）
   - 助理群「查岗」→ 只巡检不启动；**始终 webhook 摘要**（全绿也推，确认口令已执行）
   - 助理群「修复」→ **先 webhook「指令已收到」**，再同上班啦拉起并复检并推摘要；钉钉大门仍异常则分离子进程跑 daemon_health_notify（自检+可选重启），勿在本线程内关 daemon
+  - digest_config.json 的 aider_runner（enabled=true 时）：助理群/白名单群内「aider 别名 任务说明」或「代码助手 别名 …」→ 后台线程调本机 aider --yes --message，开始与结束 webhook（路径白名单 + self_only 与备忘发送者策略同源）
   - 助理群「查看进程」→ desk_ops 调用仓库根 proc_manager.py --markdown-list，结果 webhook；「关进程 N」或「关进程 1,3」按快照序号关闭（与桌面运维同门禁）
   - 助理群「启动PM」「启动 PM」（中间可空格，PM 大小写不敏感）→ desk_ops 执行 quick_start_headless.bat 等，探活后 webhook 汇总（8000 若被其它服务占用会失败）
   - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
@@ -34,6 +35,8 @@ import re
 import sys
 import json
 import time
+import tempfile
+import subprocess
 import threading
 import urllib.request
 from datetime import datetime
@@ -44,6 +47,10 @@ from datetime import datetime
 # [AgentWish Task] 任务目标: WISH-001 群消息「许愿」/「愿望单」路由
 # [AgentRsum Task] 开始时间: 2026-03-25
 # [AgentRsum Task] 任务目标: RESUME-001~003 简历轮询源 cid、日志回退、排除本人/内部材料 PDF
+# [AgentFilt Task] 开始时间: 2026-04-01 18:20
+# [AgentFilt Task] 任务目标: RESUME-FILT-001 简历文件名第一层判定，拦截调查报告/述职总结等误触发
+# [AgentAidr Task] 开始时间: 2026-04-08
+# [AgentAidr Task] 任务目标: AIDR-001 digest aider_runner 接入 skill_router
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _THIS_DIR)
 
@@ -89,6 +96,7 @@ from skills.memo_tracker import (
     _wish_webhook_for_cid,
 )
 from skills.desk_ops import process_desk_ops
+from skills.aider_runner import process_aider_runner
 from skills.doc_review import (
     extract_doc_url,
     extract_doc_url_from_message,
@@ -107,6 +115,14 @@ _TR_SYNC_INTERVAL_MS = int(os.environ.get('SKILL_TR_SYNC_INTERVAL_MS', '120000')
 _CONFIG_PATH  = os.path.join(_THIS_DIR, 'digest_config.json')
 # 与 daemon 写入的日志路径一致，否则预审回溯时读不到「刚发的文档链接」
 _LOG_FILE     = os.path.join(DATA_DIR, '_msg_log.jsonl')
+_TEMPLATE_PATH = os.path.join(_THIS_DIR, 'message_templates.json')
+_MYAGENTS_ROOT = os.path.normpath(os.path.join(_THIS_DIR, '..'))
+_PALACE_RUN_PY = os.path.join(_MYAGENTS_ROOT, 'palace', 'run.py')
+_INTERVIEW_OUT_DIR = os.path.join(_MYAGENTS_ROOT, 'data', 'interview_reviews')
+
+_INTERVIEW_PENDING_TTL_MS = 30 * 60 * 1000
+_INTERVIEW_PENDING_BY_CID = {}
+_INTERVIEW_PENDING_LOCK = threading.Lock()
 
 # region agent log
 _AGENT_DEBUG_LOG = os.path.normpath(os.path.join(_THIS_DIR, '..', 'debug-5a049e.log'))
@@ -274,6 +290,40 @@ def _log(msg: str):
     print(f'[skill_router][{ts}] {msg}', flush=True)
 
 
+_RESUME_NAME_FILTER_DEFAULT = {
+    # 命中任一排除词直接跳过（非候选人简历）
+    'block_keywords': [
+        '面试评价', '面试结论', '面试清单', '面试记录', '面试反馈',
+        '述职', '二次审核', '审核意见', '入职定级', '录用审批', '背调',
+        '调查报告', '调研报告', '报告', '总结', '复盘', '会议纪要', '汇报',
+        '周报', '月报', '季度总结', '年度总结', '预算', '招标', '合同',
+    ],
+    # 命中任一关键词视为明确简历命名
+    'allow_keywords': ['简历', '个人简历', 'resume', 'cv', '应聘', '求职'],
+    # 未命中 allow 且未命中 block 时：
+    # pass=放行；skip=全拦；skip_non_name=仅「姓名式命名」放行（推荐）
+    'unknown_policy': 'skip_non_name',
+}
+
+
+def _resume_name_filter_cfg_from_root(cfg: dict) -> dict:
+    raw = cfg.get('resume_name_filter')
+    if not isinstance(raw, dict):
+        raw = {}
+    out = dict(_RESUME_NAME_FILTER_DEFAULT)
+    _allow = raw.get('allow_keywords')
+    _block = raw.get('block_keywords')
+    if isinstance(_allow, list):
+        out['allow_keywords'] = [str(x).strip() for x in _allow if str(x).strip()]
+    if isinstance(_block, list):
+        out['block_keywords'] = [str(x).strip() for x in _block if str(x).strip()]
+    _policy = str(raw.get('unknown_policy') or out['unknown_policy']).strip().lower()
+    if _policy not in ('pass', 'skip', 'skip_non_name'):
+        _policy = 'skip_non_name'
+    out['unknown_policy'] = _policy
+    return out
+
+
 def _load_config() -> dict:
     """从 digest_config.json 读取所有路由配置"""
     try:
@@ -347,17 +397,24 @@ def _load_config() -> dict:
                     memo_cfg['wish_reply_webhook_by_cid'] = br
                 br[tgc] = tw
 
+        ar = cfg.get('aider_runner')
+        if isinstance(ar, dict):
+            memo_cfg['aider_runner'] = dict(ar)
+        else:
+            memo_cfg['aider_runner'] = {}
+
         return {
             'recruit_cids': cids,
             'cid_names': cid_names,
             'notify_cid': notify_cid,
             'memo_tracker': memo_cfg,
             'doc_review': doc_review_cfg,
+            'resume_name_filter': _resume_name_filter_cfg_from_root(cfg),
         }
     except Exception as e:
         _log(f'load config failed: {e}')
         return {'recruit_cids': [], 'cid_names': {}, 'notify_cid': '',
-                'memo_tracker': {}}
+                'memo_tracker': {}, 'resume_name_filter': dict(_RESUME_NAME_FILTER_DEFAULT)}
 
 
 def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 75) -> list:
@@ -538,30 +595,73 @@ def _extract_file_info(msg: dict) -> tuple:
     return msg_id, file_name, file_path
 
 
-# 招聘会话里会混有「本人发给 HR 的材料」；此类 PDF 不应走候选人初筛 LLM
-_RESUME_SKIP_NAME_SUBSTRINGS = (
-    '面试评价',
-    '面试结论',
-    '面试清单',
-    '面试记录',
-    '面试反馈',
-    '述职',
-    '二次审核',
-    '审核意见',
-    '入职定级',
-    '录用审批',
-    '背调',
-)
+def _normalize_resume_filename(name: str) -> str:
+    n = (name or '').strip().lower()
+    if not n:
+        return ''
+    return re.sub(r'[\s\-_().（）\[\]【】]+', '', n)
 
 
-def _resume_pdf_filename_should_skip(file_name: str) -> bool:
-    if not (file_name or '').strip():
+def _resume_name_keyword_hit(file_name: str, keyword: str) -> bool:
+    kw = (keyword or '').strip().lower()
+    if not kw:
         return False
-    n = file_name.lower()
-    for s in _RESUME_SKIP_NAME_SUBSTRINGS:
-        if s.lower() in n:
-            return True
+    name_raw = (file_name or '').lower()
+    name_norm = _normalize_resume_filename(file_name)
+    kw_norm = _normalize_resume_filename(kw)
+    return (kw in name_raw) or (kw_norm and kw_norm in name_norm)
+
+
+def _resume_filename_looks_like_person_name(file_name: str) -> bool:
+    """姓名式命名：张三.pdf、李先生.pdf、WangSan.pdf 等。"""
+    base = (file_name or '').strip()
+    if not base:
+        return False
+    base = re.sub(r'\.[^.]+$', '', base).strip()
+    if not base:
+        return False
+    # 去掉常见分隔符后再判定
+    norm = re.sub(r'[\s\-_().（）\[\]【】·]+', '', base)
+    if not norm:
+        return False
+    # 中文姓名（2~4字）及带称谓（先生/女士/小姐/同学）
+    if re.fullmatch(r'[\u4e00-\u9fff]{2,4}', norm):
+        return True
+    if re.fullmatch(r'[\u4e00-\u9fff]{1,4}(先生|女士|小姐|同学)', norm):
+        return True
+    # 英文姓名：2~40字母（可含点与空格）
+    if re.fullmatch(r"[A-Za-z][A-Za-z.\s]{1,39}", base):
+        return True
     return False
+
+
+def _resume_pdf_filename_gate(file_name: str, resume_name_filter: dict | None) -> tuple:
+    """第一层文件名门禁：先按文件名判断是否应进入简历预审。"""
+    cfg = resume_name_filter or _RESUME_NAME_FILTER_DEFAULT
+    blocks = cfg.get('block_keywords') or []
+    allows = cfg.get('allow_keywords') or []
+    policy = str(cfg.get('unknown_policy') or 'pass').strip().lower()
+    if policy not in ('pass', 'skip', 'skip_non_name'):
+        policy = 'skip_non_name'
+    if not (file_name or '').strip():
+        return True, ''
+
+    for kw in blocks:
+        if _resume_name_keyword_hit(file_name, kw):
+            return False, f'非候选人简历：文件名命中排除词[{kw}]'
+
+    if allows:
+        for kw in allows:
+            if _resume_name_keyword_hit(file_name, kw):
+                return True, ''
+        if policy == 'skip':
+            return False, '非候选人简历：文件名未命中简历关键词'
+        if policy == 'skip_non_name':
+            if _resume_filename_looks_like_person_name(file_name):
+                return True, ''
+            return False, '非候选人简历：文件名未命中简历关键词且非姓名式命名'
+
+    return True, ''
 
 
 def _resume_message_is_from_me(msg: dict) -> bool:
@@ -620,7 +720,7 @@ def _fetch_resume_messages(cid: str, count: int, timeout: int) -> list:
     return msgs
 
 
-def _poll_once(cid: str, seen_ids: set, source_name: str = ''):
+def _poll_once(cid: str, seen_ids: set, source_name: str = '', resume_name_filter: dict | None = None):
     """轮询一个招聘群/私信，处理所有新的 ct=502 消息。
     初筛结论经 resume_notify Webhook 推送（见 resume_screen）；本函数只负责在源会话上拉消息与触发下载。
     source_name: 来源的显示名（用于推送消息中告知来源）
@@ -657,11 +757,12 @@ def _poll_once(cid: str, seen_ids: set, source_name: str = ''):
             )
             seen_ids.add(msg_id)
             continue
-        if _resume_pdf_filename_should_skip(file_name):
-            _log(f'跳过简历初筛（文件名属内部材料）: {file_name}')
+        _gate_ok, _gate_reason = _resume_pdf_filename_gate(file_name, resume_name_filter)
+        if not _gate_ok:
+            _log(f'跳过简历初筛（文件名门禁）: {file_name} | {_gate_reason}')
             save_resume_result(
                 msg_id, cid, sender_uid, file_name, file_path or '',
-                '—', '跳过', '非候选人简历：文件名命中内部材料关键词', reply_sent=False,
+                '—', '跳过', _gate_reason, reply_sent=False,
             )
             seen_ids.add(msg_id)
             continue
@@ -1219,6 +1320,16 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'memo quick-edit {_edit_fn.__name__} error: {e}')
 
     try:
+        if process_aider_runner(
+                msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg,
+                sender_uid=_message_sender_identity(msg)):
+            memo_seen_ids.add(msg_id)
+            _log('push: Aider 指令')
+            return
+    except Exception as e:
+        _log(f'aider_runner error: {e}')
+
+    try:
         if process_desk_ops(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
             memo_seen_ids.add(msg_id)
             _log('push: 桌面运维指令')
@@ -1467,11 +1578,14 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
     router_start_ms：仅处理不早于本次 router 启动的消息（重启后不追溯）。
     """
     messages = _fetch_memo_messages(group_cid, max_age_ms=_MEMO_MAX_AGE_MS)
+    _cleanup_pending_interview_bind()
     if os.environ.get('SKILL_ROUTER_MEMO_POLL_TRACE', '').strip() == '1':
         _log(f'memo poll trace cid={group_cid} fetched_messages={len(messages)}')
     now_ms = int(time.time() * 1000)
 
     for msg in messages:
+        if _handle_interview_file_message(msg, group_cid, seen_ids, router_start_ms=router_start_ms):
+            continue
         text = _normalize_command_text(_extract_message_text(msg))
         if not text:
             continue
@@ -1488,6 +1602,9 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
 
         if not _assistant_group_skill_sender_allowed(memo_cfg, group_cid, _message_sender_identity(msg)):
             seen_ids.add(msg_id)
+            continue
+
+        if _try_bind_candidate_command(text, group_cid, seen_ids, msg_id):
             continue
 
         if _RE_MORNING.match(text):
@@ -1728,6 +1845,16 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             continue
 
         try:
+            if process_aider_runner(
+                    msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg,
+                    sender_uid=_message_sender_identity(msg)):
+                seen_ids.add(msg_id)
+                _log('poll: Aider 指令')
+                continue
+        except Exception as e:
+            _log(f'aider_runner error: {e}')
+
+        try:
             if process_desk_ops(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg):
                 seen_ids.add(msg_id)
                 _log('poll: 桌面运维指令')
@@ -1902,6 +2029,303 @@ def _maybe_sync_tr_local(memo_cfg: dict) -> None:
         _log(f'TR sync error: {e}')
 
 
+def _resume_notify_webhook() -> str:
+    """面试评价通知统一走 resume_notify。"""
+    fallback = ''
+    try:
+        with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            cfg = json.load(f)
+        fallback = str(cfg.get('resume_notify_webhook') or '').strip()
+    except Exception:
+        pass
+    return get_webhook_url('resume_notify', fallback)
+
+
+def _load_msg_templates() -> dict:
+    try:
+        with open(_TEMPLATE_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def _interview_tpl() -> dict:
+    data = _load_msg_templates().get('interview_review', {})
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _send_notify_markdown(title: str, text: str, webhook_url: str):
+    if not webhook_url:
+        return
+    payload = json.dumps({
+        'msgtype': 'markdown',
+        'markdown': {'title': title, 'text': text},
+    }, ensure_ascii=False).encode('utf-8')
+    req = urllib.request.Request(
+        webhook_url, data=payload,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15):
+            pass
+    except Exception as e:
+        _log(f'notify markdown webhook failed: {e}')
+
+
+def _looks_like_interview_file(file_name: str) -> bool:
+    n = (file_name or '').strip().lower()
+    if not n or not n.endswith('.pdf'):
+        return False
+    return ('招聘面试' in n) or ('面试纪要' in n)
+
+
+def _extract_candidate_from_filename(file_name: str) -> str:
+    base = re.sub(r'\.[^.]+$', '', (file_name or '').strip())
+    # 常见命名：招聘面试-张三-xxx
+    m = re.search(r'招聘面试[\s\-_—]*([\u4e00-\u9fa5]{2,8})', base)
+    if m:
+        return m.group(1)
+    m2 = re.search(r'([\u4e00-\u9fa5]{2,8})[\s\-_—]*招聘面试', base)
+    if m2:
+        return m2.group(1)
+    return ''
+
+
+def _guess_role_from_interview(file_name: str, text: str) -> str:
+    s = ((file_name or '') + '\n' + (text or '')[:800]).lower()
+    if '主策' in s or '主策划' in s:
+        return '主策划'
+    if '战斗' in s:
+        return '战斗策划'
+    if '系统策划' in s or ('系统' in s and '策划' in s):
+        return '系统策划'
+    if '应届' in s:
+        return 'fresh'
+    return '运营策划'
+
+
+def _extract_mobile_tail(file_name: str, text: str) -> str:
+    s = ((file_name or '') + '\n' + (text or '')[:1200])
+    m = re.search(r'1\d{10}', s)
+    if m:
+        return m.group(0)[-4:]
+    m2 = re.search(r'手机号[:：]?\s*(\d{4})', s)
+    if m2:
+        return m2.group(1)
+    return ''
+
+
+def _read_pdf_text(path: str) -> str:
+    try:
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            return '\n'.join((p.extract_text() or '') for p in pdf.pages).strip()
+    except Exception as e:
+        _log(f'interview pdf read failed: {e}')
+        return ''
+
+
+def _build_interview_out_path(candidate: str, role: str, suffix: str = '面试评价') -> str:
+    day = datetime.now().strftime('%Y-%m-%d')
+    safe_candidate = re.sub(r'[\\/:*?"<>|]+', '_', (candidate or '候选人')).strip() or '候选人'
+    safe_role = re.sub(r'[\\/:*?"<>|]+', '_', (role or '岗位')).strip() or '岗位'
+    out_dir = os.path.join(_INTERVIEW_OUT_DIR, f'{day}_{safe_role}')
+    os.makedirs(out_dir, exist_ok=True)
+    return os.path.join(out_dir, f'{safe_candidate}-{suffix}.md')
+
+
+def _run_palace_interview_eval(note_text: str, role: str, candidate: str, mobile_tail: str) -> tuple:
+    if not os.path.isfile(_PALACE_RUN_PY):
+        return False, f'Palace run.py 不存在: {_PALACE_RUN_PY}', ''
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', encoding='utf-8', delete=False) as tmp:
+        tmp.write(note_text or '')
+        tmp_path = tmp.name
+    output_path = _build_interview_out_path(candidate, role, suffix='面试评价')
+    doc_type = f'role:{role};mode:evaluation;candidate:{candidate};mobile_tail:{mobile_tail}'
+    cmd = [
+        'py', _PALACE_RUN_PY,
+        '--scenario', 'interview_checklist',
+        '--input-file', tmp_path,
+        '--doc-type', doc_type,
+        '--format', 'markdown',
+        '--output', output_path,
+    ]
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=os.path.dirname(_PALACE_RUN_PY),
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            errors='replace',
+            timeout=180,
+        )
+        if p.returncode != 0:
+            return False, (p.stderr or p.stdout or 'Palace 调用失败').strip(), output_path
+        if not os.path.exists(output_path):
+            return False, 'Palace 未产出评价文件', output_path
+        return True, 'ok', output_path
+    except Exception as e:
+        return False, str(e), output_path
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+
+
+def _set_pending_interview_bind(group_cid: str, payload: dict):
+    with _INTERVIEW_PENDING_LOCK:
+        _INTERVIEW_PENDING_BY_CID[str(group_cid)] = payload
+
+
+def _pop_pending_interview_bind(group_cid: str) -> dict | None:
+    with _INTERVIEW_PENDING_LOCK:
+        item = _INTERVIEW_PENDING_BY_CID.pop(str(group_cid), None)
+    if not item:
+        return None
+    now_ms = int(time.time() * 1000)
+    if now_ms - int(item.get('created_ms', 0)) > _INTERVIEW_PENDING_TTL_MS:
+        return None
+    return item
+
+
+def _cleanup_pending_interview_bind():
+    now_ms = int(time.time() * 1000)
+    with _INTERVIEW_PENDING_LOCK:
+        dead = [
+            k for k, v in _INTERVIEW_PENDING_BY_CID.items()
+            if now_ms - int(v.get('created_ms', 0)) > _INTERVIEW_PENDING_TTL_MS
+        ]
+        for k in dead:
+            _INTERVIEW_PENDING_BY_CID.pop(k, None)
+
+
+def _notify_interview_bind_needed(file_name: str):
+    tpl = _interview_tpl()
+    title = tpl.get('ask_bind_title') or '❓ 面试纪要待绑定候选人'
+    text_tpl = tpl.get('ask_bind_text') or (
+        "检测到招聘面试纪要：{file_name}\n\n"
+        "未识别到候选人姓名，请回复：**绑定候选人 张三**\n\n"
+        "###### ※ 小秘书提醒"
+    )
+    text = text_tpl.format(file_name=file_name)
+    _send_notify_markdown(title, text, _resume_notify_webhook())
+
+
+def _notify_interview_bound(candidate: str):
+    tpl = _interview_tpl()
+    title = tpl.get('bind_ok_title') or '✅ 候选人已绑定'
+    text_tpl = tpl.get('bind_ok_text') or (
+        "已绑定候选人：**{candidate}**，开始生成面试评价。\n\n"
+        "###### ※ 小秘书提醒"
+    )
+    _send_notify_markdown(title, text_tpl.format(candidate=candidate), _resume_notify_webhook())
+
+
+def _notify_interview_no_pending():
+    tpl = _interview_tpl()
+    title = tpl.get('bind_fail_title') or '⚠️ 绑定失败'
+    text = tpl.get('bind_fail_text') or (
+        "当前没有待绑定的招聘面试任务，请先下载“招聘面试”文件。\n\n"
+        "###### ※ 小秘书提醒"
+    )
+    _send_notify_markdown(title, text, _resume_notify_webhook())
+
+
+def _notify_interview_result(candidate: str, ok: bool, detail: str, output_path: str):
+    tpl = _interview_tpl()
+    if ok:
+        title = tpl.get('result_ok_title') or '✅ 面试评价已生成'
+        text_tpl = tpl.get('result_ok_text') or (
+            "候选人：**{candidate}**\n"
+            "评价文件：`{output_path}`\n\n"
+            "###### ※ 小秘书提醒"
+        )
+        text = text_tpl.format(candidate=candidate, output_path=output_path)
+    else:
+        title = tpl.get('result_fail_title') or '❌ 面试评价生成失败'
+        text_tpl = tpl.get('result_fail_text') or (
+            "候选人：**{candidate}**\n"
+            "原因：{detail}\n\n"
+            "###### ※ 小秘书提醒"
+        )
+        text = text_tpl.format(candidate=candidate, detail=detail)
+    _send_notify_markdown(title, text, _resume_notify_webhook())
+
+
+def _handle_interview_file_message(msg: dict, group_cid: str, seen_ids: set, router_start_ms: int = 0) -> bool:
+    """返回 True 表示该消息已处理（会入 seen_ids），False 表示继续走普通流程。"""
+    if int(msg.get('content_type') or 0) != 502:
+        return False
+    if _skip_msg_before_router_start(msg, router_start_ms):
+        return True
+    msg_id, file_name, file_path_hint = _extract_file_info(msg)
+    if not msg_id:
+        msg_id = _make_msg_id(msg)
+    if not msg_id or msg_id in seen_ids:
+        return True
+    if not _looks_like_interview_file(file_name):
+        return False
+    local_path = _resume_resolve_local_pdf_path(file_name or '', file_path_hint or '')
+    if not local_path:
+        # 手动下载前不标记 seen，允许后续轮询继续命中
+        return True
+    note_text = _read_pdf_text(local_path)
+    if len(note_text) < 30:
+        _notify_interview_result('候选人', False, '面试纪要解析失败或内容过短', '')
+        seen_ids.add(msg_id)
+        return True
+    candidate = _extract_candidate_from_filename(file_name)
+    role = _guess_role_from_interview(file_name, note_text)
+    mobile_tail = _extract_mobile_tail(file_name, note_text)
+    if not candidate:
+        _set_pending_interview_bind(str(group_cid), {
+            'msg_id': msg_id,
+            'file_name': file_name,
+            'note_text': note_text,
+            'role': role,
+            'mobile_tail': mobile_tail,
+            'created_ms': int(time.time() * 1000),
+        })
+        _notify_interview_bind_needed(file_name or '招聘面试文件')
+        seen_ids.add(msg_id)
+        return True
+    ok, detail, output_path = _run_palace_interview_eval(note_text, role, candidate, mobile_tail)
+    _notify_interview_result(candidate, ok, detail, output_path)
+    seen_ids.add(msg_id)
+    return True
+
+
+def _try_bind_candidate_command(text: str, group_cid: str, seen_ids: set, msg_id: str) -> bool:
+    m = re.match(r'^\s*绑定候选人\s+(.+?)\s*$', text or '')
+    if not m:
+        return False
+    candidate = m.group(1).strip()
+    if not re.fullmatch(r'[\u4e00-\u9fa5]{2,8}', candidate):
+        _notify_interview_result('候选人', False, '姓名格式不合法，请用2-8位中文姓名', '')
+        seen_ids.add(msg_id)
+        return True
+    item = _pop_pending_interview_bind(str(group_cid))
+    if not item:
+        _notify_interview_no_pending()
+        seen_ids.add(msg_id)
+        return True
+    _notify_interview_bound(candidate)
+    ok, detail, output_path = _run_palace_interview_eval(
+        item.get('note_text', ''),
+        item.get('role', '运营策划'),
+        candidate,
+        item.get('mobile_tail', ''),
+    )
+    _notify_interview_result(candidate, ok, detail, output_path)
+    seen_ids.add(msg_id)
+    return True
+
+
 def _send_notify(text: str, webhook_url: str):
     """轻量 webhook 通知（用于路由层的边界情况提示）"""
     if not webhook_url:
@@ -2035,6 +2459,7 @@ class SkillRouter:
         notify_cid   = cfg['notify_cid']
         memo_cfg     = cfg.get('memo_tracker', {})
         doc_review_cfg = cfg.get('doc_review', {})
+        resume_name_filter = cfg.get('resume_name_filter', {})
 
         has_resume     = bool(recruit_cids)
         _allowed = _memo_allowed_cids(memo_cfg)
@@ -2069,7 +2494,7 @@ class SkillRouter:
 
         self._thread = threading.Thread(
             target=self._loop,
-            args=(recruit_cids, cid_names, notify_cid, memo_cfg, doc_review_cfg),
+            args=(recruit_cids, cid_names, notify_cid, memo_cfg, doc_review_cfg, resume_name_filter),
             daemon=True,
         )
         self._thread.start()
@@ -2109,12 +2534,16 @@ class SkillRouter:
                 _log(f'memo push dispatch error: {e}')
 
     def _loop(self, recruit_cids: list, cid_names: dict,
-              notify_cid: str, memo_cfg: dict, doc_review_cfg: dict = None):
+              notify_cid: str, memo_cfg: dict, doc_review_cfg: dict = None,
+              resume_name_filter: dict | None = None):
         while self._running:
             for cid in recruit_cids:
                 source_name = cid_names.get(cid, '')
                 try:
-                    n = _poll_once(cid, self._seen_ids, source_name=source_name)
+                    n = _poll_once(
+                        cid, self._seen_ids, source_name=source_name,
+                        resume_name_filter=resume_name_filter,
+                    )
                     if n:
                         _log(f'[{source_name or cid}] processed {n} resumes')
                 except Exception as e:

@@ -4,6 +4,9 @@
 
 $ErrorActionPreference = "Continue"
 $env:PYTHONIOENCODING = "utf-8"
+param(
+    [switch]$EveningChange
+)
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 Set-Location $ScriptDir
@@ -21,9 +24,21 @@ function Write-Log {
 
 Write-Log "===== version daily start ====="
 
-Write-Log "[A1] version_digest.py"
+if ($EveningChange) {
+    Write-Log "[E1] version_digest.py --mode change"
+    try {
+        & py version_digest.py --mode change 2>&1 | ForEach-Object { Write-Log $_ }
+        if ($LASTEXITCODE -ne 0) { Write-Log "[E1] WARN exit code $LASTEXITCODE" }
+    } catch {
+        Write-Log "[E1] ERROR $($_.Exception.Message)"
+    }
+    Write-Log "===== version daily end ====="
+    exit 0
+}
+
+Write-Log "[A1] version_digest.py --mode snapshot"
 try {
-    & py version_digest.py 2>&1 | ForEach-Object { Write-Log $_ }
+    & py version_digest.py --mode snapshot 2>&1 | ForEach-Object { Write-Log $_ }
     if ($LASTEXITCODE -ne 0) { Write-Log "[A1] WARN exit code $LASTEXITCODE" }
 } catch {
     Write-Log "[A1] ERROR $($_.Exception.Message)"

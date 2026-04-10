@@ -18,6 +18,8 @@ import urllib.request
 
 # [AgentHR Task] 开始时间: 2026-03-25 22:30
 # [AgentHR Task] 任务目标: HR-001 新增主策划L4初筛并补充通用思维考察
+# [AgentFilt Task] 开始时间: 2026-04-01 19:05
+# [AgentFilt Task] 任务目标: RESUME-NOTIFY-001 恢复推送正文标题行，避免钉钉卡片仅显示来源
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT     = os.path.join(_THIS_DIR, '..')
@@ -32,6 +34,16 @@ DAEMON_URL = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 # 优先级：RESUME_LLM_* > LLM_* > palace/.env > 硬编码默认值
 
 _DEFAULT_MODEL = 'claude-opus-4.6'
+# Ollama OpenAI 兼容：http://127.0.0.1:11434/v1 ，模型名如 gemma4:latest（见 scripts/run_resume_preview_ollama.py）
+_DEFAULT_OLLAMA_MODEL = 'gemma4:latest'
+
+
+def _is_ollama_endpoint(base: str) -> bool:
+    if not base:
+        return False
+    u = base.lower().rstrip('/')
+    return '11434' in u or u.endswith('/ollama/v1')
+
 
 def _resolve_llm():
     key   = os.environ.get('RESUME_LLM_API_KEY') or os.environ.get('LLM_API_KEY', '')
@@ -50,7 +62,15 @@ def _resolve_llm():
                     if k == 'PALACE_API_KEY' and not key:   key   = v
                     elif k == 'PALACE_API_BASE' and not base: base  = v
                     elif k == 'PALACE_MODEL' and not model:  model = v
-    return key, base or 'https://api.openai.com/v1', model or _DEFAULT_MODEL
+    base = (base or 'https://api.openai.com/v1').rstrip('/')
+    model = model or _DEFAULT_MODEL
+    if _is_ollama_endpoint(base):
+        if not key:
+            key = 'ollama'
+        # 避免沿用云端默认模型名导致 Ollama 404
+        if model == _DEFAULT_MODEL:
+            model = os.environ.get('RESUME_LLM_MODEL') or os.environ.get('LLM_MODEL') or _DEFAULT_OLLAMA_MODEL
+    return key, base, model
 
 
 # ── 岗位猜测 + 应届识别 ───────────────────────────────────────
@@ -152,8 +172,9 @@ def _call_llm(prompt: str, system: str = '') -> str:
         },
         method='POST',
     )
+    timeout = 180 if _is_ollama_endpoint(base) else 60
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode('utf-8'))
         return data['choices'][0]['message']['content'].strip()
     except Exception as e:
@@ -537,6 +558,8 @@ _DEFAULT_TEMPLATE = {
         'pending': '❓ 应届初筛待定 | {candidate} · {role}',
         'fail':    '❌ 应届初筛不通过 | {candidate} · {role}',
     },
+    # 正文首行标题，默认回显 webhook 标题，避免部分客户端只在正文可见
+    'body_title': '{title}',
     'lines': [
         {'key': 'core',       'show': True,  'tpl': '核心判定：{core}'},
         {'key': 'l4_assess',  'show': True,  'tpl': 'L4评估：{l4_assess}'},
@@ -588,6 +611,16 @@ def _format_reply(file_name: str, role: str, parsed: dict,
     line_defs = tpl.get(lines_key, _DEFAULT_TEMPLATE['lines'])
 
     body_lines = []
+    body_title_tpl = tpl.get('body_title', '{title}')
+    if body_title_tpl:
+        try:
+            body_title = str(body_title_tpl).format(title=title, **ctx).strip()
+        except Exception:
+            body_title = title.strip()
+        if body_title:
+            body_lines.append(body_title)
+            body_lines.append('')
+
     if source_name:
         source_tpl = tpl.get('source_line', '来源：{source}')
         body_lines.append(source_tpl.format(**ctx))
@@ -766,3 +799,21 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
                        role, parsed['verdict'], summary, reply_sent=sent)
 
     return True
+
+
+def screen_resume_text(
+    resume_text: str,
+    file_name: str = '候选人.pdf',
+    role: str | None = None,
+    is_fresh: bool | None = None,
+):
+    """对纯文本简历做一轮初筛（与钉钉链路共用清单与 prompt）。返回 (llm_raw, parsed_dict, role, is_fresh)。"""
+    if is_fresh is None:
+        is_fresh = _is_fresh_graduate(file_name, resume_text)
+    if role is None:
+        role = _guess_role(file_name, resume_text)
+    checklist = _load_checklist(role, is_fresh=is_fresh)
+    system_prompt, user_prompt = _build_prompt(resume_text, role, checklist, is_fresh=is_fresh)
+    llm_output = _call_llm(user_prompt, system=system_prompt)
+    parsed = _parse_llm_output(llm_output)
+    return llm_output, parsed, role, is_fresh

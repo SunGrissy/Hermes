@@ -27,6 +27,7 @@ build/
 # Virtual environments
 venv/
 .venv/
+.venv_mcp/
 env/
 ENV/
 

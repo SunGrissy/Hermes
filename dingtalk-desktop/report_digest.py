@@ -135,6 +135,8 @@ def _resolve_llm_config():
 
 # [AgentDgst Task] 开始时间: 2026-03-25 00:00
 # [AgentDgst Task] 任务目标: DIGEST-001 分组拉取与顺序编排
+# [AgentInbx Task] 开始时间: 2026-03-31 23:20
+# [AgentInbx Task] 任务目标: DIGEST-002 日志收件箱(ct=300)直拉全文
 LLM_API_KEY, LLM_API_BASE, LLM_MODEL = _resolve_llm_config()
 
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'digest_config.json')
@@ -181,6 +183,7 @@ def _load_config():
         'team_members': [],
         'notify_target': NOTIFY_TARGET,
         'report_cids': [],
+        'report_inbox_cid': '',
         'discover_marker': '#日报收集',
     }
     if os.path.exists(_CONFIG_PATH):
@@ -431,6 +434,138 @@ def fetch_reports(target_date, report_cids, after_str=None, before_str=None):
     removed = len(all_msgs) - len(dedup_result)
     if removed:
         print(f'[fetch] dedup removed {removed} duplicate(s)', flush=True)
+    return dedup_result
+
+
+def _load_uid_name_map():
+    """Build uid->name map from local contacts db and daemon contacts cache."""
+    uid_name = {}
+    if os.path.exists(_CONTACTS_FILE):
+        try:
+            with open(_CONTACTS_FILE, 'r', encoding='utf-8') as f:
+                cdb = json.load(f)
+            for entry in (cdb.get('p2p', {}) or {}).values():
+                if not isinstance(entry, dict):
+                    continue
+                uid = str(entry.get('uid', '')).strip()
+                name = str(entry.get('name', '')).strip()
+                if uid and name:
+                    uid_name[uid] = name
+        except Exception:
+            pass
+
+    result = _daemon_request('/contacts')
+    for row in result.get('results', []) if isinstance(result, dict) else []:
+        cid = str(row.get('cid', '')).strip()
+        name = str(row.get('sender', '') or row.get('name', '')).strip()
+        if not cid or ':' not in cid or not name:
+            continue
+        uid = cid.split(':', 1)[0].strip()
+        if uid:
+            uid_name[uid] = name
+    return uid_name
+
+
+def fetch_reports_from_inbox(target_date, inbox_cid, after_str=None, before_str=None):
+    """从日志收件箱 CID 拉取 ct=300 日报，优先使用 bf/b_form 或 text 拼接全文。"""
+    if not inbox_cid:
+        print('[inbox] empty inbox cid', flush=True)
+        return []
+
+    if not after_str or not before_str:
+        dt = datetime.strptime(target_date, '%Y-%m-%d')
+        after_str = (dt.replace(hour=18, minute=30, second=0)).strftime(
+            '%Y-%m-%d %H:%M:%S')
+        before_str = (dt + timedelta(days=1)).replace(
+            hour=12, minute=0, second=0).strftime('%Y-%m-%d %H:%M:%S')
+
+    result = _daemon_request('/fetch_reports', {
+        'cid': inbox_cid,
+        'count': 80,
+        'after': after_str,
+        'before': before_str,
+        'max_pages': 30,
+        'max_seconds': 60,
+    })
+    if not result.get('success'):
+        err = result.get('error', '') or ''
+        print(f'[inbox] fetch failed: {err}', flush=True)
+        log_result = _daemon_request('/fetch_reports', {
+            'cid': inbox_cid,
+            'count': 500,
+            'after': after_str,
+            'before': before_str,
+            'source': 'log',
+        })
+        if not log_result.get('success'):
+            return []
+        fetched = log_result.get('messages', []) or []
+        if fetched:
+            print(f'[inbox] fallback source=log got {len(fetched)}', flush=True)
+        result = log_result
+
+    fetched = result.get('messages', []) or []
+    if not fetched:
+        log_result = _daemon_request('/fetch_reports', {
+            'cid': inbox_cid,
+            'count': 500,
+            'after': after_str,
+            'before': before_str,
+            'source': 'log',
+        })
+        if log_result.get('success'):
+            fetched = log_result.get('messages', []) or []
+            if fetched:
+                print(f'[inbox] JSAPI empty, fallback source=log got {len(fetched)}',
+                      flush=True)
+
+    all_msgs = []
+    seen_keys = set()
+    for m in fetched:
+        key = f'{m.get("ts", 0)}_{m.get("sender", "")}'
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        m['_source_group'] = '日志收件箱'
+        all_msgs.append(m)
+
+    uid_name = _load_uid_name_map()
+    resolved = 0
+    for m in all_msgs:
+        sender = str(m.get('sender', '') or '').strip()
+        if sender and sender.isdigit():
+            name = uid_name.get(sender, '')
+            if name:
+                m['sender'] = name
+                resolved += 1
+
+    all_msgs.sort(key=lambda m: m.get('ts', 0))
+
+    dedup_result = []
+    seen_content_keys = {}
+    for m in all_msgs:
+        sender = m.get('sender', '')
+        text = (m.get('text') or '').strip()[:80]
+        ck = (sender, text)
+        if ck in seen_content_keys and text:
+            existing_idx = seen_content_keys[ck]
+            existing = dedup_result[existing_idx]
+            if (m.get('bf') or m.get('b_form')) and not (
+                existing.get('bf') or existing.get('b_form')
+            ):
+                dedup_result[existing_idx] = m
+        else:
+            seen_content_keys[ck] = len(dedup_result)
+            dedup_result.append(m)
+
+    removed = len(all_msgs) - len(dedup_result)
+    print(
+        f'[inbox] {len(fetched)} fetched, {len(dedup_result)} after dedup'
+        f'{f", uid_resolved={resolved}" if resolved else ""}',
+        flush=True,
+    )
+    if removed:
+        print(f'[inbox] dedup removed {removed} duplicate(s)', flush=True)
     return dedup_result
 
 
@@ -818,10 +953,13 @@ def format_digest(analysis, target_date, group_label=None):
     return '\n'.join(lines)
 
 
-_MSG_LOG = os.path.join(
-    os.path.dirname(__file__), 'data', 'dingtalk', '_msg_log.jsonl')
-_CONTACTS_FILE = os.path.join(
-    os.path.dirname(__file__), 'data', 'dingtalk', 'contacts.json')
+_root_for_msg = os.path.dirname(os.path.abspath(__file__))
+if _root_for_msg not in sys.path:
+    sys.path.insert(0, _root_for_msg)
+from lib.utils import DATA_DIR as _DT_DATA_DIR
+
+_MSG_LOG = os.path.join(_DT_DATA_DIR, '_msg_log.jsonl')
+_CONTACTS_FILE = os.path.join(_DT_DATA_DIR, 'contacts.json')
 
 
 def _load_contacts_db():
@@ -1329,6 +1467,7 @@ def main():
     args = parser.parse_args()
 
     config = _load_config()
+    inbox_cid = str(config.get('report_inbox_cid', '') or '').strip()
 
     if args.list_digest_groups:
         _print_digest_groups(config)
@@ -1398,17 +1537,26 @@ def main():
             '%Y-%m-%d')
 
         print(f'[fetch-only] group={_safe(group_label)}, window={win_label}', flush=True)
-        messages = fetch_reports(
-            td_log, report_cids, after_str=after_str, before_str=before_str)
-        jsapi_n = len(messages)
-        messages = _enrich_from_monitor_log(
-            messages, td_log, report_cids, after_ts_ms=ams, before_ts_ms=bms)
-        print(f'[fetch-only] JSAPI 去重 {jsapi_n}, 合并 monitor 后 {len(messages)}',
-              flush=True)
+        if inbox_cid:
+            messages = fetch_reports_from_inbox(
+                td_log, inbox_cid, after_str=after_str, before_str=before_str)
+            print(f'[fetch-only] inbox mode: {len(messages)} reports from {inbox_cid}',
+                  flush=True)
+            if args.full_content:
+                print('[fetch-only] inbox mode ignore --full-content (no CEF needed)',
+                      flush=True)
+        else:
+            messages = fetch_reports(
+                td_log, report_cids, after_str=after_str, before_str=before_str)
+            jsapi_n = len(messages)
+            messages = _enrich_from_monitor_log(
+                messages, td_log, report_cids, after_ts_ms=ams, before_ts_ms=bms)
+            print(f'[fetch-only] JSAPI 去重 {jsapi_n}, 合并 monitor 后 {len(messages)}',
+                  flush=True)
 
-        if args.full_content:
-            print('[fetch-only] --full-content: CEF 拉取详情页（较慢）…', flush=True)
-            messages = fetch_full_contents(messages)
+            if args.full_content:
+                print('[fetch-only] --full-content: CEF 拉取详情页（较慢）…', flush=True)
+                messages = fetch_full_contents(messages)
 
         md = _format_fetch_only_markdown(
             messages, win_label, after_str, before_str,
@@ -1461,26 +1609,39 @@ def main():
     print(f'[report-digest] date={target_date}, group={group_id or "all"}, '
           f'members={len(scope_members)}, groups={len(report_cids)}', flush=True)
 
-    messages = fetch_reports(target_date, report_cids)
-    jsapi_count = len(messages)
-    messages = _enrich_from_monitor_log(messages, target_date, report_cids)
-    print(f'[report-digest] fetched {jsapi_count} via JSAPI, '
-          f'{len(messages)} total (after monitor enrichment)', flush=True)
-    if _PROGRESS_WEBHOOK_URL:
-        _notify_progress(
-            '阶段拉取完成',
-            [
-                f'JSAPI 去重后 **{jsapi_count}** 条',
-                f'合并监控日志后 **{len(messages)}** 条',
-            ],
-        )
+    if inbox_cid:
+        messages = fetch_reports_from_inbox(target_date, inbox_cid)
+        print(f'[report-digest] inbox mode: {len(messages)} reports from {inbox_cid}',
+              flush=True)
+        if _PROGRESS_WEBHOOK_URL:
+            _notify_progress(
+                '阶段拉取完成',
+                [f'收件箱直拉 **{len(messages)}** 条（ct=300）'],
+            )
+    else:
+        messages = fetch_reports(target_date, report_cids)
+        jsapi_count = len(messages)
+        messages = _enrich_from_monitor_log(messages, target_date, report_cids)
+        print(f'[report-digest] fetched {jsapi_count} via JSAPI, '
+              f'{len(messages)} total (after monitor enrichment)', flush=True)
+        if _PROGRESS_WEBHOOK_URL:
+            _notify_progress(
+                '阶段拉取完成',
+                [
+                    f'JSAPI 去重后 **{jsapi_count}** 条',
+                    f'合并监控日志后 **{len(messages)}** 条',
+                ],
+            )
 
     if not messages:
         print('[report-digest] no reports found, exiting', flush=True)
         return 0
 
-    if args.full_content:
+    if args.full_content and not inbox_cid:
         messages = fetch_full_contents(messages)
+    elif args.full_content and inbox_cid:
+        print('[report-digest] inbox mode ignore --full-content (no CEF needed)',
+              flush=True)
 
     if _PROGRESS_WEBHOOK_URL:
         _notify_progress('LLM分析', ['正在汇总日报并请求模型，请稍候…'])

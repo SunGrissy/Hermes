@@ -2,6 +2,22 @@
 
 > 供新会话快速对齐上下文：**受众差异、版本过滤、文末形态、脚本入口**。实现分散在 `dingtalk-desktop` 与 `pm-system` 两处，以本节为单一说明入口。
 
+### 定时任务（Windows）— 和「改代码」不是一回事
+
+- **`git pull` / 只改 Python 不会自动改你本机的计划任务**。是否每天跑、几点跑，取决于 **本机「任务计划程序」**里是否注册了 `VersionDigest`，以及触发器时间。
+- **仓库默认时间**：**每日 09:40**（`run_version_digest.ps1` 与 `register_version_digest_task.ps1` 一致）。核对：`schtasks /Query /TN VersionDigest /FO LIST /V`。
+- **注册 / 改触发时间**：需 **`Register-ScheduledTask -RunLevel Highest`**（或覆盖已有任务），一般要 **管理员权限**。推荐二选一：
+  - 双击 **`register_version_digest_task_elevated.cmd`**（会 UAC 提权后执行 `register_version_digest_task.ps1`）；
+  - 或 **以管理员打开 PowerShell**，`cd` 到 `dingtalk-desktop` 后执行 `.\register_version_digest_task.ps1`。
+- **说明**：Cursor/自动化终端常为**非管理员会话**，在本机直接跑注册脚本可能报 **拒绝访问**；这不是「没改代码」，而是 **提权边界**。若需无人值守，只能把任务改成当前用户可编辑的策略（不推荐弱化安全），或在你本机用上述提权方式执行一次。
+
+### 早间是否发送 vs 工作日（PM 假日 / 调休）
+
+- **早间快照**（`run_version_digest_send`，且 `mark_morning` + 实际 `send_webhook`）：默认按 PM **`GET /api/config/holidays`**（区间）+ **`GET /api/config/workdays`**（调休上班日）判断，与前端 `VersionPlanningView.isWorkday` 一致：**法定假区间内不推、调休日推、普通周末不推**。
+- **拉取日历失败**：退化为 **仅周一～周五**（仍排除周末），并打日志；不静默吞掉。
+- **不受此规则**：`--dry-run`（`send_webhook=False`）仍会渲染，便于假日预览；傍晚 `change` 模式另有一套逻辑。
+- **强制发送**：CLI **`--ignore-workday`** 或环境变量 **`VERSION_DIGEST_IGNORE_WORKDAY=1`**（补发、调试）。
+
 ---
 
 ## 1. 涉及代码（按职责）

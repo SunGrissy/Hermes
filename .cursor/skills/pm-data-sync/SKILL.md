@@ -22,11 +22,18 @@ app.init()
 app.saveData()
   └─ DataManager.saveData(app)
        ├─ localStorage 写入 (gamedev-pm-data-v6, pm-system-data)
-       ├─ saveToBackend → POST /api/data
+       ├─ saveToBackend → POST /api/data（带 `baseRevision: app._knownServerRevision`）
        └─ _markSynced → _saveSyncBase
 
+**整包乐观锁 `dataRevision`**
+
+- `GET /api/data` 与 `GET /api/data/meta` 响应含 `dataRevision`（整数，单调递增，存于 SQLite `AppConfig.dataRevision`）。
+- 前端 `app._knownServerRevision` 在 load / 保存成功 / 心跳 meta 更新时与服务器对齐。
+- `POST /api/data` 若带 `baseRevision` 且 **小于** 服务器当前 revision → **409**，正文含 `serverRevision`、`serverLastSaved`；前端 `saveToBackend` 会拉取服务器整包并走 `_doConflictMerge`。
+- 未带 `baseRevision`（旧客户端）时服务端降级为 Last-Write-Wins 并打 WARN 日志。
+
 [心跳] _startSyncHeartbeat (每15秒)
-  └─ fetch /api/data/meta → 比较 lastSaved
+  └─ fetch /api/data/meta → 比较 lastSaved **与 dataRevision**
        └─ _fetchRemoteAndShowBanner
             ├─ 无冲突 → 自动合并 + Toast
             └─ 有冲突 → 设 pm-pending-conflict + 显示 Banner

@@ -26,7 +26,17 @@ from app.services.pipeline_node_checklist_render import (
 )
 from app.services.release_checklist_render import PIPELINE_STAGES
 from app.services.demand_pool_health import compute_demand_pool_health
-from app.services.version_progress_notify import enrich_pipeline_for_version, render_version_status_markdown
+from app.services.version_progress_notify import (
+    DIGEST_AUDIENCE_FULL,
+    DIGEST_AUDIENCE_GROUP,
+    DIGEST_AUDIENCE_PLD,
+    DIGEST_AUDIENCE_PM,
+    DIGEST_AUDIENCE_PRODUCER,
+    _DEFAULT_TEMPLATE,
+    _digest_footer_for_audience,
+    enrich_pipeline_for_version,
+    render_version_status_markdown,
+)
 
 _ACCEPTANCE_IDX = next(i for i, (sid, _) in enumerate(PIPELINE_STAGES) if sid == "acceptance")
 
@@ -63,6 +73,44 @@ def _replace_pipeline_node_block_with_local(suffix: str, pipe_md: str) -> str:
         return out
     return f"---\n\n{pipe_md}\n\n---\n\n{norm.strip()}"
 
+
+def _strip_pipeline_node_todo_block(text: str) -> str:
+    """移除清单后缀中的「管线节点待办」整块（含 Feature 卡点 / 发布推进），保留发版检查等。"""
+    if not text or "管线节点待办" not in text:
+        return text
+    norm = text.replace("\r\n", "\n").strip()
+    pat = r"(?ms)(?:^---\s*\n\s*)?#### \*\*管线节点待办\*\*.*?(?=\n\n---\n\n####\s*\*?\*?发版检查|\Z)"
+    out = re.sub(pat, "", norm, count=1)
+    return out.strip()
+
+
+def _compact_release_checklist_for_pm(suffix: str) -> str:
+    """管线快报：发版检查只保留「已完成数/总项数」a/b，不列未完成条目与说明。"""
+    if not suffix or "发版检查" not in suffix:
+        return suffix
+    norm = suffix.replace("\r\n", "\n")
+
+    pat = re.compile(
+        r"(?ms)(####\s*\*\*发版检查（(\d+)/(\d+)\s*未完成）\*\*)\s*\n.*?(?=\n\n---|\n\n####|\Z)",
+    )
+
+    def _repl(m) -> str:
+        n_inc = int(m.group(2))
+        total = int(m.group(3))
+        done = total - n_inc
+        new_header = f"#### **发版检查（{done}/{total}）**"
+        block = m.group(0)
+        link = ""
+        for line in block.split("\n"):
+            s = line.strip()
+            if "查看详情" in s or "请在 PM" in s or "PM 系统" in s:
+                link = "\n\n" + s
+                break
+        return new_header + link
+
+    return pat.sub(_repl, norm).strip()
+
+
 DESKTOP_CFG = os.path.join(_DIR, "digest_config.json")
 
 
@@ -87,6 +135,15 @@ def _load_default_progress_webhook() -> str:
         return str(j.get("default") or "").strip()
     except (OSError, json.JSONDecodeError):
         return ""
+
+
+def _days_to_release_from_version(v: dict) -> int | None:
+    """距发版剩余天数（releaseDate - 今天）；无发版日则 None。"""
+    today = date.today()
+    d = _parse_iso_date(v.get("releaseDate") or v.get("release_date"))
+    if not d:
+        return None
+    return (d - today).days
 
 
 def _explicit_planning_ddl(v: dict) -> date | None:
@@ -344,6 +401,37 @@ def _resolve_progress_webhooks(target: dict) -> list[str]:
     return urls
 
 
+def _pipeline_params_for_audience(audience: str) -> dict:
+    """管线节点待办 / Feature 卡点摘要长度：群广播最短，PM/PLD 略收，制作人/全量默认。"""
+    if audience == DIGEST_AUDIENCE_GROUP:
+        return {
+            "max_nodes": 4,
+            "max_lines_per_node": 2,
+            "stage_lookahead": 0,
+            "feature_focus_max": 3,
+        }
+    if audience in (DIGEST_AUDIENCE_PM, DIGEST_AUDIENCE_PLD):
+        return {
+            "max_nodes": 5,
+            "max_lines_per_node": 3,
+            "stage_lookahead": 0,
+            "feature_focus_max": 4,
+        }
+    return {
+        "max_nodes": 6,
+        "max_lines_per_node": 3,
+        "stage_lookahead": 0,
+        "feature_focus_max": 5,
+    }
+
+
+def _effective_digest_audience(audience: str) -> str:
+    """仅用于管线块渲染密度：producer 与 full 共用参数。"""
+    if audience == DIGEST_AUDIENCE_PRODUCER:
+        return DIGEST_AUDIENCE_FULL
+    return audience or DIGEST_AUDIENCE_FULL
+
+
 def _build_entry_suffix(
     pm_url: str,
     api_key: str | None,
@@ -353,6 +441,8 @@ def _build_entry_suffix(
     cfg: dict | None = None,
     data_all: dict | None = None,
     users: list | None = None,
+    audience: str = DIGEST_AUDIENCE_FULL,
+    pipeline_profile: str | None = None,
 ) -> tuple[dict, str, str, dict]:
     pm_url = pm_url.rstrip("/")
     cfg = cfg or {}
@@ -391,6 +481,12 @@ def _build_entry_suffix(
     rvl = _RemoteVersionLike(target)
     enrich_pipeline_for_version(entry, rvl)
 
+    ps_early = target.get("pipelineStatus") or target.get("pipeline_status") or {}
+    if audience == DIGEST_AUDIENCE_GROUP and isinstance(ps_early, dict) and ps_early.get(
+        "release"
+    ):
+        return entry, "", vid, target
+
     suffix = ""
     if vt == "demand_pool":
         fs = entry.get("featureSummary") if isinstance(entry.get("featureSummary"), dict) else {}
@@ -410,33 +506,114 @@ def _build_entry_suffix(
         except Exception as e:
             print(f"WARN: checklist blocks: {e}", flush=True)
 
+        strip_pipeline = audience in (DIGEST_AUDIENCE_PRODUCER, DIGEST_AUDIENCE_PM)
+        prof = pipeline_profile if pipeline_profile is not None else _effective_digest_audience(
+            audience
+        )
         pipe_md = None
-        try:
-            v_duck = version_duck_from_pm_api(target)
-            feats = features_duck_from_pm_api(target.get("features") or [])
-            pipe_md = render_pipeline_node_checklists_markdown(
-                None,
-                v_duck,
-                features_override=feats,
-                suppress_auto_keys=set(SUPPRESSED_AUTO_CHECK_KEYS),
-            )
-        except Exception as e:
-            print(f"WARN: local pipeline checklist: {e}", flush=True)
+        if not strip_pipeline:
+            try:
+                v_duck = version_duck_from_pm_api(target)
+                feats = features_duck_from_pm_api(target.get("features") or [])
+                dr_pipe = _days_to_release_from_version(target)
+                pipe_kw = {
+                    "suppress_auto_keys": set(SUPPRESSED_AUTO_CHECK_KEYS),
+                    "days_to_release": dr_pipe,
+                }
+                pipe_kw.update(_pipeline_params_for_audience(prof))
+                pipe_md = render_pipeline_node_checklists_markdown(
+                    None,
+                    v_duck,
+                    features_override=feats,
+                    **pipe_kw,
+                )
+            except Exception as e:
+                print(f"WARN: local pipeline checklist: {e}", flush=True)
 
-        if pipe_md:
-            if suffix and "管线节点待办" in suffix:
-                suffix = _replace_pipeline_node_block_with_local(suffix, pipe_md)
-            elif suffix:
-                suffix = f"---\n\n{pipe_md}\n\n---\n\n{suffix.strip()}"
-            else:
-                suffix = f"---\n\n{pipe_md}"
+            if pipe_md:
+                if suffix and "管线节点待办" in suffix:
+                    suffix = _replace_pipeline_node_block_with_local(suffix, pipe_md)
+                elif suffix:
+                    suffix = f"---\n\n{pipe_md}\n\n---\n\n{suffix.strip()}"
+                else:
+                    suffix = f"---\n\n{pipe_md}"
+        elif suffix and "管线节点待办" in suffix:
+            suffix = _strip_pipeline_node_todo_block(suffix)
 
         ps = target.get("pipelineStatus") or target.get("pipeline_status") or {}
         fi = _first_incomplete_main_stage_index(ps)
         if fi is not None and fi < _ACCEPTANCE_IDX and suffix:
             suffix = _strip_release_checklist_block(suffix)
 
+        if audience == DIGEST_AUDIENCE_PRODUCER and suffix:
+            suffix = _strip_release_checklist_block(suffix)
+
+        if audience == DIGEST_AUDIENCE_PM and suffix:
+            suffix = _compact_release_checklist_for_pm(suffix)
+
     return entry, suffix.strip(), vid, target
+
+
+def _filter_names_exclude_release_done(names: list[str], data_all: dict) -> list[str]:
+    """PLD/版本快报：排除管线「发版」已勾选的版本（仅 PMO/管线快报保留）。"""
+    vers = data_all.get("versions") or []
+    by_name: dict[str, dict] = {}
+    for v in vers:
+        if not isinstance(v, dict):
+            continue
+        nm = str(v.get("name") or "").strip()
+        if nm:
+            by_name[nm] = v
+    out: list[str] = []
+    for n in names:
+        vn = str(n or "").strip()
+        if not vn:
+            continue
+        v = by_name.get(vn)
+        if not v:
+            out.append(vn)
+            continue
+        ps = v.get("pipelineStatus") or v.get("pipeline_status") or {}
+        if isinstance(ps, dict) and ps.get("release"):
+            continue
+        out.append(vn)
+    return out
+
+
+def _digest_footer_links_markdown(
+    pm_url: str,
+    audience: str,
+    version_names: list[str],
+    data_all: dict,
+) -> str:
+    """早间文末「小尾巴」跳转块（插在 --- 与 ※ 小秘书提醒 之间）：PMO/管线=首页；PLD=各版本详情；group=空（无链接），标准 footer 仍由 render_version_status_markdown 追加。"""
+    pm_base = pm_url.rstrip("/")
+    if audience in (DIGEST_AUDIENCE_PRODUCER, DIGEST_AUDIENCE_PM):
+        return f"[PM 系统]({pm_base}/index.html)"
+    if audience == DIGEST_AUDIENCE_PLD:
+        vers = data_all.get("versions") or []
+        by_name: dict[str, dict] = {}
+        for v in vers:
+            if not isinstance(v, dict):
+                continue
+            nm = str(v.get("name") or "").strip()
+            if nm:
+                by_name[nm] = v
+        lines: list[str] = []
+        for vn in version_names:
+            vns = str(vn or "").strip()
+            if not vns:
+                continue
+            t = by_name.get(vns)
+            vid = str((t or {}).get("id") or "").strip() if t else ""
+            u = f"{pm_base}/index.html"
+            if vid:
+                u = f"{pm_base}/index.html#version={vid}"
+            lines.append(f"- {vns}：[查看版本]({u})")
+        return "\n".join(lines)
+    if audience == DIGEST_AUDIENCE_GROUP:
+        return ""
+    return ""
 
 
 def render_multi_version_digest_markdown(
@@ -446,16 +623,33 @@ def render_multi_version_digest_markdown(
     cfg: dict,
     *,
     log_to_stdout: bool = True,
+    audience: str = DIGEST_AUDIENCE_FULL,
+    data_all: dict | None = None,
 ) -> tuple[str, list[str], int]:
-    """与定时管线推送同源：多版本合并为一条 Markdown；@ 人为各版本管线角色手机号去重并集。"""
+    """与定时管线推送同源：多版本合并为一条 Markdown；@ 人为各版本管线角色手机号去重并集。
+
+    audience：full | producer | pm | pld | group，与 digest_config.version_digest_audience_by_key 对齐。
+    版本名列表由调用方按受众规则事先算好；group 仍会在本函数内排除「发版」已勾选（与 data 对齐）。
+    PLD/版本快报在无版本可渲时返回空正文（不发占位消息）。
+
+    data_all：若调用方已拉取 ``GET /api/data``（或与 _extract_data 兼容的包裹体），传入可避免本函数重复请求。
+    """
     pm_url = pm_url.rstrip("/")
-    data_all = _extract_data(_api_get_json(f"{pm_url}/api/data", api_key))
+    raw_a = audience
+    eff_pipe = _effective_digest_audience(audience)
+    vnames_in = [str(x or "").strip() for x in version_names if str(x or "").strip()]
+    if data_all is None:
+        data_all = _extract_data(_api_get_json(f"{pm_url}/api/data", api_key))
+    else:
+        data_all = _extract_data(data_all)
+    if raw_a in (DIGEST_AUDIENCE_PLD, DIGEST_AUDIENCE_GROUP):
+        vnames_in = _filter_names_exclude_release_done(vnames_in, data_all)
     users = data_all.get("users") or []
     entries: list = []
     sfx_by_id: dict[str, str] = {}
     at_out: list[str] = []
     seen_m: set[str] = set()
-    for vname in version_names:
+    for vname in vnames_in:
         vn = str(vname or "").strip()
         if not vn:
             continue
@@ -468,6 +662,8 @@ def render_multi_version_digest_markdown(
                 cfg=cfg,
                 data_all=data_all,
                 users=users,
+                audience=raw_a,
+                pipeline_profile=eff_pipe,
             )
         except VersionProgressRenderError as e:
             if log_to_stdout:
@@ -481,10 +677,17 @@ def render_multi_version_digest_markdown(
                 seen_m.add(m)
                 at_out.append(m)
     if not entries:
+        if raw_a in (DIGEST_AUDIENCE_PLD, DIGEST_AUDIENCE_GROUP):
+            return "", [], 0
         return "", [], 0
+    footer_links_md = _digest_footer_links_markdown(
+        pm_url, raw_a, vnames_in, data_all
+    )
     md = render_version_status_markdown(
         entries,
         checklist_suffix_by_id=sfx_by_id if sfx_by_id else None,
+        audience=raw_a,
+        footer_links_md=footer_links_md,
     )
     return md, at_out, len(entries)
 
@@ -508,6 +711,8 @@ def _render_one(
             cfg=cfg,
             data_all=data_all,
             users=users,
+            audience=DIGEST_AUDIENCE_GROUP,
+            pipeline_profile=DIGEST_AUDIENCE_GROUP,
         )
     except VersionProgressRenderError as e:
         raise SystemExit(f"ERROR: {e}") from e
@@ -518,7 +723,11 @@ def _render_one(
             "and webhook_config.json default is empty"
         )
     sfx_map = {vid: suffix} if suffix else None
-    md = render_version_status_markdown([entry], checklist_suffix_by_id=sfx_map)
+    md = render_version_status_markdown(
+        [entry],
+        checklist_suffix_by_id=sfx_map,
+        audience=DIGEST_AUDIENCE_GROUP,
+    )
     return vid, md, urls
 
 
@@ -538,14 +747,23 @@ def _dingtalk_mobile(u: dict | None) -> str:
     return (str(ext.get("dingtalk_mobile") or "").strip()) or (str(u.get("phone") or "").strip())
 
 
-def _send_webhook_markdown(text: str, webhook_url: str, at_mobiles: list[str]) -> bool:
+def _send_webhook_markdown(
+    text: str,
+    webhook_url: str,
+    at_mobiles: list[str],
+    *,
+    markdown_title: str | None = None,
+) -> bool:
     body_text = text.rstrip()
     if at_mobiles:
         body_text += "\n\n" + " ".join(f"@{m}" for m in at_mobiles)
+    title = (markdown_title or "").strip() or "小秘书提醒 · 版本快报"
+    if "小秘书提醒" not in title:
+        title = f"小秘书提醒 · {title}"
     payload: dict = {
         "msgtype": "markdown",
         "markdown": {
-            "title": "小秘书提醒 · 版本状态",
+            "title": title,
             "text": body_text,
         },
     }
@@ -624,9 +842,11 @@ def run_version_progress_push(
             flush=True,
         )
         ok_wh = True
+        ts = datetime.now().strftime("%m/%d %H:%M")
+        wh_title = f"小秘书提醒 · 版本快报[{ts}]"
         for i, wh in enumerate(urls, 1):
             try:
-                ok = _send_webhook_markdown(md, wh, at_list)
+                ok = _send_webhook_markdown(md, wh, at_list, markdown_title=wh_title)
             except Exception as e:
                 ok = False
                 print(f"  webhook#{i} EXCEPTION {e}", flush=True)

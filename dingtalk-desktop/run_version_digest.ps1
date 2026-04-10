@@ -1,5 +1,5 @@
 # run_version_digest.ps1
-# 版本状态定时推送脚本（每日 15:00 运行）
+# 版本状态定时推送脚本（每日 09:40 运行，与 register_version_digest_task.ps1 一致）
 # 从 PmSystem 拉取活跃版本状态，通过 webhook 推送到助理通知群
 
 $ErrorActionPreference = "Continue"
