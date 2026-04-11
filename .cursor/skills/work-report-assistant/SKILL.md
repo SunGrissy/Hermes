@@ -49,7 +49,7 @@ Windows 计划任务（schtasks）
 
 - `work_report_assistant_config.json`：从 `.example` 复制，填 `api_key`
 - 环境变量可覆盖：`WORK_REPORT_API_KEY`、`WORK_REPORT_BASE_URL`
-- 钉钉推送默认用 `webhook_config.json` 的 `hr` 键（与简历通知共用 HR 机器人）
+- 钉钉推送优先用 `webhook_config.json` 的 `work_report_assistant` 键；未配置时回退 `hr` 键（与简历通知共用 HR 机器人）。两个键均在 `webhook_config.json.example` 中有定义。
 
 ## 运维
 
