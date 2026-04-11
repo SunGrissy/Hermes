@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-11] - pm-system quick_start 启动脚本
+
+**状态**: 验收通过
+
+**内容**:
+- `pm-system/quick_start.bat`：修复 `cd`/`||` 兼容性；启动时拉起 Aider（`ollama_chat/gemma4`，OLLAMA 仅作用于 Aider 窗口）；清理与退出时一并关闭 Aider 窗口
+
+---
+
 ## [2026-04-10] - Cursor Skills、Rules 与 dingtalk-desktop 同步提交
 
 **状态**: 验收通过
