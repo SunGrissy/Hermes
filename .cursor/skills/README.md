@@ -14,6 +14,11 @@
 | ai-content-collaboration | 与 Agent 协作做内容创作的方法论（给方向而非给答案，三种协作模式） |
 | leadership-report-craft | 向上汇报结构化方法（思考作业 vs 成果汇报、受众校准、敏感信息处理） |
 
+### Agent 体系自治
+| Skill | 用途 |
+|-------|------|
+| skill-authoring-guide | **元 Skill**——指导 Agent 创建高质量 Skill，含 Agentic Protocol 模板、质量检查清单 |
+
 ### 开发工具
 | Skill | 用途 |
 |-------|------|

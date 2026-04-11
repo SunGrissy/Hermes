@@ -1,5 +1,21 @@
 # Work Log - MyAgents Root
 
+## [2026-04-11] - Agent 体系增强：吸收 hermes-agent / Archon / nuwa-skill 核心设计
+
+**状态**: 验收通过
+
+**内容**:
+- 深度分析三个开源 Agent 框架（hermes-agent、Archon、nuwa-skill），提取可落地的设计模式
+- 新增 `skill-evolution.mdc`：Skill 自进化规范（借鉴 Hermes 自创建/自修复机制），让 Agent 可主动提议创建和改进 Skill
+- 新增 `skill-quality-gate.mdc`：Skill 质量门禁（借鉴 nuwa-skill 三重验证），含结构完整性检查 + 可操作性/生成力/排他性三重验证 + 诚实边界要求
+- 新增 `session-handoff.mdc`：结构化会话交接规范（借鉴 Hermes 上下文压缩 + Archon artifacts），五要素摘要格式（Goal/Progress/Decisions/Files/Next）
+- 增强 `agentx.mdc`：加入分阶段检查点（Checkpoint）+ 门禁（GATE）机制（借鉴 Archon DAG 模式），复杂任务中增加中间校验
+- 新增 `skill-authoring-guide` Skill：Skill 编写元指南，引入 Agentic Protocol 三步工作流（分类→研究→输出）+ 质量检查清单
+- 更新 Skills README：新增"Agent 体系自治"分类
+- 新增吸收分析文档 `README-absorption-analysis.md`：记录三仓库洞察和吸收/不吸收决策
+
+---
+
 ## [2026-04-11] - 策划审查人类版 v0.5：实施对接与仓库约定并入设计文档
 
 **状态**: 验收通过
