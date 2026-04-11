@@ -172,9 +172,29 @@ Design Agent（Cursor Claude）→ 写 draft-*.md → 本地 Gemma4 脚本读取
 ## 六、建议的下一步（Gate 关闭后更新）
 
 > Gate #1、#2 均已关闭。以下为更新后的行动建议。
+> **顺序很重要**——先走查再写代码，用最低成本发现流程断点。
 
-1. **在 spec 中补写"执行架构"一节**——把已确认的架构（Cursor Claude → draft 文件 → Gemma4 脚本 → review 文件 → Cursor Claude 修复）写进 spec，让后续实现者不需要猜
-2. **定义 `draft-*.md` 的 schema**——让 Design Agent 有结构化的输出格式，也让 Gemma4 脚本有稳定的解析入口
-3. **收集 2-3 份好策划案范本**——作为 Design Agent 的 few-shot 参考，放进 skill 目录
-4. **做一次端到端的"纸上走查"**——拿一个具体案例（如"钓鱼小游戏"），按 spec 流程手动走一遍，记录卡住的地方反哺修订
-5. **MVP 裁剪建议**：先实现"阶段一 + 阶段三（单轮 Gemma4 审查，不循环）+ 阶段四"，验证核心价值后再补多轮对抗循环
+### 第一步：纸上走查（在写任何代码之前）
+
+拿一个具体案例手动走完整条链路，记录每个"卡住"的地方。走查指南见 [`game-craft-walkthrough-guide.md`](game-craft-walkthrough-guide.md)。
+
+走查会自然暴露以下问题，省去提前猜测：
+- `draft-*.md` 应该长什么样（schema 从走查中长出来，而非凭空设计）
+- Design Agent 的 prompt 需要多详细（走查中直接测试 prompt 效果）
+- Gemma4 脚本的输入/输出格式是否匹配（走查中直接验证）
+- 哪些阶段值得自动化、哪些保持手动（走查中体感判断）
+
+### 第二步：基于走查断点修订 spec
+
+- 在 spec 中补写"执行架构"一节（Cursor Claude → draft 文件 → Gemma4 脚本 → review 文件 → Cursor Claude 修复）
+- 定义 `draft-*.md` 的 schema（从走查产出物中提炼）
+- 修复走查中发现的所有流程断点
+
+### 第三步：收集范本 + 补充 Design Agent 指导
+
+- 收集 2-3 份好策划案范本作为 few-shot 参考
+- 基于走查体验，补充 Design Agent 的 prompt 指导
+
+### 第四步：MVP 实现
+
+建议范围：阶段一 + 阶段三（单轮 Gemma4 审查，不循环）+ 阶段四。验证核心价值后再补多轮对抗循环。
