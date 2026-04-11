@@ -25,6 +25,11 @@
 |-------|------|
 | producer-mind | **制作人（孙懿）认知 OS**——7 个心智模型 + 10 条决策启发式 + 表达 DNA，用制作人的思维方式分析问题 |
 | munger-perspective | **查理·芒格认知 OS**——多元思维模型格栅 + 反向思考 + 人类误判心理学，跨学科交叉分析 |
+| bezos-perspective | **贝索斯认知 OS**——飞轮效应 + 逆向工作法 + Day One 文化，存量中找增量 |
+| naval-perspective | **Naval 认知 OS**——四种杠杆 + 特定知识 + 判断力资本化，个人效能极致化 |
+| inamori-perspective | **稻盛和夫认知 OS**——阿米巴经营 + 利他心 + 人生方程式，机制之外的人心经营 |
+| taleb-perspective | **塔勒布认知 OS**——反脆弱 + 非对称风险 + 肥尾分布，挑战确定性假设 |
+| zhangxiaolong-perspective | **张小龙认知 OS**——用完即走 + 简约克制 + 人性驱动设计，产品直觉的可言说化 |
 
 ### 开发工具
 | Skill | 用途 |
