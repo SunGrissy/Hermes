@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-11] - palace/game_review 策划审查网页服务设计说明（人类版 v0.4 + Agent 版 v0.3）
+
+**状态**: 验收通过
+
+**内容**:
+- `palace/game_review/docs/DESIGN-策划审查网页服务-人类版.md`：WHAT/HOW/BUILD/MAKE、玄石登录、埋点与反馈必选、云文档链接、数据留存与独立 Git 归档、审计互链等
+- `palace/game_review/docs/DESIGN-策划审查网页服务-Agent版.md`：与人类版 v0.4 对齐的 API/存储/测试与 FR 映射
+
+---
+
 ## [2026-04-11] - pm-system quick_start 启动脚本
 
 **状态**: 验收通过
