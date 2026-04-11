@@ -1,5 +1,19 @@
 # Work Log - MyAgents Root
 
+## [2026-04-11] - 认知科学基础文献库：三本书完整蒸馏 + 论文前沿
+
+**状态**: 已完成
+
+**内容**:
+- 新增 `cognitive-science-foundations` Skill：学术底座版，与 cognitive-design-engine（实战版）互补
+  - Part A：《思考快与慢》完整蒸馏——双系统、六大启发式偏差、前景理论四要素/四重模式、两个自我
+  - Part B：《助推》完整蒸馏——自由家长主义、NUDGES 六工具、伦理边界
+  - Part C：《体验引擎》完整蒸馏——人造体验生成器、人类关切分类、涌现叙事、心流八要素/五个敌人
+  - Part D：7 篇前沿论文——Schultz PEL、Anderson VDAC、Near-miss P300、视听沉浸倒 U 型、dACC 累积编码、Machine Zone/Dark Flow、PREE
+  - 三本书交叉对照表 + 与 cognitive-design-engine 分工表
+
+---
+
 ## [2026-04-11] - 认知设计引擎：给设计直觉装科学底座
 
 **状态**: 已完成

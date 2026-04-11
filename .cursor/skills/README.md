@@ -58,7 +58,8 @@
 ### 游戏业务
 | Skill | 用途 |
 |-------|------|
-| cognitive-design-engine | **认知设计引擎**——认知科学/神经科学翻译为设计操作语言，6 模块 20+ 机制，给所有设计 Skill 装底层解释 |
+| cognitive-design-engine | **认知设计引擎**（实战版）——认知科学翻译为设计操作语言，6 模块 20+ 机制，回答"怎么用" |
+| cognitive-science-foundations | **认知科学基础文献库**（学术版）——《思考快与慢》《助推》《体验引擎》完整蒸馏 + 7 篇前沿论文，回答"原理是什么" |
 | game-review | **策划方案审核** 6引擎检查（目的/节奏/红线/价值/分层/经济）+ 制作人决策问题 |
 | boss-precheck-review | Boss 表演预审三道门（概念门/结构门/制作门）自检与预审意见 |
 | feature-what-review | Feature WHAT 层设计质量审查（想没想清楚，而非文档写没写） |
