@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-11] - 策划审查人类版 v0.5：实施对接与仓库约定并入设计文档
+
+**状态**: 验收通过
+
+**内容**:
+- `palace/game_review/docs/DESIGN-策划审查网页服务-人类版.md`：v0.5，在「文档目的」下增加「文档与仓库约定（实施对接）」、依赖索引、与制作人对接、双 Git 指引；删除分散的 palace README 依赖
+- `palace/game_review/docs/DESIGN-策划审查网页服务-Agent版.md`：v0.4，产品权威对齐人类版 v0.5
+- 根 `README.md`：仅保留指向人类版文档的一行；删除 `palace/README.md`、`palace/game_review/README.md`
+
+---
+
 ## [2026-04-11] - 根目录与 palace 对接说明 README
 
 **状态**: 验收通过
