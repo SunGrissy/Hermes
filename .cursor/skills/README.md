@@ -18,6 +18,12 @@
 | Skill | 用途 |
 |-------|------|
 | skill-authoring-guide | **元 Skill**——指导 Agent 创建高质量 Skill，含 Agentic Protocol 模板、质量检查清单 |
+| cognitive-furnace | **认知炼化炉**——从人物素材蒸馏思维操作系统，产出可对话的数字思考伙伴（六阶段流水线 + 三重验证） |
+
+### 数字思考伙伴
+| Skill | 用途 |
+|-------|------|
+| producer-mind | **制作人（孙懿）认知 OS**——7 个心智模型 + 10 条决策启发式 + 表达 DNA，用制作人的思维方式分析问题 |
 
 ### 开发工具
 | Skill | 用途 |
