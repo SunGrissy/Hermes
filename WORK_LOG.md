@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-11] - 根目录与 palace 对接说明 README
+
+**状态**: 验收通过
+
+**内容**:
+- 根 `README.md`：本库为事实源、实施与制作人对接、关键路径索引（Skills、palace/game_review 设计文档、dual-git-sync）
+- `palace/README.md`、`palace/game_review/README.md`：目录说明与设计文档/脚本索引
+
+---
+
 ## [2026-04-11] - palace/game_review 策划审查网页服务设计说明（人类版 v0.4 + Agent 版 v0.3）
 
 **状态**: 验收通过
