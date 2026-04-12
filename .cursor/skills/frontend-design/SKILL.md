@@ -1,41 +1,201 @@
+# 前端设计 Skill
+
+> 生成有辨识度、生产级前端界面，拒绝 AI 审美流水线。
+
+## 触发条件
+
+当用户要求构建 Web 组件、页面、落地页、仪表盘、海报，或需要美化/重设计任何前端 UI 时激活。
+
+精确触发词：`设计页面`、`做个前端`、`美化 UI`、`重新设计`、`landing page`、`dashboard`、`组件设计`。
+模糊意图：「这个页面太丑了」「帮我出个好看的」「做得有设计感一些」。
+
+## 适用场景
+
+- 适用于：HTML/CSS/JS 原生页面、React/Vue 组件、Streamlit 自定义样式、静态站点、内部工具 UI
+- 不适用于：移动端原生应用（iOS/Android）、游戏内 UI（引擎内 Widget）、纯后端 API 设计
+
 ---
-name: frontend-design
-description: Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.
+
+## 工作流程
+
+### Step 1: 理解上下文
+
+在写任何代码前，先搞清楚三件事：
+
+**1a. 产品定位**
+- 这个界面解决什么问题？给谁用？
+- 是内部工具（效率优先）还是面向外部用户（品牌优先）？
+- 有没有现有的设计系统或品牌约束？
+
+**1b. 检查 DESIGN.md**
+
+如果项目根目录存在 `DESIGN.md`，读取并严格遵循其中的视觉决策（字体、颜色、间距等）。仅在用户明确要求突破时偏离。
+
+如果不存在，根据下方的设计判断框架自主决策，并在交付时建议是否需要沉淀为 DESIGN.md。
+
+**1c. 确定美学方向**
+
+从以下方向池中选择一个，或组合出变体。选择的核心标准：**与产品定位匹配，且有辨识度**。
+
+| 方向 | 适合 | 关键特征 |
+|------|------|---------|
+| 极简主义 | 工具类、数据密集型 | 大量留白、字体即设计、零装饰 |
+| 工业/实用 | 开发者工具、管理后台 | 等宽字体强调、功能密度高、哑光色调 |
+| 社论/杂志 | 内容展示、报告 | 强排版层级、不对称网格、拉引引用 |
+| 复古未来 | 个性化工具 | CRT 辉光、像素网格、暖色等宽 |
+| 奢华/精致 | 品牌展示、高端产品 | 衬线字体、高对比、贵金属色调 |
+| 有机/自然 | 社区、健康、教育 | 大地色、圆润形态、手绘纹理 |
+| 玩具/趣味 | 面向年轻用户 | 大圆角、弹性动效、大胆原色 |
+| 装饰艺术 | 仪式感场景 | 几何精确、金属点缀、对称、装饰边框 |
+| 野兽派/原始 | 强调实验性 | 裸露结构、系统字体、可见网格 |
+| 极繁主义 | 创意展示 | 密集层叠、Y2K 混搭、图案叠加 |
+
+**决策时必须回答**：这个界面让人记住的一件事是什么？
+
 ---
 
-This skill guides creation of distinctive, production-grade frontend interfaces that avoid generic "AI slop" aesthetics. Implement real working code with exceptional attention to aesthetic details and creative choices.
+### Step 2: 设计决策（SAFE/RISK 框架）
 
-The user provides frontend requirements: a component, page, application, or interface to build. They may include context about the purpose, audience, or technical constraints.
+做出完整的设计决策包，拆成两层：
 
-## Design Thinking
+**SAFE 层（行业基线）**：同类产品用户默认期待的设计模式。不需要冒险，但必须做好。
+- 例：管理后台用侧边栏导航、表格数据用等宽数字、表单输入有清晰的标签
 
-Before coding, understand the context and commit to a BOLD aesthetic direction:
-- **Purpose**: What problem does this interface solve? Who uses it?
-- **Tone**: Pick an extreme: brutally minimal, maximalist chaos, retro-futuristic, organic/natural, luxury/refined, playful/toy-like, editorial/magazine, brutalist/raw, art deco/geometric, soft/pastel, industrial/utilitarian, etc. There are so many flavors to choose from. Use these for inspiration but design one that is true to the aesthetic direction.
-- **Constraints**: Technical requirements (framework, performance, accessibility).
-- **Differentiation**: What makes this UNFORGETTABLE? What's the one thing someone will remember?
+**RISK 层（差异化赌注）**：让这个产品从同类中跳出来的创意决策。每个 RISK 要说清楚赌什么、赢什么、代价是什么。
+- 例：「用 Fraunces 衬线做标题字体（赌：管理工具不该只有 Sans-serif；赢：辨识度极高；代价：可能感觉不够"科技"）」
 
-**CRITICAL**: Choose a clear conceptual direction and execute it with precision. Bold maximalism and refined minimalism both work - the key is intentionality, not intensity.
+每个设计方案至少包含 2 个 SAFE + 2 个 RISK。
 
-Then implement working code (HTML/CSS/JS, React, Vue, etc.) that is:
-- Production-grade and functional
-- Visually striking and memorable
-- Cohesive with a clear aesthetic point-of-view
-- Meticulously refined in every detail
+#### 2a. 字体选择
 
-## Frontend Aesthetics Guidelines
+**分角色选字体**，不要一个字体打天下：
 
-Focus on:
-- **Typography**: Choose fonts that are beautiful, unique, and interesting. Avoid generic fonts like Arial and Inter; opt instead for distinctive choices that elevate the frontend's aesthetics; unexpected, characterful font choices. Pair a distinctive display font with a refined body font.
-- **Color & Theme**: Commit to a cohesive aesthetic. Use CSS variables for consistency. Dominant colors with sharp accents outperform timid, evenly-distributed palettes.
-- **Motion**: Use animations for effects and micro-interactions. Prioritize CSS-only solutions for HTML. Use Motion library for React when available. Focus on high-impact moments: one well-orchestrated page load with staggered reveals (animation-delay) creates more delight than scattered micro-interactions. Use scroll-triggering and hover states that surprise.
-- **Spatial Composition**: Unexpected layouts. Asymmetry. Overlap. Diagonal flow. Grid-breaking elements. Generous negative space OR controlled density.
-- **Backgrounds & Visual Details**: Create atmosphere and depth rather than defaulting to solid colors. Add contextual effects and textures that match the overall aesthetic. Apply creative forms like gradient meshes, noise textures, geometric patterns, layered transparencies, dramatic shadows, decorative borders, custom cursors, and grain overlays.
+| 角色 | 推荐候选 | 说明 |
+|------|---------|------|
+| 展示/标题 | Satoshi, General Sans, Instrument Serif, Fraunces, Clash Grotesk, Cabinet Grotesk | 个性强、辨识度高 |
+| 正文 | Instrument Sans, DM Sans, Source Sans 3, Geist, Plus Jakarta Sans, Outfit | 可读性优先 |
+| 数据/表格 | Geist (tabular-nums), DM Sans (tabular-nums), JetBrains Mono, IBM Plex Mono | 必须支持等宽数字 |
+| 代码 | JetBrains Mono, Fira Code, Berkeley Mono, Geist Mono | 连字支持优先 |
 
-NEVER use generic AI-generated aesthetics like overused font families (Inter, Roboto, Arial, system fonts), cliched color schemes (particularly purple gradients on white backgrounds), predictable layouts and component patterns, and cookie-cutter design that lacks context-specific character.
+**黑名单（永不推荐）**：
+Papyrus, Comic Sans, Lobster, Impact, Jokerman, Bleeding Cowboys, Permanent Marker, Bradley Hand, Brush Script, Hobo, Trajan, Courier New（用于正文时）
 
-Interpret creatively and make unexpected choices that feel genuinely designed for the context. No design should be the same. Vary between light and dark themes, different fonts, different aesthetics. NEVER converge on common choices (Space Grotesk, for example) across generations.
+**过度使用（仅用户明确要求时才用）**：
+Inter, Roboto, Arial, Helvetica, Open Sans, Lato, Montserrat, Poppins, Raleway
 
-**IMPORTANT**: Match implementation complexity to the aesthetic vision. Maximalist designs need elaborate code with extensive animations and effects. Minimalist or refined designs need restraint, precision, and careful attention to spacing, typography, and subtle details. Elegance comes from executing the vision well.
+#### 2b. 颜色策略
 
-Remember: Claude is capable of extraordinary creative work. Don't hold back, show what can truly be created when thinking outside the box and committing fully to a distinctive vision.
+| 策略 | 适合 | 做法 |
+|------|------|------|
+| 克制型 | 工具/数据类 | 1 个强调色 + 中性色。颜色稀缺才有意义 |
+| 均衡型 | 一般 Web 应用 | 主色 + 辅色 + 语义色，层级清晰 |
+| 表现型 | 创意/品牌 | 颜色即设计工具，大胆配色 |
+
+必须包含：主色（含 hex）、中性色梯度（暖灰/冷灰）、语义色（success/warning/error/info）。
+如果需要暗色模式，表面色和背景色需要独立定义，不能简单反转。
+
+#### 2c. 间距与密度
+
+- 基准单位：4px 或 8px
+- 密度等级：紧凑（数据密集型）/ 舒适（一般应用）/ 宽松（内容展示）
+- 圆角分级：小 4px（数据元素）/ 中 8px（按钮/输入框）/ 大 12px（卡片/面板）/ 全圆（标签/徽章）
+
+#### 2d. 动效策略
+
+| 策略 | 时长 | 适合 |
+|------|------|------|
+| 功能性 | 50-150ms | 工具类。只在帮助理解时才动 |
+| 有意图 | 150-400ms | 一般应用。入场动画、状态过渡 |
+| 表现性 | 400-700ms | 品牌/创意。滚动驱动、编排式动效 |
+
+高影响力做法：**一个精心编排的页面加载**（stagger reveal + animation-delay）比散落的微交互更令人愉悦。
+
+---
+
+### Step 3: 实现代码
+
+基于 Step 1-2 的决策，输出可运行的生产级代码。
+
+**实现原则**：
+
+1. **CSS 变量驱动**：所有设计 token（颜色、字体、间距、圆角）通过 CSS 自定义属性定义，集中在 `:root`
+2. **字体加载**：使用 Google Fonts / Fontshare CDN，`display=swap` 防止 FOIT
+3. **响应式**：移动端优先，关键断点清晰
+4. **匹配实现复杂度与美学愿景**：极繁设计需要精细代码；极简设计需要克制，精确到间距和字重
+
+**布局与空间**：
+- 不对称 > 完全对称。允许网格打破。
+- 负空间是设计工具，不是浪费。
+- 密度和留白的选择必须有意识，不是默认值。
+
+**背景与视觉质感**：
+- 创造氛围而非默认纯色。渐变网格、噪点纹理、几何图案、层叠透明、戏剧阴影——匹配整体美学。
+- 暗色模式可加微弱噪点叠加（opacity 0.02-0.03）增加质感，避免"扁平 SaaS 模板"感。
+
+---
+
+## 判断框架
+
+### AI 审美反模式（Anti-Slop 清单）
+
+以下模式是 AI 生成界面的典型特征，**必须主动避免**：
+
+**颜色层**：
+- 紫色/紫罗兰渐变作为默认强调色
+- 白底配淡紫/淡蓝的"安全"配色
+
+**布局层**：
+- 带彩色圆圈图标的三列 feature 网格
+- 所有内容居中 + 等距排列
+- Hero section 用通用的居中大标题 + 副标题 + 按钮的固定结构
+
+**组件层**：
+- 所有元素统一的大圆角（bubble border-radius）
+- 渐变按钮作为主 CTA
+- "Built for X" / "Designed for Y" 的套路文案
+
+**字体层**：
+- 全站只用一个 Sans-serif
+- 标题和正文用同一个字重
+- 依赖 Inter/Roboto 等系统默认字体
+
+**整体层**：
+- 不同页面/项目之间设计趋同
+- 深色主题 = 纯黑 #000000 背景
+- 浅色主题 = 纯白 #FFFFFF 无层次感
+
+### 设计品质检验
+
+交付前用这三个问题自检：
+
+1. **记忆点测试**：关掉页面 10 秒后，能说出一个印象深刻的视觉细节吗？如果不能，设计缺少辨识度。
+2. **品类辨识测试**：把这个页面和同类产品的 5 个截图放在一起，一眼能挑出来吗？如果不能，RISK 层不够大胆。
+3. **一致性测试**：页面上每个间距、颜色、字体选择都能追溯到 Step 2 的决策吗？如果不能，设计系统有漏洞。
+
+---
+
+## 输出格式
+
+每次交付包含：
+
+1. **设计决策摘要**（对应 Step 1-2，含 SAFE/RISK 标注）
+2. **可运行的代码**（HTML/CSS/JS 或框架组件）
+3. **字体加载说明**（CDN 链接或自托管路径）
+4. **DESIGN.md 建议**（如果项目还没有，建议是否创建；如果有，检查本次设计是否与之一致）
+
+---
+
+## 局限性
+
+- 本 Skill 不覆盖用户研究和可用性测试——产出的是视觉设计，不是 UX 方案验证。遇到需要用户反馈驱动的设计决策时，应建议用户做原型测试。
+- 本 Skill 的字体推荐基于 Web 场景（Google Fonts / Fontshare 可用性），自托管或商业字体环境下推荐列表可能不适用。
+- AI 图片生成能力（如 gstack 的 GPT Image API）不在覆盖范围内，本 Skill 专注于可运行的代码产出。
+
+---
+
+## 变更记录
+
+| 日期 | 版本 | 变更 | 来源会话 |
+|------|------|------|----------|
+| 2025-03 | v1.0 | 初始创建，基础美学指导 | — |
+| 2026-04-12 | v2.0 | 重大升级：融入 gstack 设计体系借鉴（SAFE/RISK 框架、Anti-Slop 清单、字体三级分类、DESIGN.md 集成、Agentic Protocol 三步工作流、诚实边界），符合 skill-quality-gate 标准 | AgentGstk |

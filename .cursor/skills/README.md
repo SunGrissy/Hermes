@@ -35,7 +35,7 @@
 | Skill | 用途 |
 |-------|------|
 | fastapi-router | FastAPI 路由与 CRUD、鉴权、Pydantic 模型 |
-| frontend-design | 高区分度前端/落地页/组件设计 |
+| frontend-design | 高区分度前端界面设计（v2.0：SAFE/RISK 框架、Anti-Slop 清单、字体三级分类、DESIGN.md 集成） |
 | vanilla-js-ui-patterns | 原生 JS 弹窗、Toast、表格等 UI 模式 |
 | webapp-testing | Playwright 本地 Web 应用测试 |
 | html-slide-deck | HTML 演示文稿生成（深色主题，浏览器打印为 PDF） |
