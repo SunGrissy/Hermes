@@ -87,7 +87,7 @@
 
 ## [2026-04-11] - Agent 体系增强：吸收 hermes-agent / Archon / nuwa-skill 核心设计
 
-**状态**: 验收通过
+**状态**: 已完成
 
 **内容**:
 - 深度分析三个开源 Agent 框架（hermes-agent、Archon、nuwa-skill），提取可落地的设计模式
@@ -98,6 +98,15 @@
 - 新增 `skill-authoring-guide` Skill：Skill 编写元指南，引入 Agentic Protocol 三步工作流（分类→研究→输出）+ 质量检查清单
 - 更新 Skills README：新增"Agent 体系自治"分类
 - 新增吸收分析文档 `README-absorption-analysis.md`：记录三仓库洞察和吸收/不吸收决策
+
+---
+
+## [2026-04-11] - 升炮赛审核对比报告 v2：基准改为 Sonnet 4.6 与后续迭代计划
+
+**状态**: 验收通过
+
+**内容**:
+- `palace/game_review/升炮赛_审核对比报告-v2.md`：B 版基准表述统一为 Sonnet 4.6；原「推荐使用场景」替换为「后续迭代计划」（Gemma 迭代、内网工具与 AI Infra、game-design-assistant SKILL）
 
 ---
 
