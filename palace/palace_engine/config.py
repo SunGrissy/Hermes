@@ -7,8 +7,9 @@ import yaml
 from dotenv import load_dotenv
 
 load_dotenv()
-
 PALACE_ROOT = Path(__file__).resolve().parent.parent
+# 无论从仓库根还是 palace 目录启动，都尝试读取 palace/.env
+load_dotenv(PALACE_ROOT / ".env", override=False)
 ROLES_DIR = PALACE_ROOT / "roles"
 SCENARIOS_DIR = PALACE_ROOT / "scenarios"
 

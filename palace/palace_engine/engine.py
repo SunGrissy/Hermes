@@ -53,6 +53,10 @@ async def run_scenario(
     if provider is None:
         provider = get_provider()
 
+    if scenario.get("handler") == "interview_checklist":
+        from .interview_checklist import run_interview_checklist
+        return await run_interview_checklist(provider, topic_text, scenario, doc_type=doc_type)
+
     extraction_role_id = scenario.get("extraction_role")
 
     if extraction_role_id:

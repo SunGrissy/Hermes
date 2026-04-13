@@ -34,6 +34,7 @@ _SCENARIO_TITLE = {
     "dor_fast": "\u5feb\u8f68 DoR \u62a5\u544a",
     "how_review": "HOW \u5ba1\u67e5\u62a5\u544a",
     "version_layout": "\u7248\u672c\u5185\u5bb9\u6392\u5e03\u9884\u5ba1",
+    "interview_checklist": "\u9762\u8bd5\u6e05\u5355/\u8bc4\u4ef7\uff08\u591a\u5c97\u4f4d\uff09",
 }
 
 _CAT_TITLE = {
@@ -60,6 +61,17 @@ def generate_markdown(
     if sid == "version_layout":
         return _generate_version_layout(
             data, feature_title=feature_title, pipeline_stage=pipeline_stage,
+        )
+    if sid == "interview_checklist":
+        body = (data.get("markdown_report") or "").strip()
+        if not body:
+            title = _SCENARIO_TITLE.get(sid, "初面清单")
+            ft = f" · {feature_title}" if feature_title else ""
+            return f"# {title}{ft}\n\n（无 markdown_report 内容）\n"
+        return (
+            "<!-- Palace scenario: interview_checklist -->\n"
+            f"<!-- generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n"
+            + body
         )
     ov = data.get("overall_verdict", "error")
     bc = data.get("blocker_count", 0)

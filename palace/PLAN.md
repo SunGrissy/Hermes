@@ -220,6 +220,7 @@ MyAgent/
       growth_review.yaml  # 增长复盘（御史台主导 advisory，待实现）
       org_advisory.yaml   # 组织架构咨询（吏部尚书主导，待实现）
       resume_screening.yaml # 简历筛选（吏部尚书主导，待实现）
+      interview_checklist.yaml # 面试清单/评价（多岗位，含记录自动更新）
     run.py                # CLI 入口（测试用）
     requirements.txt
     .env.example

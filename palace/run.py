@@ -5,6 +5,7 @@ Usage:
     py palace/run.py --scenario what_precheck --input-file doc.md --doc-type full_spec --format markdown --output report.md
     py palace/run.py --scenario what_precheck --input-file doc.md --doc-type delta --format markdown --output report.md
     py palace/run.py --scenario what_precheck --input-file doc.md --title "Feature" --owner "Owner" --weight slow --stage scoping --doc-layer WHAT
+    py palace/run.py --scenario interview_checklist --input-file resume.txt --doc-type "role:运营策划;mode:checklist" --format markdown --output 初面清单.md
 """
 
 import argparse
@@ -54,9 +55,8 @@ def main():
     )
     parser.add_argument(
         "--doc-type",
-        choices=["full_spec", "delta", "campaign", "hotfix", "version"],
-        help="Document type (auto-detected if not specified): "
-             "full_spec=new system, delta=variant, campaign=ops activity, hotfix, version=release plan",
+        help="Document type meta. Review scenarios use full_spec/delta/campaign/hotfix/version; "
+             "interview_checklist uses key-value format: role:<岗位>;mode:checklist|evaluation;candidate:<姓名>",
     )
     parser.add_argument(
         "--from-json", help="Skip LLM call, generate report from existing JSON result",

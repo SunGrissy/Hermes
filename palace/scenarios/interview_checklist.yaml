@@ -1,0 +1,21 @@
+id: interview_checklist
+name: "面试清单生成（多岗位）"
+handler: interview_checklist
+mode: interview_checklist
+target: feature
+pipeline_weight: slow
+pipeline_stage: scoping
+
+# doc_type 复用传参格式：
+#   role:运营策划;mode:checklist;candidate:徐博;mobile_tail:1381
+#   role:系统策划;mode:evaluation;candidate:张三
+#
+# role 必填：运营策划 / 系统策划 / 战斗策划 / 主策划 / fresh
+# mode 可选：checklist(默认) / evaluation
+
+output_includes:
+  - markdown_report
+  - role
+  - mode
+  - candidate_name
+  - candidate_key
