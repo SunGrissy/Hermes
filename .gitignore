@@ -91,5 +91,5 @@ workspace-docs/
 novel/
 .aider*
 
-# 本地钉钉消息日志（含敏感会话，勿入库）
-data/dingtalk/
+# 本地数据与钉钉消息日志（含敏感会话，勿入库）
+data/

@@ -7,7 +7,7 @@
 **内容**:
 - **子模块**：`task_reminder`（TaskReminder 窄屏布局）、`md-reader`（UI 测试脚本与截图）、`performeval`（简历初筛清单、面试材料与模板）、`pm-system`（管线清单渲染、DDL 解析、导入/HR 测试与截图）
 - **根目录**：`.gitignore`（`.aider*`、`data/dingtalk/`）；`dingtalk-desktop/skills/aider_runner.py`；`palace` 面试清单引擎与场景；`scripts` 清单生成与 Ollama 简历预览；`会议材料` AI 提效与 Q1 汇报稿；`面试` 索引与候选人目录；杂项 HTML/工具（diff、Excel 转换、ROI、测试截图等）
-- **未纳入**：`.obsidian/`、`_external/`、`_tmp_wra.py`、`data/dingtalk/`（已忽略）、`pm-system` 内 `_commit_msg*.txt` 临时文件、`pm-system/data/` 本地数据
+- **未纳入**：`.obsidian/`、`_external/`、`_tmp_wra.py`；根目录 `data/` 与 `pm-system/data/` 已加入 `.gitignore`；`pm-system` 内 `_commit_msg*.txt` 等临时文件已忽略
 
 ---
 
