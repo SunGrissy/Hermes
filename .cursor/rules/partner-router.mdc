@@ -26,6 +26,7 @@ alwaysApply: true
 | **效能/杠杆** | 怎么提效、怎么放大产出、自动化、时间分配 |
 | **认知/原理** | 为什么有效、玩家为什么这样、什么机制、学术依据 |
 | **汇报/表达** | 给老板看、怎么写、怎么讲、材料结构 |
+| **内容协作** | 帮我理清楚、结构化、说清楚、帮我组织一下、这段话怎么讲、帮我整理 |
 | **数据/归因** | 数据异常、指标波动、为什么XX变了、归因分析、帮我查一下 |
 | **概念/深挖** | 解剖概念、这个到底是什么、想透、追本、本质是什么、降秩 |
 | **写作/表达** | 帮我写一篇、把这个观点写透、白话说、说人话 |
@@ -43,7 +44,8 @@ alwaysApply: true
 | **产品/体验** | `zhangxiaolong-perspective` | + `producer-mind`（玩家视角）+ `cognitive-design-engine`（科学验证） | 张小龙为主，其余补充 |
 | **效能/杠杆** | `naval-perspective` | + `producer-mind`（532 框架） | Naval 为主，制作人补充 |
 | **认知/原理** | `cognitive-design-engine` | + `cognitive-science-foundations`（学术深挖） | 实战版为主，文献库按需 |
-| **汇报/表达** | `leadership-report-craft` | + `bezos-perspective`（叙事纪律） | 汇报 Skill 为主，贝索斯补充 |
+| **汇报/表达** | `leadership-report-craft` | + `structured-communication`（协作模式 & 表达纪律）+ `bezos-perspective`（叙事纪律） | 汇报 Skill 定结构，structured-communication 管协作节奏 |
+| **内容协作** | `structured-communication` | 无 | 素材整理、想法成型、框架填充等通用协作 |
 | **数据/归因** | `data-investigation-playbook` | + `gelman-perspective`（统计陷阱审查） | 探查流程为主，Gelman 审查分析逻辑 |
 | **概念/深挖** | `concept-anatomy` 或 `drill-to-root` 或 `rank-reducer` | 按问题形态选：概念→anatomy，观点→drill，领域→rank | 单独使用，不交叉 |
 | **写作/表达** | `writing-engine` 或 `plain-speak` | 写文章→engine，翻译成大白话→plain | 单独使用，不交叉 |

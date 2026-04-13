@@ -9,10 +9,11 @@
 ### 沟通 & 身份
 | Skill | 用途 |
 |-------|------|
-| producer-dialogue | 对制作人说人话、少技术黑话、产品思维组织回答；Skills 仓库与用户目录同步维护 |
+| structured-communication | **结构化表达教练**——表达纪律（先结论后展开、说人话、密度控制）+ 三种协作模式 + 高效反馈指南，Agent 自己的输出也遵守 |
 | digital-twin-voice | 数字分身措辞与主人翁立场（禁用「你们」）；含双目录同步说明 |
-| ai-content-collaboration | 与 Agent 协作做内容创作的方法论（给方向而非给答案，三种协作模式） |
 | leadership-report-craft | 向上汇报结构化方法（思考作业 vs 成果汇报、受众校准、敏感信息处理） |
+| ai-content-collaboration | ⚠️ **已废弃**，合并至 `structured-communication` |
+| producer-dialogue | ⚠️ **已废弃**，表达纪律迁入 `structured-communication`，同步规则见 `digital-twin-voice` |
 
 ### Agent 体系自治
 | Skill | 用途 |
