@@ -5,9 +5,51 @@ alwaysApply: true
 
 # 数字思考伙伴自动路由
 
+## 伙伴注册表
+
+Agent 在路由前必须知道完整的可用伙伴清单。以下是所有已注册的思考伙伴及其 Skill 路径：
+
+### 人物伙伴
+
+| ID | 名称 | Skill 路径 | 一句话定位 | 触发词 |
+|----|------|-----------|-----------|--------|
+| `producer-mind` | 制作人（孙懿） | `.cursor/skills/producer-mind/SKILL.md` | 效能公式 + 穿透因果 + 四层职权 | 制作人视角、我怎么看、效能分析 |
+| `munger-perspective` | 查理·芒格 | `.cursor/skills/munger-perspective/SKILL.md` | 多元模型格栅 + 反向思考 + 误判心理 | 芒格、多元模型、反过来想、陷阱 |
+| `bezos-perspective` | 杰夫·贝索斯 | `.cursor/skills/bezos-perspective/SKILL.md` | 飞轮 + 逆向工作法 + Day One | 贝索斯、飞轮、客户倒推、长期 |
+| `naval-perspective` | 纳瓦尔 | `.cursor/skills/naval-perspective/SKILL.md` | 杠杆 + 特定知识 + 复利 | Naval、杠杆、放大产出、时间分配 |
+| `inamori-perspective` | 稻盛和夫 | `.cursor/skills/inamori-perspective/SKILL.md` | 阿米巴 + 利他心 + 以心为本 | 稻盛、利他、人心、阿米巴 |
+| `taleb-perspective` | 塔勒布 | `.cursor/skills/taleb-perspective/SKILL.md` | 反脆弱 + 非对称 + 肥尾风险 | 塔勒布、反脆弱、风险、黑天鹅 |
+| `zhangxiaolong-perspective` | 张小龙 | `.cursor/skills/zhangxiaolong-perspective/SKILL.md` | 用完即走 + 做减法 + 人性驱动 | 张小龙、克制、该不该做、简单 |
+| `jobs-perspective` | 乔布斯 🔴 | `.cursor/skills/jobs-perspective/SKILL.md` | **红队挑战者**——品味 + 直觉 + 极致标准 | 红队、挑战、压力测试、品味、够好吗 |
+
+### 认知科学伙伴
+
+| ID | 名称 | Skill 路径 | 一句话定位 | 触发词 |
+|----|------|-----------|-----------|--------|
+| `cognitive-design-engine` | 认知设计引擎 | `.cursor/skills/cognitive-design-engine/SKILL.md` | 认知机制→设计含义（实战版） | 认知设计、为什么有效、玩家为什么 |
+| `cognitive-science-foundations` | 认知科学文献库 | `.cursor/skills/cognitive-science-foundations/SKILL.md` | 三本书+论文原理库（学术版） | 原理、学术依据、论文怎么说 |
+
+### 设计智囊团
+
+| ID | 名称 | Skill 路径 | 一句话定位 | 触发词 |
+|----|------|-----------|-----------|--------|
+| `boss-design-council` | Boss 设计智囊团 | `.cursor/skills/boss-design-council/SKILL.md` | 6 位智囊审视 Boss 加分表演 | Boss 智囊团、Boss 方案讨论、加分表演检验 |
+| `game-design-council` | 游戏设计智囊团 | `.cursor/skills/game-design-council/SKILL.md` | 6 位智囊审视通用玩法/系统设计 | 玩法智囊团、系统设计讨论、方案自检 |
+
+### 路由优先级
+
+当用户输入同时匹配多个注册表条目时，按以下优先级判断：
+
+1. **用户显式指定** → 无条件遵从，不自动加其他
+2. **设计智囊团触发词命中** → 调用对应智囊团（boss / game），不走人物伙伴路由
+3. **人物伙伴触发词命中** → 调用对应人物伙伴
+4. **无触发词但问题性质可识别** → 走下方的问题类型路由表
+
+---
+
 ## 原则
 
-用户提出问题时，Agent 应**自动判断是否需要调用思考伙伴、调用哪个/哪几个**，而非等用户指定。用户显式指定时（"用芒格的视角"）优先遵从。
+用户提出问题时，Agent 应**自动判断是否需要调用思考伙伴、调用哪个/哪几个**，而非等用户指定。用户显式指定时优先遵从。
 
 ## 路由判断
 
