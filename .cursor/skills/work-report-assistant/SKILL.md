@@ -16,16 +16,19 @@ Windows 计划任务（schtasks）
   → run_work_report_assistant.ps1 -Scenario <id>
     → py work_report_assistant_run.py --scenario <id>
       1. 读 roster.json（人员名单）+ config.json（API 密钥）
-      2. 构造提示词（含硬约束 + 格式铁律 + 日期窗口）
-      3. POST /api/v1/chat → 日志助手 Chat API
-      4. 回复 Markdown → send_result_webhook.py → 钉钉群
+      2. （早报）读 PM 主数据 `holidays`/`workdays`，与「假日与调休」一致后算「上一工作日」
+      3. 构造提示词（含硬约束 + 格式铁律 + 日期窗口）
+      4. POST /api/v1/chat → 日志助手 Chat API
+      5. 回复 Markdown → send_result_webhook.py → 钉钉群
 ```
+
+**工作日口径**：与 PmSystem 版本规划工作日历一致，详见 [`pm-work-calendar/SKILL.md`](../pm-work-calendar/SKILL.md)。
 
 ## 四场景
 
 | ID | 触发 | 用途 | 输出结构 |
 |----|------|------|----------|
-| `morning_digest` | 周一至周五 09:00 | 前一工作日日报提交情况 + 信息不对称风险 | 提交率、未交名单、分人风险点 |
+| `morning_digest` | **每日** 09:00（脚本内按 PM 工作日过滤，非工作日不推） | 前一工作日日报提交情况 + 信息不对称风险 | 提交率、未交名单、分人风险点 |
 | `weekly_material` | 周日 16:00 | 按 UE/运营/数据/技术 四组合并周报初稿 | 分组产出 → 管线进展 → 卡点 → AI 应用 |
 | `weekly_px_insight` | 周一 10:30 | 上一自然周产品体验洞察聚类 + 人均条数 | 体验时长 → 洞察聚类 → 贡献统计 |
 | `weekly_ai_px_report` | 周五 17:00 | 当周 AI 使用场景聚类 + 人均条数 | AI 聚类（按主题） → 各组统计 |
@@ -42,12 +45,13 @@ Windows 计划任务（schtasks）
 | `dingtalk-desktop/work_report_assistant_config.json.example` | 配置示例 | ✅ |
 | `dingtalk-desktop/run_work_report_assistant.ps1` | PS 包装（日志、错误处理） | ✅ |
 | `dingtalk-desktop/register_work_report_assistant_tasks.ps1` | 注册 4 个 Windows 计划任务 | ✅ |
+| `dingtalk-desktop/pm_work_calendar.py` | 与 PM `isWorkday` 一致的工作日 / 上一工作日 | ✅ |
 | `.cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py` | Webhook 发送（读 webhook_config.json） | ✅ |
 | `dingtalk-desktop/webhook_config.json` | 钉钉机器人 URL（默认键 `hr`） | ❌ .gitignore |
 
 ## 配置与密钥
 
-- `work_report_assistant_config.json`：从 `.example` 复制，填 `api_key`
+- `work_report_assistant_config.json`：从 `.example` 复制，填 `api_key`；`pm_calendar_base_url` 填 **PmSystem** 根地址（如 `http://192.168.20.160:8112`），脚本会请求其 `/api/pm-calendar`；失败再用本地 `pm_data_json_path`
 - 环境变量可覆盖：`WORK_REPORT_API_KEY`、`WORK_REPORT_BASE_URL`
 - 钉钉推送优先用 `webhook_config.json` 的 `work_report_assistant` 键；未配置时回退 `hr` 键（与简历通知共用 HR 机器人）。两个键均在 `webhook_config.json.example` 中有定义。
 
