@@ -1,0 +1,374 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>途游工作室 · 2026 夏季团建方案</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#FAFAF7;--text:#1C1C1C;--text-secondary:#5A5A5A;--border:#E5E2DC;
+  --lake:#3D7C98;--fire:#B8622E;--mountain:#5A7E5A;--forest:#3B6B3B;--mist:#7B8BA0;
+  --card-bg:#FFFFFF;--hero-bg:#1C2A2A;
+}
+body{font-family:'Noto Sans SC',system-ui,sans-serif;background:var(--bg);color:var(--text);
+  font-size:15px;line-height:1.7;font-weight:400}
+.hero{background:var(--hero-bg);color:#E8E4DF;padding:60px 24px 48px;text-align:center;
+  background-image:radial-gradient(ellipse at 30% 0%,#2A3F3F 0%,transparent 60%),
+                   radial-gradient(ellipse at 70% 100%,#1A2828 0%,transparent 60%)}
+.hero h1{font-family:'Noto Serif SC',serif;font-size:clamp(28px,5vw,42px);font-weight:700;
+  letter-spacing:0.05em;margin-bottom:8px}
+.hero .sub{font-size:15px;color:#9AA8A8;font-weight:300;letter-spacing:0.1em}
+.hero .meta{margin-top:20px;display:flex;justify-content:center;gap:32px;font-size:13px;color:#7A8E8E}
+.hero .meta span::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:#5A8A7A;margin-right:8px;vertical-align:middle}
+.toggle-bar{display:flex;justify-content:center;gap:0;margin:32px auto 0;
+  background:var(--card-bg);border:1px solid var(--border);border-radius:40px;
+  max-width:360px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+.toggle-btn{flex:1;padding:12px 24px;border:none;background:transparent;cursor:pointer;
+  font-family:'Noto Sans SC',sans-serif;font-size:14px;font-weight:500;color:var(--text-secondary);
+  transition:all .25s ease;position:relative}
+.toggle-btn.active{background:var(--text);color:#fff}
+.toggle-btn:first-child{border-radius:40px 0 0 40px}
+.toggle-btn:last-child{border-radius:0 40px 40px 0}
+.container{max-width:800px;margin:0 auto;padding:0 24px}
+.plan{display:none;padding-top:12px}.plan.active{display:block}
+.route{display:flex;align-items:center;justify-content:center;gap:0;margin:36px 0 8px;flex-wrap:wrap}
+.route-node{display:flex;align-items:center;gap:0}
+.route-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.route-label{font-size:12px;font-weight:500;margin-left:6px;white-space:nowrap}
+.route-line{width:40px;height:1px;background:var(--border);margin:0 4px;flex-shrink:0}
+.route-info{text-align:center;font-size:12px;color:var(--text-secondary);margin-bottom:32px}
+.day{background:var(--card-bg);border:1px solid var(--border);border-left:4px solid var(--lake);
+  border-radius:2px 8px 8px 2px;padding:28px 32px;margin-bottom:20px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.03);transition:box-shadow .2s}
+.day:hover{box-shadow:0 4px 16px rgba(0,0,0,0.06)}
+.day-header{display:flex;align-items:baseline;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.day-num{font-family:'Noto Serif SC',serif;font-size:13px;font-weight:600;
+  letter-spacing:0.08em;text-transform:uppercase;flex-shrink:0}
+.day-title{font-family:'Noto Serif SC',serif;font-size:20px;font-weight:700}
+.day-theme{font-size:12px;font-weight:400;color:var(--text-secondary);
+  border:1px solid var(--border);border-radius:12px;padding:2px 10px}
+.day-body{display:grid;gap:12px}
+.slot{display:grid;grid-template-columns:72px 1fr;gap:12px;align-items:start}
+.slot-time{font-size:13px;font-weight:500;color:var(--text-secondary);padding-top:1px;text-align:right}
+.slot-content{font-size:14.5px;line-height:1.65}
+.slot-content strong{font-weight:600}
+.slot-content .note{display:block;font-size:13px;color:var(--text-secondary);margin-top:4px;
+  font-style:italic;line-height:1.5}
+.day-quote{margin-top:16px;padding:14px 18px;background:#F5F4F0;border-radius:6px;
+  font-size:13.5px;color:var(--text-secondary);line-height:1.65;font-style:italic}
+.night-tag{display:inline-block;margin-top:14px;font-size:12px;font-weight:500;
+  color:var(--text-secondary);border:1px dashed var(--border);border-radius:4px;padding:3px 10px}
+.section-title{font-family:'Noto Serif SC',serif;font-size:20px;font-weight:700;
+  margin:48px 0 20px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-bottom:32px}
+th{text-align:left;font-weight:600;padding:10px 12px;border-bottom:2px solid var(--border);
+  font-size:13px;color:var(--text-secondary)}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+td:first-child{font-weight:500;white-space:nowrap}
+.highlight{background:#F0F7F4;border-radius:3px;padding:1px 4px;font-weight:500}
+.cut{color:#B0A8A0;text-decoration:line-through}
+.energy{display:flex;gap:2px;align-items:center;margin-top:2px}
+.energy-bar{height:14px;border-radius:2px;width:18px}
+.energy-bar.filled{background:var(--forest);opacity:0.7}
+.energy-bar.half{background:var(--forest);opacity:0.3}
+.energy-bar.empty{background:var(--border)}
+footer{text-align:center;padding:48px 24px;font-size:12px;color:var(--text-secondary);
+  border-top:1px solid var(--border);margin-top:48px}
+.opt-badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:0.04em;
+  padding:2px 8px;border-radius:10px;vertical-align:middle}
+.opt-active{background:#E8F5E9;color:#2E7D32}
+.opt-chill{background:#FFF3E0;color:#E65100}
+@media(max-width:600px){
+  .slot{grid-template-columns:1fr;gap:4px}
+  .slot-time{text-align:left;font-size:12px}
+  .day{padding:20px 18px}
+  .hero .meta{flex-direction:column;gap:8px}
+  .route-line{width:20px}
+}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>湖州 · 莫干山</h1>
+  <div class="sub">途游工作室 2026 夏季团建方案</div>
+  <div class="meta">
+    <span>约70人</span>
+    <span>北京出发</span>
+    <span>6月下旬</span>
+  </div>
+  <div class="toggle-bar">
+    <button class="toggle-btn active" onclick="switchPlan('5')">5天4晚</button>
+    <button class="toggle-btn" onclick="switchPlan('4')">4天3晚</button>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- PLACEHOLDER_5DAY -->
+<section class="plan active" id="plan-5">
+
+<div class="route">
+  <div class="route-node"><div class="route-dot" style="background:var(--lake)"></div><div class="route-label">南太湖</div></div>
+  <div class="route-line"></div>
+  <div class="route-node"><div class="route-dot" style="background:var(--fire)"></div><div class="route-label">南浔·龙之梦</div></div>
+  <div class="route-line"></div>
+  <div class="route-node"><div class="route-dot" style="background:var(--mountain)"></div><div class="route-label">莫干山</div></div>
+  <div class="route-line"></div>
+  <div class="route-node"><div class="route-dot" style="background:var(--mist)"></div><div class="route-label">杭州✈</div></div>
+</div>
+<div class="route-info">太湖 2晚 → 莫干山 2晚 · 单向南下不走回头路 · 换酒店 1 次</div>
+
+<div class="day" style="border-left-color:var(--lake)">
+  <div class="day-header">
+    <span class="day-num">Day 1</span>
+    <span class="day-title">到达 · 太湖</span>
+    <span class="day-theme">湖</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">抵达南太湖，入住<strong>月亮酒店</strong>（指环形建筑浮在湖面上）</div></div>
+    <div class="slot"><span class="slot-time">傍晚</span><div class="slot-content"><strong>太湖帆船 / 水上活动</strong>——在中国第三大湖上暖场</div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content"><strong>太湖光影夜游</strong>（演艺船 50min，4km 湖面光影长廊）</div></div>
+  </div>
+  <div class="day-quote">开场调性：宽阔、舒展。让人从北京格子间切换到"湖面上的世界"。</div>
+  <div class="night-tag">🏨 Night 1 · 南太湖</div>
+</div>
+
+<div class="day" style="border-left-color:var(--fire)">
+  <div class="day-header">
+    <span class="day-num">Day 2</span>
+    <span class="day-title">水乡 + 铁花</span>
+    <span class="day-theme">镇 · 火</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content"><strong>南浔古镇</strong>（40min）— 摇橹船、百间楼、小莲庄</div></div>
+    <div class="slot"><span class="slot-time">午餐</span><div class="slot-content">南浔本地（双交面、河鲜）</div></div>
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">回太湖 · 自由半天<span class="note">泳池 / 温泉 26 池 / SPA / 太湖边发呆</span></div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content"><strong>龙之梦太湖古镇 — 铁花秀 + 高空烟花</strong><span class="note">铁水飞溅 + 烟花炸开 = 全旅行最强视觉冲击</span></div></div>
+  </div>
+  <div class="day-quote">铁花秀是"第一幕高潮"——全团一起被震到的共同记忆，打开后半程的情绪阀门。</div>
+  <div class="night-tag">🏨 Night 2 · 南太湖</div>
+</div>
+
+<div class="day" style="border-left-color:var(--mountain)">
+  <div class="day-header">
+    <span class="day-num">Day 3</span>
+    <span class="day-title">转场 + 自选玩水</span>
+    <span class="day-theme">山 · 水</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content">退房 → 车程 1h → <strong>莫干山</strong>，check in，放行李</div></div>
+    <div class="slot"><span class="slot-time">午餐</span><div class="slot-content">莫干山</div></div>
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">
+      <span class="opt-badge opt-active">想动</span> 鱼鳞坝溯溪 / 碧坞龙潭 / 大斗坞透明船<br>
+      <span class="opt-badge opt-chill">想静</span> 酒店泳池 / 竹林散步 / 喝茶发呆 / 睡午觉
+      <span class="note">不统一集合、不统一行动。想玩水的三五成群出去，想休息的留下。</span>
+    </div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content">山居晚餐 → 露台 / 酒吧</div></div>
+  </div>
+  <div class="day-quote">70 人第一次被允许"各干各的"——这本身就是一种放松。前两天密集体验后，这口气该喘了。</div>
+  <div class="night-tag">🏨 Night 3 · 莫干山</div>
+</div>
+
+<div class="day" style="border-left-color:var(--forest)">
+  <div class="day-header">
+    <span class="day-num">Day 4</span>
+    <span class="day-title">探险 + 告别</span>
+    <span class="day-theme">山 · 林</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content"><strong>Discovery 探险基地</strong>（3h · 高空 / 丛林 / 速降）</div></div>
+    <div class="slot"><span class="slot-time">午餐</span><div class="slot-content">山间农家菜</div></div>
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">自由——全旅程最后一个下午，不安排任何事<span class="note">竹林散步 / 茶园 / 酒店泳池 / 三五同事坐露台聊天</span></div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content"><strong>告别晚餐</strong>，在山间，不在宴会厅</div></div>
+  </div>
+  <div class="day-quote">这些"无组织的时刻"才是团建真正发生的时候。</div>
+  <div class="night-tag">🏨 Night 4 · 莫干山</div>
+</div>
+
+<div class="day" style="border-left-color:var(--mist)">
+  <div class="day-header">
+    <span class="day-num">Day 5</span>
+    <span class="day-title">晨雾</span>
+    <span class="day-theme">静</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">清晨</span><div class="slot-content"><strong>竹海晨雾中醒来</strong>——拉开窗帘的那一刻，是全旅行的最后一帧画面</div></div>
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content">不赶。山间最后走走，早午餐。</div></div>
+    <div class="slot"><span class="slot-time">中午前</span><div class="slot-content">莫干山 → 杭州萧山机场（1 ~ 1.5h）</div></div>
+  </div>
+  <div class="day-quote">旅行的结尾不是烟花，是晨雾。它安静到让人有空间去感受"这几天真好"。</div>
+</div>
+
+</section>
+
+<!-- PLACEHOLDER_4DAY -->
+<section class="plan" id="plan-4">
+
+<div class="route">
+  <div class="route-node"><div class="route-dot" style="background:var(--fire)"></div><div class="route-label">南太湖·龙之梦</div></div>
+  <div class="route-line"></div>
+  <div class="route-node"><div class="route-dot" style="background:var(--lake)"></div><div class="route-label">南浔</div></div>
+  <div class="route-line"></div>
+  <div class="route-node"><div class="route-dot" style="background:var(--mountain)"></div><div class="route-label">莫干山</div></div>
+  <div class="route-line"></div>
+  <div class="route-node"><div class="route-dot" style="background:var(--mist)"></div><div class="route-label">杭州✈</div></div>
+</div>
+<div class="route-info">太湖 1晚 → 莫干山 2晚 · 到达即铁花秀 · 换酒店 1 次</div>
+
+<div class="day" style="border-left-color:var(--fire)">
+  <div class="day-header">
+    <span class="day-num">Day 1</span>
+    <span class="day-title">到达 + 铁花秀</span>
+    <span class="day-theme">火</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content">北京 → 杭州（飞行约 2h）</div></div>
+    <div class="slot"><span class="slot-time">中午</span><div class="slot-content">杭州机场 → 南太湖（大巴 1.5h），入住</div></div>
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">自由：酒店泳池 / 温泉 / 太湖边散步<span class="note">刚下飞机不折腾，留时间适应和休息</span></div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content"><strong>龙之梦 · 铁花秀 + 高空烟花</strong><span class="note">第一晚直接放大招——"这趟不一样"</span></div></div>
+  </div>
+  <div class="day-quote">开场即高潮。在大巴上的困倦被铁花一把烧醒。</div>
+  <div class="night-tag">🏨 Night 1 · 南太湖</div>
+</div>
+
+<div class="day" style="border-left-color:var(--lake)">
+  <div class="day-header">
+    <span class="day-num">Day 2</span>
+    <span class="day-title">南浔 → 莫干山</span>
+    <span class="day-theme">镇 · 山</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">9:00</span><div class="slot-content">退房，行李上车</div></div>
+    <div class="slot"><span class="slot-time">9:40</span><div class="slot-content">到达<strong>南浔古镇</strong>（车程 40min）</div></div>
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content">摇橹船、百间楼——最后看一眼水乡</div></div>
+    <div class="slot"><span class="slot-time">午餐</span><div class="slot-content">南浔本地</div></div>
+    <div class="slot"><span class="slot-time">13:00</span><div class="slot-content">出发去莫干山（约 1.5h）</div></div>
+    <div class="slot"><span class="slot-time">14:30</span><div class="slot-content"><strong>入住莫干山度假酒店</strong></div></div>
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">
+      <span class="opt-badge opt-active">想动</span> 鱼鳞坝溯溪 / 碧坞龙潭 / 大斗坞透明船<br>
+      <span class="opt-badge opt-chill">想静</span> 酒店泳池 / 竹林散步 / 发呆
+    </div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content">山居晚餐</div></div>
+  </div>
+  <div class="day-quote">上半场"最后看一眼水乡"，下半场"进山"。到了莫干山就是自己的天地。</div>
+  <div class="night-tag">🏨 Night 2 · 莫干山</div>
+</div>
+
+<div class="day" style="border-left-color:var(--forest)">
+  <div class="day-header">
+    <span class="day-num">Day 3</span>
+    <span class="day-title">探险 + 告别</span>
+    <span class="day-theme">林</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content"><strong>Discovery 探险基地</strong>（3h · 高空 / 丛林 / 速降）</div></div>
+    <div class="slot"><span class="slot-time">午餐</span><div class="slot-content">山间农家菜</div></div>
+    <div class="slot"><span class="slot-time">下午</span><div class="slot-content">自由——旅程最后一个下午，不安排任何事<span class="note">竹林 / 茶园 / 泳池 / 三五同事坐露台聊天</span></div></div>
+    <div class="slot"><span class="slot-time">晚</span><div class="slot-content"><strong>告别晚餐</strong>，在山间</div></div>
+  </div>
+  <div class="day-quote">经过三天密集体验，人需要空间消化。"无组织的时刻"才是团建真正发生的时候。</div>
+  <div class="night-tag">🏨 Night 3 · 莫干山</div>
+</div>
+
+<div class="day" style="border-left-color:var(--mist)">
+  <div class="day-header">
+    <span class="day-num">Day 4</span>
+    <span class="day-title">晨雾</span>
+    <span class="day-theme">静</span>
+  </div>
+  <div class="day-body">
+    <div class="slot"><span class="slot-time">清晨</span><div class="slot-content"><strong>竹海晨雾中醒来</strong>——全旅行最后一帧画面</div></div>
+    <div class="slot"><span class="slot-time">上午</span><div class="slot-content">不赶。山间最后走走，早午餐。</div></div>
+    <div class="slot"><span class="slot-time">中午前</span><div class="slot-content">莫干山 → 杭州萧山机场（1 ~ 1.5h）</div></div>
+  </div>
+  <div class="day-quote">旅行的结尾不是烟花，是晨雾。安静到让人有空间去感受"这几天真好"。</div>
+</div>
+
+</section>
+
+<!-- PLACEHOLDER_COMPARE -->
+<div id="compare-section">
+
+<h2 class="section-title">方案对比</h2>
+<table>
+  <thead><tr><th style="width:28%">维度</th><th style="width:36%">5天4晚</th><th style="width:36%">4天3晚</th></tr></thead>
+  <tbody>
+    <tr><td>住宿</td><td>太湖 2晚 + 莫干山 2晚</td><td>太湖 1晚 + 莫干山 2晚</td></tr>
+    <tr><td>铁花秀</td><td>D2 晚（第二天才看到）</td><td class="highlight">D1 晚（到达即高潮）</td></tr>
+    <tr><td>太湖帆船</td><td>有</td><td class="cut">砍掉</td></tr>
+    <tr><td>太湖光影夜游</td><td>有</td><td class="cut">砍掉（被铁花秀替代）</td></tr>
+    <tr><td>南浔古镇</td><td>有</td><td>有</td></tr>
+    <tr><td>莫干山自选玩水</td><td>有（独立半天）</td><td>有（转场日下午）</td></tr>
+    <tr><td>Discovery</td><td>有</td><td>有</td></tr>
+    <tr><td>晨雾告别</td><td>有</td><td>有</td></tr>
+    <tr><td>自由时间</td><td>更充裕（D3 全天 + D4 下午）</td><td>紧凑但够（D2 下午 + D3 下午）</td></tr>
+    <tr>
+      <td>能量节奏</td>
+      <td>
+        <div style="font-size:12px;color:var(--text-secondary)">吸 · 吸 · 呼 · 吸 · 呼</div>
+        <div style="display:flex;gap:8px;margin-top:6px;font-size:12px">
+          <span>D1<br>▓▓▓</span><span>D2<br>▓▓▓▓▓</span><span>D3<br>▓▓░</span><span>D4<br>▓▓▓▓</span><span>D5<br>▓▓░</span>
+        </div>
+      </td>
+      <td>
+        <div style="font-size:12px;color:var(--text-secondary)">炸 · 移 · 探 · 静</div>
+        <div style="display:flex;gap:8px;margin-top:6px;font-size:12px">
+          <span>D1<br>▓▓▓▓▓</span><span>D2<br>▓▓▓░</span><span>D3<br>▓▓▓▓</span><span>D4<br>▓▓░</span>
+        </div>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 class="section-title">住宿方案</h2>
+<table>
+  <thead><tr><th>位置</th><th>推荐</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>南太湖</td><td>月亮酒店（喜来登）或同级</td><td>300+ 房间，指环形建筑浮在湖面，温泉 26 池</td></tr>
+    <tr><td>莫干山</td><td>郡安里 / 开元森泊 / 同级</td><td>需确认可容纳 35 间房（70 人），提前预约</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section-title">交通概览</h2>
+<table>
+  <thead><tr><th>路段</th><th>方式</th><th>时间</th></tr></thead>
+  <tbody>
+    <tr><td>杭州机场 → 南太湖</td><td>大巴</td><td>约 1.5h</td></tr>
+    <tr><td>南太湖 → 南浔古镇</td><td>大巴</td><td>约 40min</td></tr>
+    <tr><td>南太湖 → 龙之梦</td><td>大巴</td><td>约 30min</td></tr>
+    <tr><td>南太湖 → 莫干山</td><td>大巴</td><td>约 1h</td></tr>
+    <tr><td>南浔 → 莫干山</td><td>大巴</td><td>约 1.5h</td></tr>
+    <tr><td>莫干山 → 杭州机场</td><td>大巴</td><td>约 1 ~ 1.5h</td></tr>
+  </tbody>
+</table>
+
+<h2 class="section-title">备注</h2>
+<ul style="list-style:none;font-size:14px;color:var(--text-secondary);line-height:2">
+  <li>· 6 月下旬为浙江梅雨季，需备室内替代方案（Discovery 有室内项目，铁花秀有棚）</li>
+  <li>· 莫干山自选水上活动为可选项，不参加的人留酒店自由活动</li>
+  <li>· 全程单向南下（太湖→莫干山→机场），不走回头路</li>
+  <li>· 换酒店仅 1 次，行李正常搬运，无需轻装</li>
+  <li>· 具体日期、价格、酒店档期需与旅行社确认</li>
+</ul>
+
+</div>
+
+</div>
+
+<footer>方案由 AgentX 生成 · 具体价格与档期需与旅行社确认</footer>
+
+<script>
+function switchPlan(n){
+  document.querySelectorAll('.plan').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('plan-'+n).classList.add('active');
+  document.querySelector('[onclick="switchPlan(\''+n+'\')"]').classList.add('active');
+}
+</script>
+</body>
+</html>

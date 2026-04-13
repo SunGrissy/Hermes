@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>陵光朱雀 · Boss战重构方案 V2.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#1e1e2e',
+        primaryTextColor: '#e2e6f0',
+        primaryBorderColor: '#f4511e',
+        lineColor: '#fbbf24',
+        secondaryColor: '#12121f',
+        tertiaryColor: '#1a1a2e',
+        fontSize: '13px'
+      }
+    });
+  </script>
+  <style>
+    :root {
+      --fire: #f4511e;
+      --fire-soft: #ff7848;
+      --gold: #fbbf24;
+      --gold-dim: rgba(251,191,36,0.7);
+      --villain: #7c3aed;
+      --bg: #060610;
+      --surface: #0f0f1e;
+      --surface2: #161626;
+      --border: rgba(244,81,30,0.18);
+      --border-soft: rgba(255,255,255,0.06);
+      --text: #dde3f0;
+      --muted: #8892aa;
+      --green: #10b981;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Noto Sans SC', sans-serif;
+      font-weight: 300;
+      line-height: 1.85;
+      overflow-x: hidden;
+    }
+    #embers {
+      position: fixed; inset: 0; z-index: 0;
+      pointer-events: none; opacity: 0.3;
+    }
+    .gdd-header {
+      position: relative; z-index: 1;
+      text-align: center; padding: 80px 24px 56px;
+      background: radial-gradient(ellipse at 50% 0%, rgba(244,81,30,0.12) 0%, transparent 70%);
+      border-bottom: 1px solid var(--border);
+    }
+    .doc-tag {
+      display: inline-block; font-size: 11px;
+      letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--gold); border: 1px solid rgba(251,191,36,0.35);
+      padding: 4px 16px; border-radius: 2px; margin-bottom: 22px;
+    }
+    .main-title {
+      font-family: 'Ma Shan Zheng', cursive;
+      font-size: clamp(3rem, 9vw, 5.5rem);
+      color: var(--fire);
+      text-shadow: 0 0 40px rgba(244,81,30,0.7), 0 0 80px rgba(244,81,30,0.3);
+      animation: glow-pulse 3s ease-in-out infinite;
+      line-height: 1.1; margin-bottom: 14px;
+    }
+    .sub-title { font-size: 13px; color: var(--muted); letter-spacing: 0.12em; margin-bottom: 10px; }
+    .v-badge {
+      display: inline-block; background: var(--fire); color: #fff;
+      font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 3px;
+      margin-left: 8px; vertical-align: middle;
+    }
+    .meta-row { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; }
+    main {
+      position: relative; z-index: 1;
+      max-width: 940px; margin: 0 auto; padding: 0 24px 80px;
+    }
+    .section { margin-bottom: 64px; }
+    .sec-hd {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 22px; padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sec-num {
+      width: 34px; height: 34px; border-radius: 50%;
+      border: 1.5px solid var(--fire);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: var(--fire); flex-shrink: 0;
+      box-shadow: 0 0 10px rgba(244,81,30,0.25);
+    }
+    .sec-title { font-family: 'Ma Shan Zheng', cursive; font-size: 1.45rem; color: var(--gold); }
+    .sec-note { font-size: 11px; color: var(--muted); margin-left: auto; font-style: italic; }
+    .meta-block {
+      background: var(--surface); border-left: 3px solid var(--fire);
+      border-radius: 0 8px 8px 0; padding: 14px 20px; margin-bottom: 10px;
+    }
+    .meta-block .lbl { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--fire); margin-bottom: 4px; }
+    .meta-block .val { font-size: 14px; color: var(--text); }
+    .story-body {
+      background: var(--surface); border: 1px solid rgba(251,191,36,0.12);
+      border-radius: 8px; padding: 22px 24px; font-size: 14px; line-height: 2; margin-top: 10px;
+    }
+    .story-body strong { color: var(--gold); }
+    .climax {
+      background: linear-gradient(135deg, rgba(244,81,30,0.07), rgba(124,58,237,0.07));
+      border: 1px solid rgba(244,81,30,0.28); border-radius: 8px;
+      padding: 18px 22px; margin-top: 14px; font-size: 14px;
+    }
+    .climax .lbl { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; font-weight: 500; }
+    .mermaid-wrap {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 28px 20px; overflow-x: auto;
+    }
+    .asset-tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .asset-tbl thead th {
+      background: linear-gradient(90deg, rgba(244,81,30,0.18), rgba(251,191,36,0.08));
+      color: var(--gold); padding: 11px 14px; text-align: left;
+      font-weight: 500; letter-spacing: 0.05em; border-bottom: 1px solid var(--border);
+    }
+    .asset-tbl tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); transition: background 0.2s; }
+    .asset-tbl tbody tr:hover { background: rgba(244,81,30,0.04); }
+    .asset-tbl td { padding: 12px 14px; vertical-align: top; }
+    .asset-tbl td:first-child { color: var(--gold); font-weight: 500; }
+    .ctag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 3px; font-weight: 500; white-space: nowrap; }
+    .ctag-zero { background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+    .ctag-low  { background: rgba(251,191,36,0.1);  color: var(--gold);  border: 1px solid rgba(251,191,36,0.3); }
+    .asset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+    .a-card {
+      background: var(--surface); border: 1px solid var(--border-soft);
+      border-top: 2px solid var(--fire); border-radius: 8px; padding: 18px;
+      transition: border-top-color 0.2s, transform 0.2s;
+    }
+    .a-card:hover { border-top-color: var(--gold); transform: translateY(-3px); }
+    .a-card .n  { font-size: 32px; font-weight: 700; color: rgba(244,81,30,0.18); line-height: 1; margin-bottom: 6px; }
+    .a-card .nm { color: var(--gold); font-weight: 500; font-size: 14px; margin-bottom: 6px; }
+    .a-card .desc { font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+    .atag { display: inline-block; font-size: 10px; padding: 1px 7px; background: rgba(124,58,237,0.18); color: #a78bfa; border: 1px solid rgba(124,58,237,0.3); border-radius: 2px; margin-bottom: 6px; }
+    .notes-stack { display: flex; flex-direction: column; gap: 16px; }
+    .note {
+      background: var(--surface2); border: 1px solid var(--border-soft);
+      border-radius: 12px; padding: 22px; display: flex; gap: 18px;
+    }
+    .note-icon {
+      width: 42px; height: 42px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .ic-blue { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.3); }
+    .ic-fire { background: rgba(244,81,30,0.12);  border: 1px solid rgba(244,81,30,0.3);  }
+    .ic-gold { background: rgba(251,191,36,0.12); border: 1px solid rgba(251,191,36,0.3); }
+    .note-ttl { font-weight: 700; font-size: 14.5px; margin-bottom: 4px; }
+    .note-sub { font-size: 11px; color: var(--muted); margin-bottom: 10px; letter-spacing: 0.08em; }
+    .note-body { font-size: 13.5px; line-height: 1.85; }
+    .note-body strong { color: var(--fire-soft); }
+    .note-body .g { color: var(--gold); }
+    .note-body .warn { color: #ef4444; font-weight: 500; background: rgba(239,68,68,0.1); padding: 1px 6px; border-radius: 3px; }
+    .gdd-footer {
+      position: relative; z-index: 1; text-align: center;
+      padding: 36px 24px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--muted); letter-spacing: 0.12em;
+    }
+    @keyframes glow-pulse {
+      0%, 100% { text-shadow: 0 0 40px rgba(244,81,30,0.7), 0 0 80px rgba(244,81,30,0.3); }
+      50%       { text-shadow: 0 0 60px rgba(244,81,30,1.0), 0 0 100px rgba(244,81,30,0.5), 0 0 140px rgba(251,191,36,0.2); }
+    }
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .gdd-header { animation: fade-up 0.8s ease-out; }
+    .section { animation: fade-up 0.6s ease-out backwards; }
+    .section:nth-child(1) { animation-delay: 0.15s; }
+    .section:nth-child(2) { animation-delay: 0.25s; }
+    .section:nth-child(3) { animation-delay: 0.35s; }
+    .section:nth-child(4) { animation-delay: 0.45s; }
+    .section:nth-child(5) { animation-delay: 0.55s; }
+    .section:nth-child(6) { animation-delay: 0.60s; }
+    .section:nth-child(7) { animation-delay: 0.65s; }
+    /* ── Acceptance cards ── */
+    .accept-grid { display: flex; flex-direction: column; gap: 16px; }
+    .ac-card {
+      background: var(--surface); border: 1px solid var(--border-soft);
+      border-radius: 10px; padding: 20px 24px;
+      display: grid; grid-template-columns: 50px 1fr; gap: 0 18px; align-items: start;
+    }
+    .ac-num {
+      width: 42px; height: 42px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--fire), #d97706);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 700; color: #fff;
+      box-shadow: 0 0 12px rgba(244,81,30,0.4); margin-top: 2px;
+    }
+    .ac-name { font-weight: 700; font-size: 14.5px; color: var(--gold); margin-bottom: 3px; }
+    .ac-sub  { font-size: 11px; color: var(--muted); margin-bottom: 12px; letter-spacing: 0.07em; }
+    .ac-target {
+      background: rgba(251,191,36,0.05); border: 1px solid rgba(251,191,36,0.12);
+      border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; font-size: 13px; line-height: 1.7;
+    }
+    .ac-target .lbl { font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+    .ac-criteria .cr { padding-left: 18px; position: relative; margin-bottom: 6px; font-size: 13px; line-height: 1.8; }
+    .ac-criteria .cr::before { content: '→'; position: absolute; left: 0; color: var(--fire); font-size: 11px; top: 3px; }
+    .state { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 3px; margin-right: 5px; }
+    .st-n { background: rgba(16,185,129,0.12);  color: var(--green);     border: 1px solid rgba(16,185,129,0.25); }
+    .st-c { background: rgba(244,81,30,0.12);   color: var(--fire-soft); border: 1px solid rgba(244,81,30,0.25); }
+    .param { background: rgba(244,81,30,0.1); color: var(--fire-soft); padding: 0 5px; border-radius: 3px; font-weight: 500; font-size: 12px; }
+    /* ── Pit table ── */
+    .pit-wrap { overflow-x: auto; }
+    .pit-tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 620px; }
+    .pit-tbl thead th {
+      background: var(--surface2); padding: 10px 14px; text-align: left;
+      font-weight: 500; font-size: 11.5px; border-bottom: 1px solid var(--border-soft);
+    }
+    .pit-tbl thead th:nth-child(2) { color: #ef4444; }
+    .pit-tbl thead th:nth-child(3) { color: var(--green); }
+    .pit-tbl thead th:nth-child(4) { color: var(--gold-dim); }
+    .pit-tbl tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .pit-tbl tbody tr:hover { background: rgba(255,255,255,0.015); }
+    .pit-tbl td { padding: 12px 14px; vertical-align: top; line-height: 1.75; }
+    .pit-tbl td:first-child {
+      font-weight: 500; font-size: 12px; white-space: nowrap;
+      border-right: 1px solid rgba(255,255,255,0.05); color: var(--text);
+    }
+    .timing { font-size: 10px; color: var(--muted); font-weight: 400; display: block; margin-top: 2px; }
+    .pit-tbl td:nth-child(2) { color: rgba(239,68,68,0.8); }
+    .pit-tbl td:nth-child(3) { color: rgba(16,185,129,0.9); }
+    .pit-tbl td:nth-child(4) { color: var(--muted); }
+    .pit-tbl td:nth-child(4) strong { color: var(--gold-dim); }
+  </style>
+</head>
+<body>
+<canvas id="embers"></canvas>
+<header class="gdd-header">
+  <div class="doc-tag">GDD · 玩法重构方案 · 内部技术文档</div>
+  <h1 class="main-title">陵光 · 朱雀</h1>
+  <p class="sub-title">Boss 战玩法重构方案 <span class="v-badge">V2.0</span></p>
+  <p class="meta-row">核心方法论：资产复用 &amp; 玩法重构 &nbsp;|&nbsp; 适用团队：程序 · 美术 · 特效</p>
+</header>
+<main>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">一</div>
+    <h2 class="sec-title">核心情节描述</h2>
+    <span class="sec-note">The Narrative Hook</span>
+  </div>
+  <div class="meta-block">
+    <div class="lbl">主题</div>
+    <div class="val">忍辱负重，绝地反杀</div>
+  </div>
+  <div class="meta-block">
+    <div class="lbl">剧情线</div>
+    <div class="val" style="font-size:13px;line-height:1.8">一只被魔化的堕落朱雀（反派）企图摧毁尚未孵化的真·朱雀神卵（正派）。玩家的每一次操作/抽奖，都在为神卵注入护盾能量。</div>
+  </div>
+  <div class="story-body">
+    随着<strong>堕落朱雀的攻击不断升级</strong>（1级 → 2级 → 3级终极毁灭），护盾在碎裂边缘疯狂试探。每一次撞击都是一次赌注——护盾能否撑住，决定了命运的走向。
+  </div>
+  <div class="climax">
+    <div class="lbl">最终悬念</div>
+    <div>蛋壳碎裂的那一刻，是<strong style="color:#ef4444">彻底熄灭化为黑烟（未中奖）</strong>？还是<strong style="color:var(--gold)">真神觉醒，破壳而出，以绝对的压倒性力量将堕落朱雀一击秒杀（大奖 / Super）</strong>？</div>
+  </div>
+</section>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">二</div>
+    <h2 class="sec-title">精简核心流程图</h2>
+    <span class="sec-note">去掉冗长镜头跟随 · 强化对峙顿帧与多结局判定</span>
+  </div>
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+graph TD
+    A["入场 - 堕落朱雀现身，锁定中央的神卵"] --> B["神卵张开能量防护罩"]
+    B --> C{"Loop 1 - 堕落朱雀释放 1级子弹"}
+    C -->|"子弹撞击护盾 · 顿帧对峙"| D{"判定结果"}
+    D -->|"护盾坚挺"| E["子弹被弹飞，堕落朱雀受反噬掉血"]
+    D -->|"护盾破裂"| F["子弹击中神卵，蛋壳出现裂纹透光"]
+    E --> G{"Loop 2 - 堕落朱雀暴怒，释放 2级子弹"}
+    G -->|"撞击护盾 · 顿帧对峙"| H{"判定结果"}
+    H -->|"护盾坚挺"| I["堕落朱雀再次受反噬，甚至直接被弹死 — 中奖结局"]
+    H -->|"护盾破裂"| F
+    F --> J{"终极悬念 - 裂纹透光，闪烁不定"}
+    J -->|"光芒熄灭"| K["蛋壳碎裂，冒出黑烟 — 未中奖结局"]
+    J -->|"七彩强光"| L["真·朱雀破壳而出 — 大奖/Super结局"]
+    L --> M["真·朱雀发出一声凤鸣，化作光柱一击贯穿堕落朱雀"]
+    M --> N["堕落朱雀灰飞烟灭，爆出满屏金币与巨额数字"]
+    </div>
+  </div>
+</section>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">三</div>
+    <h2 class="sec-title">资源对应关系</h2>
+    <span class="sec-note">Asset Mapping · 极高复用率</span>
+  </div>
+  <p style="font-size:13px; color:var(--muted); margin-bottom:16px">核心原则：榨干现有高品质资产的价值，通过材质和缩放改变其功能。</p>
+  <table class="asset-tbl">
+    <thead>
+      <tr>
+        <th>角色 / 元素</th>
+        <th>原版资产（Before）</th>
+        <th>重构后用途（After）</th>
+        <th>修改成本</th>
+        <th>具体修改动作</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>堕落朱雀（反派）</td>
+        <td>原版红金色朱雀本体</td>
+        <td>全场攻击的发起者</td>
+        <td><span class="ctag ctag-low">极低</span></td>
+        <td>调整材质球（Shader）色相改为暗紫/幽绿/灰烬色，身上加黑烟粒子。动作完全复用原版扇翅膀。</td>
+      </tr>
+      <tr>
+        <td>真·神卵（正派）</td>
+        <td>原版砸向屏幕的巨大陨石</td>
+        <td>被保护的目标，全场视觉中心</td>
+        <td><span class="ctag ctag-low">极低</span></td>
+        <td>去掉陨石后方长条火焰拖尾；稍微压扁呈椭圆形；增加缓慢呼吸的高光（Pulsing Glow）。</td>
+      </tr>
+      <tr>
+        <td>真·朱雀（大奖）</td>
+        <td>原版红金色朱雀本体</td>
+        <td>破壳反杀的终极奖励</td>
+        <td><span class="ctag ctag-zero">零</span></td>
+        <td>完全不改，保留最华丽的红金配色和特效。仅在大奖结局最后 3 秒出场，拉满稀缺感。</td>
+      </tr>
+      <tr>
+        <td>攻击子弹</td>
+        <td>原版乱飞的小火球、火龙卷</td>
+        <td>堕落朱雀的 1、2、3 级攻击</td>
+        <td><span class="ctag ctag-low">极低</span></td>
+        <td>调整大小比例。1级：小火球；2级：大火球；3级：火龙卷。</td>
+      </tr>
+      <tr>
+        <td>受击反馈</td>
+        <td>原版满屏乱爆的碎火花</td>
+        <td>护盾对峙、弹飞时的受击特效</td>
+        <td><span class="ctag ctag-low">低</span></td>
+        <td>提取原版爆炸粒子，控制生成位置在护盾边缘即可。</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">四</div>
+    <h2 class="sec-title">必须新增的少量资源</h2>
+    <span class="sec-note">New Assets Required · 叙事粘合剂</span>
+  </div>
+  <p style="font-size:13px; color:var(--muted); margin-bottom:20px">为让叙事成立，美术与特效团队仅需补充以下四项「粘合剂」资产：</p>
+  <div class="asset-grid">
+    <div class="a-card">
+      <div class="n">01</div>
+      <div class="atag">特效</div>
+      <div class="nm">能量防护罩</div>
+      <div class="desc">半透明球体包裹神卵。被攻击时有水波纹或受击闪烁反馈。</div>
+    </div>
+    <div class="a-card">
+      <div class="n">02</div>
+      <div class="atag">贴图 + 特效</div>
+      <div class="nm">裂纹与透光</div>
+      <div class="desc">神卵受损时的裂纹贴图，加从裂纹射出的极强光线（Volume Light / God Rays）。</div>
+    </div>
+    <div class="a-card">
+      <div class="n">03</div>
+      <div class="atag">特效</div>
+      <div class="nm">黑烟</div>
+      <div class="desc">失败结局时神卵碎裂冒出的黑烟粒子。低成本，与胜利结局的七彩强光形成鲜明对比。</div>
+    </div>
+    <div class="a-card">
+      <div class="n">04</div>
+      <div class="atag">特效 / 动画</div>
+      <div class="nm">一击贯穿</div>
+      <div class="desc">真朱雀化作一道极速直线强光/火流星，瞬间穿透堕落朱雀。参考动漫拔刀斩的极速表现。</div>
+    </div>
+  </div>
+</section>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">五</div>
+    <h2 class="sec-title">制作人特别叮嘱</h2>
+    <span class="sec-note">执行关键点 · 决定爽感的三个细节</span>
+  </div>
+  <div class="notes-stack">
+    <div class="note">
+      <div class="note-icon ic-blue">🎥</div>
+      <div>
+        <div class="note-ttl">镜头不要一直飞</div>
+        <div class="note-sub">克制原则 · 节奏设计</div>
+        <div class="note-body">
+          不要每次子弹飞出都做漫长的镜头跟随。<span class="g">1级子弹</span>可以给个全景；<span class="g">2级、3级子弹</span>飞出时，镜头直接<strong>快速推近（Zoom-in）</strong>到神卵面前，强化压迫感。<br><br>
+          <span class="warn">原版"从头炸到尾、没有节奏感"的覆辙必须避免</span>。克制才能爆发，密度拉满反而让玩家麻木。
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <div class="note-icon ic-fire">⚡</div>
+      <div>
+        <div class="note-ttl">对峙顿帧（Hit-Stop）是灵魂</div>
+        <div class="note-sub">关键机制 · 必须实现</div>
+        <div class="note-body">
+          当子弹撞击防护罩，或撞击神卵的瞬间，<strong>全屏必须定帧（卡肉）0.2 ~ 0.4 秒</strong>。配合剧烈的屏幕震动和刺耳的音效。<br><br>
+          这是让玩家心跳漏半拍的「赌注揭晓时刻」，<span class="warn">绝对不能匀速滑过</span>！这个停顿的时长越精准，赌注感越强。
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <div class="note-icon ic-gold">⚔️</div>
+      <div>
+        <div class="note-ttl">反杀必须干脆利落</div>
+        <div class="note-sub">秒杀感 · 神兽逼格</div>
+        <div class="note-body">
+          真·朱雀破壳后，玩家情绪已到顶峰。此时<span class="warn">绝对不要</span>安排两只鸟在空中打斗。<br><br>
+          真朱雀出来后<strong>停顿一下（摆 Pose）</strong>，然后<strong>快速贯穿</strong>堕落朱雀。堕落朱雀定格、碎裂，随后爆出满屏的大数字。<span class="g">越干脆，越有神兽的逼格，爽感越强。</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">六</div>
+    <h2 class="sec-title">核心体验验收清单</h2>
+    <span class="sec-note">完工后对照检查 · 5个关键帧</span>
+  </div>
+  <p style="font-size:13px; color:var(--muted); margin-bottom:20px">以下 5 条为本方案的硬性验收标准。完工后逐条对照，全部通过方可提交审核。</p>
+  <div class="accept-grid">
+    <div class="ac-card">
+      <div class="ac-num">1</div>
+      <div>
+        <div class="ac-name">神卵的"生命感"传递</div>
+        <div class="ac-sub">赋予死物情绪</div>
+        <div class="ac-target">
+          <div class="lbl">体验目标</div>
+          玩家需要对这颗蛋产生保护欲。它不能只是一块发光的石头，得让玩家感觉到它是"活的"、且会"害怕"的。
+        </div>
+        <div class="ac-criteria">
+          <div class="cr"><span class="state st-n">常态</span>蛋体需要有类似呼吸的缓慢明暗变化（自发光律动）。</div>
+          <div class="cr"><span class="state st-c">危机态</span>护盾破裂、蛋壳受击时，"呼吸频率"需要肉眼可见地<strong style="color:var(--fire-soft)">骤然加快</strong>，配合微弱闪烁，传递出"危在旦夕"的紧迫感。</div>
+        </div>
+      </div>
+    </div>
+    <div class="ac-card">
+      <div class="ac-num">2</div>
+      <div>
+        <div class="ac-name">物理碰撞的"重量感"</div>
+        <div class="ac-sub">拒绝轻飘飘</div>
+        <div class="ac-target">
+          <div class="lbl">体验目标</div>
+          堕落朱雀的攻击必须显得极具破坏力。子弹打在护盾上，不能像穿过空气一样匀速爆开，需要有"扛不住了"的阻力感。
+        </div>
+        <div class="ac-criteria">
+          <div class="cr">2级/3级子弹撞击护盾或蛋壳的接触瞬间，必须有明确的 <span class="param">Hit-Stop（顿帧/卡肉）</span> 处理。</div>
+          <div class="cr">全局时间或局部动画短暂定格 <span class="param">0.2~0.3 秒</span>，配合非线性的剧烈震屏，把撞击"重量感"做实，再让爆炸特效散开。</div>
+        </div>
+      </div>
+    </div>
+    <div class="ac-card">
+      <div class="ac-num">3</div>
+      <div>
+        <div class="ac-name">揭晓前的"悬念拉扯"</div>
+        <div class="ac-sub">情绪发酵期</div>
+        <div class="ac-target">
+          <div class="lbl">体验目标</div>
+          盲盒开奖前，最刺激的是"刮奖"的过程。蛋壳裂开到出结果之间，不能一闪而过，要狠狠吊一下玩家的胃口。
+        </div>
+        <div class="ac-criteria">
+          <div class="cr">蛋壳裂开、透出光芒后，需要强制保留 <span class="param">1~1.5 秒</span> 的"悬念停顿期"。</div>
+          <div class="cr">期间裂缝透出的光必须是<strong style="color:var(--fire-soft)">极度不稳定、高频闪烁</strong>的状态（类似即将过载的能量），让玩家在"要爆了"和"要成了"之间疯狂猜测，随后再瞬间切入结局。</div>
+        </div>
+      </div>
+    </div>
+    <div class="ac-card">
+      <div class="ac-num">4</div>
+      <div>
+        <div class="ac-name">破壳反杀的"降维打击感"</div>
+        <div class="ac-sub">极致的对比</div>
+        <div class="ac-target">
+          <div class="lbl">体验目标</div>
+          真·朱雀登场是全场最高潮。此时屏幕已历经太多红黄火焰，反杀若继续对轰会造成严重视觉疲劳。需要体现真神降临的"绝对碾压"。
+        </div>
+        <div class="ac-criteria">
+          <div class="cr">决胜一击（Impact Frame）必须做出<strong style="color:var(--fire-soft)">极大的视觉反差</strong>。</div>
+          <div class="cr">建议手法：瞬间抽干背景色彩（黑白/负片化），或全屏极暗，只保留那一道贯穿的 <span class="param">纯白/纯金光柱</span>。配合音效上"瞬间静音 → 爆裂轰鸣"，用极简反衬力量的恐怖。</div>
+        </div>
+      </div>
+    </div>
+    <div class="ac-card">
+      <div class="ac-num">5</div>
+      <div>
+        <div class="ac-name">视觉层级与"爆分"清晰度</div>
+        <div class="ac-sub">保护核心爽点</div>
+        <div class="ac-target">
+          <div class="lbl">体验目标</div>
+          玩家打Boss最核心的爽点就是最后爆出的金币和巨额数字。这些奖励绝对不能被华丽的特效"吃掉"。
+        </div>
+        <div class="ac-criteria">
+          <div class="cr">最终击杀、爆出满屏奖励的瞬间，背景（包括Boss残骸和火焰特效）必须进行 <span class="param">动态压暗或降低饱和度</span> 处理。</div>
+          <div class="cr">UI层级必须绝对清晰，确保金币和跳字是全屏<strong style="color:var(--gold)">对比度最高、最锐利的视觉焦点</strong>。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="section">
+  <div class="sec-hd">
+    <div class="sec-num">七</div>
+    <h2 class="sec-title">制作避坑对照表</h2>
+    <span class="sec-note">制作中参考 · 建立执行锚点</span>
+  </div>
+  <p style="font-size:13px; color:var(--muted); margin-bottom:16px">为打破"到处炸、镜头一直飞"的制作惯性，以下 5 个关键时刻必须严格按 V2 新标准执行：</p>
+  <div class="pit-wrap">
+    <table class="pit-tbl">
+      <thead>
+        <tr>
+          <th>关键时刻</th>
+          <th>⚠️ 容易踩的坑</th>
+          <th>✅ V2 新标准</th>
+          <th>💡 为什么必须这么改</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>子弹飞行时<span class="timing">过程表现</span></td>
+          <td>镜头死死跟着火球，从头飞到尾，画面一直在平移。</td>
+          <td>放弃长距离跟随，改用快速推镜（Zoom-in）直接怼到神卵面前，或用局部镜头交代逼近感。</td>
+          <td>镜头一直飞会严重<strong>拖慢节奏</strong>且导致视觉眩晕。快速推镜能瞬间拉满压迫感。</td>
+        </tr>
+        <tr>
+          <td>击中护盾时<span class="timing">物理碰撞</span></td>
+          <td>火球碰到护盾，像穿过空气一样，匀速顺滑地爆开一堆火。</td>
+          <td>撞击瞬间画面强制卡死/定帧 0.2~0.3 秒，配合剧烈震屏，然后再让特效爆开。</td>
+          <td>匀速操作毫无"重量感"。顿帧是为了体现护盾<strong>"快扛不住了"的阻力</strong>，这是拉扯玩家心跳的关键 0.3 秒。</td>
+        </tr>
+        <tr>
+          <td>裂纹透光后<span class="timing">悬念发酵</span></td>
+          <td>裂开后直接切结局，不到 1 秒一闪而过。</td>
+          <td>强制保留 1~1.5 秒高频闪烁悬念期，光芒极度不稳定，绝不提前切入结局。</td>
+          <td>这是整场<strong>最值钱的"刮奖时刻"</strong>——赌注揭晓的窒息感全靠这段发酵，不能省。</td>
+        </tr>
+        <tr>
+          <td>破壳反杀时<span class="timing">情绪高潮</span></td>
+          <td>真朱雀出来后，满屏依然是红黄色火海，两只鸟在火里对决。</td>
+          <td>贯穿瞬间抽干背景颜色（变暗或负片化），只留下一道纯白/纯金的光柱，一击秒杀。</td>
+          <td><strong>极简的色彩 + 秒杀的动作</strong>才能体现真神的绝对碾压感。玩家看红黄色已经看吐了。</td>
+        </tr>
+        <tr>
+          <td>爆出奖励时<span class="timing">结算反馈</span></td>
+          <td>背景火光冲天（亮度 100%），前面爆出的金色数字和金币混在一起，看不清。</td>
+          <td>爆金币瞬间背景特效强制压暗/降饱和度，确保金币和数字是全屏唯一的高亮焦点。</td>
+          <td>玩家是来爽的，不是来看烟花的。<strong>看不清楚击数字，前面的特效做得再好也是零分。</strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+</main>
+<footer class="gdd-footer">
+  <div>陵光 · 朱雀 Boss战玩法重构方案 &nbsp;·&nbsp; V2.0 &nbsp;·&nbsp; 内部设计文档</div>
+  <div style="margin-top:6px; opacity:0.5">资产复用 · 叙事驱动 · 爽感优先</div>
+</footer>
+<script>
+  const canvas = document.getElementById('embers');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  class Ember {
+    constructor() { this.init(true); }
+    init(random) {
+      this.x    = Math.random() * W;
+      this.y    = random ? Math.random() * H : H + 10;
+      this.r    = Math.random() * 2.5 + 0.5;
+      this.vy   = Math.random() * 0.65 + 0.25;
+      this.vx   = (Math.random() - 0.5) * 0.4;
+      this.life = 0;
+      this.maxL = Math.random() * 220 + 160;
+      this.hue  = Math.random() * 28 + 8;
+    }
+    step() {
+      this.x += this.vx;
+      this.y -= this.vy;
+      this.life++;
+      if (this.life > this.maxL || this.y < -10) this.init(false);
+    }
+    draw() {
+      const t = this.life / this.maxL;
+      const a = t < 0.12 ? t / 0.12 : t > 0.75 ? 1 - (t - 0.75) / 0.25 : 1;
+      ctx.save();
+      ctx.globalAlpha   = a * 0.55;
+      ctx.shadowBlur    = 5;
+      ctx.shadowColor   = `hsl(${this.hue},100%,60%)`;
+      ctx.fillStyle     = `hsl(${this.hue},100%,${65 - t * 20}%)`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r * (1 - t * 0.4), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  for (let i = 0; i < 60; i++) particles.push(new Ember());
+
+  (function tick() {
+    ctx.clearRect(0, 0, W, H);
+    particles.forEach(p => { p.step(); p.draw(); });
+    requestAnimationFrame(tick);
+  })();
+</script>
+</body>
+</html>
