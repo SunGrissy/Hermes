@@ -8,10 +8,19 @@ import tempfile
 import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
+
+from pm_work_calendar import (
+    fetch_pm_calendar_http,
+    is_pm_workday,
+    previous_pm_workday,
+    try_load_pm_calendar,
+)
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
+# 与 PM 后端 data/gamedev_pm_data.json 默认相对路径（含 holidays / workdays）
+_DEFAULT_PM_DATA_REL = "pm-system/backend/data/gamedev_pm_data.json"
 _CONFIG_NAME = "work_report_assistant_config.json"
 _ROSTER_NAME = "work_report_assistant_roster.json"
 _CHAT_PATH = "/api/v1/chat"
@@ -59,7 +68,8 @@ def _load_roster() -> dict[str, Any]:
     return _load_json(path)
 
 
-def previous_workday(today: date) -> date:
+def previous_workday_weekday_only(today: date) -> date:
+    """未配置 PM 日历时：前一工作日 = 向前跳过周末（与旧逻辑一致）。"""
     d = today - timedelta(days=1)
     while d.weekday() >= 5:
         d -= timedelta(days=1)
@@ -70,13 +80,55 @@ def monday_of_week(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-def scenario_date_context(scenario_id: str, today: date) -> dict[str, str]:
+def _load_pm_calendar_tuple(cfg: dict[str, Any]) -> Optional[Tuple[List[Dict[str, Any]], List[str], str]]:
+    """
+    加载 PM 假日/调休：优先请求 PmSystem 的 /api/pm-calendar，失败再读本地 gamedev_pm_data.json。
+    成功返回 (holidays, workdays, source_label)，source_label 为请求 URL 或本地路径。
+    """
+    timeout = int(cfg.get("pm_calendar_timeout_sec") or 15)
+    full_url = (os.environ.get("WORK_REPORT_PM_CALENDAR_URL") or "").strip()
+    base = (os.environ.get("WORK_REPORT_PM_CALENDAR_BASE_URL") or "").strip()
+    if not base:
+        base = (cfg.get("pm_calendar_base_url") or "").strip()
+    if full_url:
+        loaded = fetch_pm_calendar_http(full_url, timeout)
+        if loaded:
+            return loaded
+    elif base:
+        url = base.rstrip("/") + "/api/pm-calendar"
+        loaded = fetch_pm_calendar_http(url, timeout)
+        if loaded:
+            return loaded
+    path = (os.environ.get("WORK_REPORT_PM_DATA_JSON") or "").strip()
+    if not path:
+        path = (cfg.get("pm_data_json_path") or "").strip()
+    if not path:
+        path = _DEFAULT_PM_DATA_REL
+    loaded = try_load_pm_calendar(path, _ROOT)
+    if not loaded:
+        return None
+    h, w, resolved = loaded
+    return (h, w, resolved)
+
+
+def scenario_date_context(
+    scenario_id: str,
+    today: date,
+    cal: Optional[Tuple[List[Dict[str, Any]], List[str], str]] = None,
+) -> dict[str, str]:
     """返回模板用到的日期字符串（YYYY-MM-DD）。"""
     if scenario_id == "morning_digest":
-        p = previous_workday(today)
+        if cal is not None:
+            h, w, _resolved = cal
+            p = previous_pm_workday(today, h, w)
+            src = "pm_data"
+        else:
+            p = previous_workday_weekday_only(today)
+            src = "fallback_weekday"
         return {
             "prev_workday": p.isoformat(),
             "today": today.isoformat(),
+            "calendar_source": src,
         }
     if scenario_id == "weekly_material":
         start = monday_of_week(today)
@@ -128,9 +180,18 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
 
     if scenario_id == "morning_digest":
         pw = ctx["prev_workday"]
+        cal_src = ctx.get("calendar_source") or "fallback_weekday"
+        if cal_src == "pm_data":
+            cal_line = "【日历口径】「上一工作日」以 PM 系统「假日与调休管理」为准（与版本规划工作日历一致）。\n"
+        else:
+            cal_line = (
+                "【日历口径】未读取到 PM 主数据文件时，「上一工作日」暂按周一至周五（不含周末）推算；"
+                "请在 work_report_assistant_config.json 中配置 pm_data_json_path，或设置环境变量 WORK_REPORT_PM_DATA_JSON。\n"
+            )
         return (
             f"{hard}\n"
             "【任务类型】工作日早报\n"
+            f"{cal_line}"
             f"【目标日报日期】{pw}（前一工作日，相对运行日）\n\n"
             "【非技术组】请对照模板「四要素」与上下游表述，识别是否存在信息不对称或可对齐而未对齐之处。\n"
             f"【技术组】{tech_note}\n\n"
@@ -370,7 +431,27 @@ def main() -> int:
     timeout = int(cfg.get("default_timeout_sec") or 300)
     wk = (cfg.get("webhook_key") or "hr").strip()
 
-    ctx = scenario_date_context(args.scenario, today)
+    cal = _load_pm_calendar_tuple(cfg)
+    if args.scenario == "morning_digest":
+        if cal is not None:
+            _log(f"pm calendar loaded: {cal[2]}")
+        else:
+            _log("pm calendar: file not found, using Mon-Fri weekday fallback")
+        if cal is not None:
+            h, w, _rp = cal
+            if not is_pm_workday(today, h, w):
+                _log(f"skip morning_digest: {today.isoformat()} is not PM workday (holiday/weekend)")
+                return 0
+        else:
+            if today.weekday() >= 5:
+                _log(f"skip morning_digest: {today.isoformat()} is weekend (no PM calendar, Mon-Fri only)")
+                return 0
+
+    ctx = scenario_date_context(
+        args.scenario,
+        today,
+        cal if args.scenario == "morning_digest" else None,
+    )
     message = build_message(args.scenario, roster_data, ctx)
     title = scenario_title(args.scenario, ctx)
 

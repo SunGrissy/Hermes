@@ -6,11 +6,14 @@
 
 | 文件 | 说明 |
 |------|------|
-| `work_report_assistant_config.json` | **勿提交**（已在 `.gitignore`）。含 `api_key`、`base_url`、`webhook_key`、`default_timeout_sec` |
+| `work_report_assistant_config.json` | **勿提交**（已在 `.gitignore`）。含 `api_key`、`base_url`、`webhook_key`、`default_timeout_sec`；可选 `pm_data_json_path`（PM 主数据路径，用于假日/调休） |
 | `work_report_assistant_config.json.example` | 示例 |
 | `work_report_assistant_roster.json` | 汇总人员名单与口径说明（可提交） |
+| `pm_work_calendar.py` | 与 PM「假日与调休」一致的工作日判定（早报「上一工作日」与是否推送） |
 
-密钥也可用环境变量：`WORK_REPORT_API_KEY`、`WORK_REPORT_BASE_URL`。
+密钥也可用环境变量：`WORK_REPORT_API_KEY`、`WORK_REPORT_BASE_URL`。  
+**优先**：配置 **PmSystem 后端根地址**（如 `http://192.168.20.160:8112`），脚本请求 **`/api/pm-calendar`**（与 PM「假日与调休」同源）。环境变量：`WORK_REPORT_PM_CALENDAR_BASE_URL` 或完整 URL `WORK_REPORT_PM_CALENDAR_URL`。  
+**回退**：本地 `pm_data_json_path` 或 `WORK_REPORT_PM_DATA_JSON`。
 
 ## Webhook
 
@@ -20,7 +23,7 @@
 
 | 任务名 | 触发 | 场景 ID |
 |--------|------|---------|
-| `MyAgents_WorkReportAssist_Morning` | 周一至周五 09:00 | `morning_digest` |
+| `MyAgents_WorkReportAssist_Morning` | **每日** 09:00（脚本按 PM 工作日历决定是否推送） | `morning_digest` |
 | `MyAgents_WorkReportAssist_WeeklyMaterial` | 周日 16:00 | `weekly_material` |
 | `MyAgents_WorkReportAssist_PxInsight` | 周一 10:30 | `weekly_px_insight` |
 | `MyAgents_WorkReportAssist_AiPx` | 周五 17:00 | `weekly_ai_px_report` |

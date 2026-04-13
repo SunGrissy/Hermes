@@ -55,6 +55,7 @@
 |-------|------|
 | cursor-to-dingtalk | 会话结束把结果发钉钉（Webhook 机器人，footer 小秘书提醒） |
 | work-report-assistant | 日志助手 Chat API 定时汇总（早报/周报素材/体验提炼/AI 与体验） |
+| pm-work-calendar | 「工作日」与 PM 假日/调休一致；早报上一工作日、定时规则口径 |
 
 ### 游戏业务
 | Skill | 用途 |

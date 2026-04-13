@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-13] - 日志助手工作日历对齐 PmSystem（/api/pm-calendar）
+
+**状态**: 验收通过
+
+**内容**:
+- `pm-system`：`GET /api/pm-calendar`（`holidays`/`workdays`），`APP_VERSION` 1.0.113
+- `dingtalk-desktop`：`pm_work_calendar.py`，早报优先 HTTP、每日计划任务、`work_report_assistant_run.py` 与配置示例
+- `.cursor/skills/pm-work-calendar`、`pm-work-calendar.mdc`、`work-report-assistant` 与 `skills/README` 同步
+
+---
+
 ## [2026-04-11] - Boss 设计智囊团 Skill（Superpowers 格式）
 
 **状态**: 已完成

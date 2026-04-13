@@ -3,5 +3,9 @@
   "base_url": "https://zxty.tuyoo.com/work-report",
   "api_key": "",
   "default_timeout_sec": 300,
-  "webhook_key": "hr"
+  "webhook_key": "hr",
+  "_comment_pm": "假日/调休：优先 GET pm_calendar_base_url + /api/pm-calendar（PmSystem 后端，如内网 8112），失败再读本地 pm_data_json_path。完整 URL 可用 WORK_REPORT_PM_CALENDAR_URL。",
+  "pm_calendar_base_url": "http://192.168.20.160:8112",
+  "pm_calendar_timeout_sec": 15,
+  "pm_data_json_path": "pm-system/backend/data/gamedev_pm_data.json"
 }
