@@ -250,8 +250,28 @@ def _path_under_allowed_roots(repo: str, roots: list) -> bool:
 
 
 def _is_git_work_tree(path: str) -> bool:
-    git_dir = os.path.join(path, '.git')
-    return os.path.isdir(git_dir) or os.path.isfile(git_dir)
+    """判定 path 是否位于某个 Git 工作树内。
+
+    父仓子目录（如 dingtalk-desktop）本身可能没有 .git，需沿目录向上找到工作树根。
+    """
+    try:
+        p = os.path.realpath(path)
+    except OSError:
+        return False
+    if not os.path.isdir(p):
+        return False
+    cur = p
+    drive, _ = os.path.splitdrive(cur)
+    root = drive + os.sep if drive else os.sep
+    while True:
+        git_dir = os.path.join(cur, '.git')
+        if os.path.isdir(git_dir) or os.path.isfile(git_dir):
+            return True
+        parent = os.path.dirname(cur)
+        if parent == cur or cur == root:
+            break
+        cur = parent
+    return False
 
 
 def _truncate(s: str, n: int) -> str:
@@ -259,6 +279,83 @@ def _truncate(s: str, n: int) -> str:
     if len(s) <= n:
         return s
     return s[: max(0, n - 1)] + '…'
+
+
+_HUMANIZE_SKIP_PREFIXES = (
+    'Detected dumb terminal',
+    'You can skip this check',
+    'Added .aider',
+    'Aider v',
+    'Model:',
+    'Git repo:',
+    'Repo-map:',
+    'Note: in-chat filenames',
+    'Cur working dir:',
+    'Git working dir:',
+    'Initial repo scan can be slow',
+)
+
+
+def _humanize_aider_terminal_output(raw: str, returncode: int) -> str:
+    """把 Aider 原始终端日志压成钉钉可读：中文状态 + 简要原因 + 短摘录。"""
+    raw = raw or ''
+    lines = raw.splitlines()
+    out_lines: list[str] = []
+    for line in lines:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith(_HUMANIZE_SKIP_PREFIXES):
+            continue
+        if s.startswith("Repo-map can't include") or s.startswith('Has it been deleted'):
+            continue
+        if 'Scanning repo:' in s and 'it/s' in s:
+            continue
+        if re.match(r'^\s*\d+%\|', s):
+            continue
+        out_lines.append(s)
+
+    filtered = '\n'.join(out_lines).strip()
+    rl = raw.lower()
+
+    if returncode == 0:
+        status = '**状态**：已完成。'
+    else:
+        status = '**状态**：未正常结束（退出码 %s）。' % returncode
+
+    hints: list[str] = []
+    if 'authenticationerror' in rl or (
+        'api key' in rl and 'check your api key' in rl
+    ) or ('authenticate' in rl and 'provider' in rl):
+        hints.append('模型接口**鉴权失败**（密钥无效、过期，或网关返回令牌不可用）。')
+    elif '令牌' in raw and '不可用' in raw:
+        hints.append('网关提示**令牌状态不可用**，请核对密钥与控制台额度。')
+    if 'rate' in rl and 'limit' in rl:
+        hints.append('可能被**限流**，可稍后再试。')
+    if re.search(r'\b429\b', raw):
+        hints.append('出现 **HTTP 429**（请求过频或额度不足）。')
+    if 'context length' in rl or ('token' in rl and 'exceed' in rl):
+        hints.append('**上下文或 Token 超限**，可缩小任务或换模型。')
+
+    parts: list[str] = [status]
+    if hints:
+        parts.append('')
+        parts.append('**说明**：' + ' '.join(hints))
+    elif returncode != 0 and not filtered:
+        parts.append('')
+        parts.append('**说明**：未留下可读输出，可在本机查看 Aider 窗口或日志。')
+    if filtered:
+        parts.append('')
+        parts.append('**摘录**（已去掉进度条与索引噪音）：')
+        parts.append('')
+        parts.append('```')
+        parts.append(_truncate(filtered, 2800))
+        parts.append('```')
+    elif not hints and returncode == 0:
+        parts.append('')
+        parts.append('**说明**：无额外终端输出。')
+
+    return '\n'.join(parts)
 
 
 def _run_aider_worker(
@@ -316,20 +413,29 @@ def _run_aider_worker(
         )
         out = (r.stdout or '') + ('\n' + r.stderr if r.stderr else '')
         out = _truncate(out.strip(), max_chars)
-        if r.returncode == 0:
-            title = '### **Aider 已完成**'
-        else:
-            title = '### **Aider 退出码 %s**' % r.returncode
-        body = '%s\n\n- 仓库：`%s`\n- 别名：`%s`\n\n```\n%s\n```' % (
-            title, repo, alias, out or '(无输出)')
+        friendly = _humanize_aider_terminal_output(out, r.returncode)
+        body = (
+            '### Aider 结果\n\n'
+            '- 仓库：`%s`\n'
+            '- 别名：`%s`\n\n'
+            '%s\n\n----'
+            % (repo, alias, friendly)
+        )
     except subprocess.TimeoutExpired:
         body = (
-            '### **Aider 超时**\n\n'
-            '- 仓库：`%s`\n- 别名：`%s`\n- 超过 %s 秒已终止。\n\n----'
+            '### Aider 结果\n\n'
+            '- 仓库：`%s`\n'
+            '- 别名：`%s`\n\n'
+            '**状态**：超时（已按 %s 秒终止）。若任务较大，可在 digest 里调大 `aider_runner.max_seconds`。\n\n----'
             % (repo, alias, max_seconds)
         )
     except Exception as e:
-        body = '### **Aider 执行异常**\n\n`%s`\n\n----' % _truncate(str(e), 500)
+        body = (
+            '### Aider 结果\n\n'
+            '**状态**：本机调度异常。\n\n'
+            '**说明**：`%s`\n\n----'
+            % _truncate(str(e), 500)
+        )
     _send_webhook(body, memo_cfg, group_cid=group_cid)
 
 
@@ -438,8 +544,11 @@ def process_aider_runner(
     aider_model_ov = str(ac.get('aider_model') or '').strip() or None
 
     _send_webhook(
-        '### **Aider 已接收**\n\n'
-        '- 仓库：`%s`\n- 别名：`%s`\n- 超时：%s 秒\n\n正在后台执行，完成后推送结果。\n\n----'
+        '### Aider 已排队\n\n'
+        '- 仓库：`%s`\n'
+        '- 别名：`%s`\n'
+        '- 最长等待：%s 秒\n\n'
+        '后台执行中，结束后会再发一条结果摘要。\n\n----'
         % (repo, alias, max_sec),
         config,
         group_cid=group_cid,
