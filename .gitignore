@@ -89,3 +89,7 @@ workspace-docs/
 
 # 小说正文独立仓库（仅 GitHub 维护，见 novel/README.md）
 novel/
+.aider*
+
+# 本地钉钉消息日志（含敏感会话，勿入库）
+data/dingtalk/
