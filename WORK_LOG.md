@@ -1,5 +1,17 @@
 # Work Log - MyAgents Root
 
+## [2026-04-13] - Skills：数据探究、Gelman、写作指南、ljg 思维工具集 + partner-router
+
+**状态**: 已完成
+
+**内容**:
+- 新增 `data-investigation-playbook`、`gelman-perspective`、`skill-crafting-guide`（含 README）
+- 新增 ljg 风格技能：`concept-anatomy`、`drill-to-root`、`plain-speak`、`rank-reducer`、`roundtable-debate`、`writing-engine`；`concept-anatomy` 增加白话表达铁律
+- `.cursor/rules/partner-router.mdc`：数据/归因、概念深挖、写作、圆桌等路由
+- `.cursor/skills/README.md` 清单同步；`.gitignore` 忽略 `.cursor/skills/*.zip`
+
+---
+
 ## [2026-04-13] - 日志助手工作日历对齐 PmSystem（/api/pm-calendar）
 
 **状态**: 验收通过

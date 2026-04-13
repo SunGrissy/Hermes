@@ -18,7 +18,24 @@
 | Skill | 用途 |
 |-------|------|
 | skill-authoring-guide | **元 Skill**——指导 Agent 创建高质量 Skill，含 Agentic Protocol 模板、质量检查清单 |
+| skill-crafting-guide | **面向人类的 SKILL 写作指南**——扫盲/入门/进阶、验证方法、与 Superpowers 协作说明 |
 | cognitive-furnace | **认知炼化炉**——从人物素材蒸馏思维操作系统，产出可对话的数字思考伙伴（六阶段流水线 + 三重验证） |
+
+### 数据探究 & 统计思维
+| Skill | 用途 |
+|-------|------|
+| data-investigation-playbook | 指标异常协作式探查（五步、查询卡片、统计陷阱与 Gelman 检查） |
+| gelman-perspective | **Andrew Gelman 认知 OS**——分叉路径、Type S/M、模型检查、测量优先 |
+
+### 思维工具（概念 / 写作 / 辩证，源自 ljg-skills 改造）
+| Skill | 用途 |
+|-------|------|
+| concept-anatomy | 概念八维解剖（定锚→八刀→内观→压缩），含白话表达铁律 |
+| drill-to-root | 追本之箭——纵向深钻到不可再分的本质 |
+| plain-speak | 白话引擎——聪明十二岁能懂，九条红线 |
+| rank-reducer | 降秩引擎——领域不可再少的独立生成器（四判据） |
+| roundtable-debate | 圆桌讨论——真实人物多视角辩证 + ASCII 框架图 |
+| writing-engine | 写作引擎——找核→攻核→脚手架→展开→磨（约千字散文） |
 
 ### 数字思考伙伴
 | Skill | 用途 |
