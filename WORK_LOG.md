@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - pm-system：制作人中控台 TR 远程导入、apiBase 覆写；子模块指针同步并双向推送
+
+**状态**: 已提交并推送（origin + github）
+
+**内容**:
+- `pm-system` 子模块指向 `feat(tower): TR远程导入与apiBase覆写，版本1.0.114`（`import-tr` 默认拉 114 TaskReminder 存储 API；跳过已完成；`who`=助理大白；前端 `apiBase`/localStorage；文档与 `_KEY_FILES`）
+
+---
+
 ## [2026-04-14] - preflight-checks：Windows .bat CRLF / .gitattributes；pm-system 子模块同步
 
 **状态**: 验收通过
