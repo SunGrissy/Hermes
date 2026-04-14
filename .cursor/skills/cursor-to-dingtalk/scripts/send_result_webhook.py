@@ -127,6 +127,10 @@ def main():
         print("error: empty content", file=sys.stderr)
         return 1
 
+    scope = os.environ.get("TAO_UPDATE_SCOPE", "").strip()
+    if scope and "tao-update-scope:" not in content:
+        content = content + "\n\ntao-update-scope:" + scope
+
     text = content + FOOTER
     title = os.environ.get("DINGTALK_TITLE", "").strip() or DEFAULT_TITLE
     ok, msg = send_markdown(url, title, text)

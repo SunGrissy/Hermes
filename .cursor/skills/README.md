@@ -72,6 +72,7 @@
 | Skill | 用途 |
 |-------|------|
 | cursor-to-dingtalk | 会话结束把结果发钉钉（Webhook 机器人，footer 小秘书提醒） |
+| notify-tao-update | **在 Cursor 里说「请涛哥更新」**：直接调本机 daemon 私聊杨玉涛；与助理群内「锚点 + 口令」链路分流 |
 | work-report-assistant | 日志助手 Chat API 定时汇总（早报/周报素材/体验提炼/AI 与体验） |
 | pm-work-calendar | 「工作日」与 PM 假日/调休一致；早报上一工作日、定时规则口径 |
 

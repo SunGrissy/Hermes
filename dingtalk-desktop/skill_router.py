@@ -17,6 +17,7 @@
   - digest_config.json 的 aider_runner（enabled=true 时）：助理群/白名单群内「aider 别名 任务说明」或「代码助手 别名 …」→ 后台线程调本机 aider --yes --message，开始与结束 webhook（路径白名单 + self_only 与备忘发送者策略同源）
   - 助理群「查看进程」→ desk_ops 调用仓库根 proc_manager.py --markdown-list，结果 webhook；「关进程 N」或「关进程 1,3」按快照序号关闭（与桌面运维同门禁）
   - 助理群「启动PM」「启动 PM」（中间可空格，PM 大小写不敏感）→ desk_ops 执行 quick_start_headless.bat 等，探活后 webhook 汇总（8000 若被其它服务占用会失败）
+  - 助理通知主群「让涛哥更新」/「请涛哥更新」→ 从群内最近消息解析 Cursor 收工 Webhook 正文中的 `tao-update-scope:子模块`，经 daemon /send 私聊杨玉涛（正文「涛哥，{子模块}求更新~」+ 白名单则追加「需要重启」+ 结尾 `[忙疯了]`）；依赖收工推送已发助理群且含锚点
   - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
   - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；选题改描述/删除 topic（与备忘同类指令，支持多编号顿号分隔）；「选题库」从 TR 列出全部 topic:#N 并先做一次本地同步；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 与本地 memo/wish/topic（选题以 TR 文案/删改/完成为准）；选题专用群 cid 可由 topic_skill_group_name 在 report_cids 中按群名解析
   - 助理群「预审」：推送路径下优先用本进程缓存的「上一条钉钉文档链接」（与备忘同源 send 事件），避免依赖 /fetch 回溯
@@ -106,6 +107,7 @@ from skills.doc_review import (
     send_no_active_doc_review_stop_reply,
 )
 from skills.status_check import run_morning_flow, run_inspection_flow, run_repair_flow
+from skills.taoge_update import run_taoge_update_flow
 from lib.utils import get_webhook_url, DATA_DIR, DEFAULT_MY_UID, ContactsDB
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
@@ -885,6 +887,12 @@ _RE_VERSION_DIGEST = re.compile(
     r'^\s*版本\s*(?:咋样|怎么样)了\s*[!！。.?？~\s]*$')
 
 
+def _text_triggers_taoge_update(text: str) -> bool:
+    """助理群口令：让涛哥更新 / 请涛哥更新（子串匹配，可前后带其它字）。"""
+    t = text or ''
+    return ('让涛哥更新' in t) or ('请涛哥更新' in t)
+
+
 def _precheck_command_flags(text: str) -> tuple:
     """预审指令：(是否匹配, 是否跳过同一文档的短时去重窗口)。"""
     if not text:
@@ -1222,6 +1230,25 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             memo_seen_ids.add(msg_id)
         except Exception as e:
             _log(f'repair status_check error: {e}')
+        return
+
+    if _text_triggers_taoge_update(text):
+        if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+            memo_seen_ids.add(msg_id)
+            _log('push: 涛哥更新 -> 跳过（超出有效时间窗或时间戳无效）')
+            return
+        key = (msg_cid, 'taoge_update')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            run_taoge_update_flow(group_cid=msg_cid, memo_cfg=memo_cfg)
+            memo_seen_ids.add(msg_id)
+            _log('push: 涛哥更新 -> 已处理')
+        except Exception as e:
+            memo_seen_ids.add(msg_id)
+            _log(f'taoge_update error: {e}')
         return
 
     if _RE_VERSION_DIGEST.match(text):
@@ -1669,6 +1696,25 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'repair status_check error: {e}')
+            continue
+
+        if _text_triggers_taoge_update(text):
+            if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+                seen_ids.add(msg_id)
+                _log('poll: 涛哥更新 -> 跳过（超出有效时间窗或时间戳无效）')
+                continue
+            key = (str(group_cid), 'taoge_update')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                run_taoge_update_flow(group_cid=group_cid, memo_cfg=memo_cfg)
+                seen_ids.add(msg_id)
+                _log('poll: 涛哥更新 -> 已处理')
+            except Exception as e:
+                seen_ids.add(msg_id)
+                _log(f'taoge_update error: {e}')
             continue
 
         if _RE_VERSION_DIGEST.match(text):

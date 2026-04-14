@@ -108,6 +108,18 @@ Invoke-RestMethod -Uri "http://127.0.0.1:19200/send" -Method POST -Body $body -C
 
 单条消息不宜过长；若内容很多，可只发摘要 + 「详情见本地 / 文档链接」。**未带 Agent 代号的推送视为不符合本 Skill 要求。**
 
+### 涛哥更新链路（与 dingtalk-desktop 助理通知主群联动）
+
+若本轮改动涉及**需要主程在服务器拉代码/重启**的子模块，收工发钉钉时须在正文中带**机器可读锚点**，便于你在助理通知群发「让涛哥更新」后，桌面网关从群内最近消息解析子模块名并私聊杨玉涛。
+
+- **锚点格式**（单独一行，建议放在摘要末尾、footer 之前）：`tao-update-scope:pm-system`（把 `pm-system` 换成实际子目录名，如 `performeval`、`task_reminder`）。
+- **自动追加（推荐）**：发 Webhook 前设置环境变量 **`TAO_UPDATE_SCOPE=pm-system`**，再执行 `send_result_webhook.py`，脚本会在正文未含 `tao-update-scope:` 时自动追加一行锚点。
+- **Agent 推断**：在发钉钉前根据 `git status` / 本轮主要编辑路径确定子模块名；若同时改了多个子模块，可写最主要的一个，或分行写多个 `tao-update-scope:`（群内解析取**时间上最新的一条**锚点）。
+
+**Webhook URL**：只写入本机 `dingtalk-desktop/webhook_config.json`（或环境变量 `DINGTALK_WEBHOOK_URL`），**勿**把含 `access_token` 的完整 URL 贴进 Git 或聊天记录；若已泄露请在钉钉开放平台重置机器人 Webhook。
+
+若在 **Cursor 里**对 Agent 说「请涛哥更新 / 让涛哥更新」要**直接私聊涛哥**（不依赖群内 `tao-update-scope`），见 **`notify-tao-update`** Skill 与仓库根 `scripts/notify_tao_daemon.py`。
+
 ## 事后查是哪个 Agent 发的
 
 每次通过 Webhook 成功发送后，脚本会往 **`dingtalk-desktop/logs/cursor_webhook_sends.log`** 追加一行，格式：

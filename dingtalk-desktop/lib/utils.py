@@ -202,7 +202,10 @@ def js_escape(text):
     parts = []
     for ch in text:
         cp = ord(ch)
-        if cp > 127:
+        # BMP 外（如 emoji U+1F916）不能写 \\uXXXX（只吞 4 位 hex，余字会落到正文里变乱码）
+        if cp > 0xFFFF:
+            parts.append(f'\\u{{{cp:x}}}')
+        elif cp > 127:
             parts.append(f'\\u{cp:04x}')
         elif ch == '\\':
             parts.append('\\\\')
@@ -215,6 +218,89 @@ def js_escape(text):
         else:
             parts.append(ch)
     return ''.join(parts)
+
+
+def _parse_dingtalk_markdown_reply(md_text: str, title: str = '') -> str:
+    """解析钉钉「引用回复」式 Markdown（> 引用块 + --- + 正文）；否则返回空串由调用方回退为整段 md。"""
+    lines = md_text.split('\n')
+    quote_sender = ''
+    quote_lines = []
+    reply_lines = []
+    in_quote = True
+    past_separator = False
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith('---') or stripped.startswith('───'):
+            past_separator = True
+            in_quote = False
+            continue
+        if in_quote and stripped.startswith('> '):
+            content = stripped[2:].strip()
+            if content.startswith('###### '):
+                quote_sender = content[7:].strip()
+            else:
+                quote_lines.append(content)
+        elif past_separator:
+            content = stripped.lstrip('#').strip()
+            if content:
+                reply_lines.append(content)
+
+    reply_text = ' '.join(reply_lines) if reply_lines else ''
+    if quote_sender or quote_lines:
+        quote_preview = ' '.join(quote_lines)[:60]
+        prefix = (
+            f'[回复 {quote_sender}: "{quote_preview}"] '
+            if quote_sender
+            else f'[回复: "{quote_preview}"] '
+        )
+        return prefix + (reply_text or title or '')
+
+    return ''
+
+
+def _looks_like_reply_thread_markdown(md: str) -> bool:
+    s = (md or '').lstrip()
+    return s.startswith('>') or '\n>' in md
+
+
+def extract_markdown_body_from_ct1200_raw(raw_json) -> str:
+    """ct=1200 Webhook/机器人 Markdown：listMessage 的 text 常只有标题，完整正文在 raw JSON。"""
+    if not raw_json:
+        return ''
+    try:
+        ct_obj = json.loads(raw_json) if isinstance(raw_json, str) else raw_json
+    except Exception:
+        return ''
+
+    for key in ('markdownContent', 'richTextContent', 'textContent'):
+        sub = ct_obj.get(key)
+        if isinstance(sub, dict):
+            t = (sub.get('text') or '').strip()
+            if t:
+                return t
+
+    atts = ct_obj.get('attachments') or []
+    if not isinstance(atts, list) or not atts:
+        return ''
+    ext = (atts[0] if isinstance(atts[0], dict) else {}).get('extension', {}) or {}
+    title = (ext.get('title') or '').strip()
+    md = (ext.get('markdown') or '').strip()
+    if not md:
+        return title
+    if _looks_like_reply_thread_markdown(md):
+        parsed = _parse_dingtalk_markdown_reply(md, title)
+        if parsed:
+            return parsed
+        return md.strip()
+    parts = []
+    if title:
+        parts.append(title)
+    parts.append(md)
+    return '\n'.join(parts).strip()
+
 
 # --------------- 去重追踪器 ---------------
 

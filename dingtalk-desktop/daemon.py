@@ -37,10 +37,11 @@ from lib.utils import (
     get_main_pid, get_main_pid_by_mem, js_escape, normalize,
     ADV_SEARCH_URL, DEFAULT_MY_UID, DATA_DIR, DedupTracker,
     deep_decode, fmt_time, CT_NAMES, ContactsDB,
+    extract_markdown_body_from_ct1200_raw,
 )
 
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.3"
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 _server_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 _KEY_FILES = [
@@ -588,6 +589,18 @@ class FridaDaemon:
                 except Exception:
                     pass
 
+            # ct=1200 机器人/Webhook Markdown：text 常仅为标题，tao-update-scope 等在 raw 的 extension.markdown
+            if ct == 1200 and raw:
+                full_md = extract_markdown_body_from_ct1200_raw(raw)
+                if full_md:
+                    low = full_md.lower()
+                    if (
+                        not (text or '').strip()
+                        or len(full_md) > len(text or '')
+                        or 'tao-update-scope' in low
+                    ):
+                        text = full_md
+
             is_self = uid == MY_UID
             entry = {
                 'time': dt,
@@ -783,10 +796,20 @@ class FridaDaemon:
             'error': reports.get('error'),
         }
 
+    def _probe_b1_ready(self, check_js: str) -> tuple[bool, str, bool]:
+        """返回 (就绪, url, has_api)。"""
+        self._beacon.clear()
+        self._cef_script.exports_sync.exec_js(1, check_js)
+        time.sleep(1.8)
+        reports = self._beacon.get_reports()
+        url = reports.get('url', '')
+        has_api = reports.get('api', False)
+        ok = isinstance(url, str) and 'advancedSearch' in url and has_api
+        return ok, url, has_api
+
     def _ensure_b1(self):
         if not self._cef_script:
             return False
-        self._beacon.clear()
         check_js = (
             f"(function(){{fetch('http://127.0.0.1:{BEACON_PORT}"
             "/b?l=url',{method:'POST',body:JSON.stringify(location.href),mode:'no-cors'});"
@@ -795,27 +818,21 @@ class FridaDaemon:
             "&&!!dingtalk.message&&typeof dingtalk.message.sendTextMsg===\"function\"),mode:'no-cors'});"
             "})()"
         )
-        self._cef_script.exports_sync.exec_js(1, check_js)
-        time.sleep(1.5)
-
-        reports = self._beacon.get_reports()
-        url = reports.get('url', '')
-        has_api = reports.get('api', False)
-
-        if isinstance(url, str) and 'advancedSearch' in url and has_api:
+        ok, url, has_api = self._probe_b1_ready(check_js)
+        if ok:
             return True
 
-        log('B1 not on advancedSearch, navigating...')
-        self._cef_script.exports_sync.load_url(1, ADV_SEARCH_URL)
-        time.sleep(4)
+        log('B1 not ready (url=%s api=%s), navigating...' % (repr(url)[:120], has_api))
+        for attempt in range(1, 4):
+            self._cef_script.exports_sync.load_url(1, ADV_SEARCH_URL)
+            time.sleep(5.0 + attempt * 0.5)
+            ok, url, has_api = self._probe_b1_ready(check_js)
+            if ok:
+                log(f'B1 ready after navigate attempt {attempt}')
+                return True
+            log('B1 still not ready attempt %s (url=%s api=%s)' % (attempt, repr(url)[:80], has_api))
 
-        self._beacon.clear()
-        self._cef_script.exports_sync.exec_js(1, check_js)
-        time.sleep(1.5)
-        reports = self._beacon.get_reports()
-        url = reports.get('url', '')
-        has_api = reports.get('api', False)
-        return isinstance(url, str) and 'advancedSearch' in url and has_api
+        return False
 
     def find_browser_with_cid(self, target_cid: str, timeout: int = 5) -> int | None:
         """???? CEF browser??????? target_cid ??? browser ID?????? None??"""

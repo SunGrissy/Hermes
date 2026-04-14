@@ -336,6 +336,11 @@
     ],
     "unknown_policy": "skip_non_name"
   },
+  "taoge_update": {
+    "_note": "助理群口令「让涛哥更新/请涛哥更新」私聊目标；recipient_cid 为涛哥单聊会话，避免按姓名解析到群或其他会话",
+    "recipient_cid": "46459012:611424765",
+    "recipient_display_name": "杨玉涛"
+  },
   "recruit_cids": [
     {
       "cid": "73137527367",

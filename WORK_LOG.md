@@ -1,5 +1,17 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - dingtalk-desktop：涛哥更新（锚点/CID）、ct=1200 正文、B1 与 /send 超时
+
+**状态**: 验收通过
+
+**内容**:
+- `digest_config.json`：`taoge_update` 写死涛哥单聊 `recipient_cid`；`skill_router` 接入「请涛哥更新/让涛哥更新」→ `skills/taoge_update.py`（群内 `tao-update-scope`、daemon 私聊、Webhook 回执）
+- `daemon`：`js_escape` 辅助平面字符；`_format_jsapi_messages` 合并 ct=1200 Markdown 全文（`lib/utils.extract_markdown_body_from_ct1200_raw`）；`_ensure_b1` 多次重试；`APP_VERSION` 递增
+- `taoge_update`：`raw` 兜底搜锚点；私聊失败文案区分 CID/B1；`DINGTALK_SEND_TIMEOUT_S` 默认 120s 避免误报超时
+- 根目录 `scripts/notify_tao_daemon.py`、`.cursor/skills/notify-tao-update` 与 `cursor-to-dingtalk` 文档/脚本补充
+
+---
+
 ## [2026-04-14] - pm-system：制作人中控台 TR 远程导入、apiBase 覆写；子模块指针同步并双向推送
 
 **状态**: 已提交并推送（origin + github）
