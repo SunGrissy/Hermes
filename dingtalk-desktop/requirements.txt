@@ -1,3 +1,4 @@
 frida
 msgpack
 winotify
+python-docx

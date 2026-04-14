@@ -1,5 +1,17 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - dingtalk-desktop：简历初筛 docx、监测窗口与运营策划招聘群文件名策略
+
+**状态**: 验收通过
+
+**内容**:
+- `skills/resume_screen.py`：PDF/docx 正文抽取；`requirements.txt` 增加 `python-docx`
+- `skill_router.py`：拉取 50 条；消息 ts 与 72h 监测窗口；时间窗与同名旧文件逻辑；Beacon 日志回退与窗口对齐；`resume_bypass_filename_gate_cids`（运营策划岗位招聘群仅保留 block_keywords，仍拦面试评价/周报等）；静默跳过超窗历史
+- `digest_config.json`：`resume_monitor_max_age_hours`、`resume_bypass_filename_gate_cids` 等说明
+- `daemon.py`：Beacon 小 HTTP 服务 `send_error` 吞客户端断开（WinError 10053）
+
+---
+
 ## [2026-04-14] - pm-system：注册 /api/pm-calendar（此前未挂载路由）
 
 **状态**: 已提交并推送

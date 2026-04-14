@@ -41,7 +41,7 @@ from lib.utils import (
 )
 
 
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.4"
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 _server_start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 _KEY_FILES = [
@@ -196,6 +196,13 @@ class _BeaconServer:
         parent = self
 
         class H(BaseHTTPRequestHandler):
+            def send_error(self, code, message=None, explain=None):
+                # CEF/浏览器在收到错误响应前断开时，父类写 wfile 会抛 ConnectionAbortedError（WinError 10053）
+                try:
+                    super().send_error(code, message, explain)
+                except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError, OSError):
+                    pass
+
             def do_GET(self):
                 parent.received.append(urllib.parse.unquote(self.path))
                 self.send_response(200)
@@ -2607,9 +2614,11 @@ def main():
                 _xs = str(_x).strip()
                 if _xs:
                     _colleague_skill_cids.add(_xs)
+            _taoge_cid = str(((_cfg.get('taoge_update') or {}).get('recipient_cid') or '')).strip()
         except Exception:
             _memo_cid = ''
             _colleague_skill_cids = set()
+            _taoge_cid = ''
 
         def _memo_callback(rec):
             """??? group_cid ????????????/??/?????????MY_UID ?????????????????
@@ -2617,7 +2626,11 @@ def main():
             c = str(rec.get('cid') or '').strip()
             if not c:
                 return
-            allow = (_memo_cid and c == _memo_cid) or (c in _colleague_skill_cids)
+            allow = (
+                (_memo_cid and c == _memo_cid)
+                or (c in _colleague_skill_cids)
+                or (_taoge_cid and c == _taoge_cid)
+            )
             if allow:
                 try:
                     _memo_event_queue.put(rec)

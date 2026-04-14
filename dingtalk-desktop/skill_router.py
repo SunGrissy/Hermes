@@ -3,7 +3,7 @@
 技能路由器 — 后台轮询线程
 
 当前支持：
-  - 监听招聘群内 ct=502（PDF 文件消息）→ 触发简历 AI 初筛
+  - 监听招聘群内 ct=502（PDF / Word .docx 文件消息）→ 触发简历 AI 初筛
   - 监听助理群 + memo_tracker.colleague_skill_cids 白名单群（及可选 topic_skill_group_cid 选题群）→ 备忘 / 许愿 / 完成 等（他人仅白名单群入队）
   - 助理通知主群 memo_tracker.group_cid：仅 memo_tracker.assistant_group_skill_uids 中的钉钉 UID 可触发技能（缺省该字段时用 DINGTALK_MY_UID / DEFAULT_MY_UID）；设为 [] 则群内所有人可触发。白名单群不受此限。
   - 手机发指令依赖桌面 /fetch：备忘轮询 JSAPI 超时默认约 95s（SKILL_MEMO_FETCH_TIMEOUT_S），须盖住 daemon _fetch_lock 排队 + beacon；POST body 带 timeout 与 fetch_history 对齐。发送者身份用 uid / is_self / sender 综合解析。
@@ -18,6 +18,7 @@
   - 助理群「查看进程」→ desk_ops 调用仓库根 proc_manager.py --markdown-list，结果 webhook；「关进程 N」或「关进程 1,3」按快照序号关闭（与桌面运维同门禁）
   - 助理群「启动PM」「启动 PM」（中间可空格，PM 大小写不敏感）→ desk_ops 执行 quick_start_headless.bat 等，探活后 webhook 汇总（8000 若被其它服务占用会失败）
   - 助理通知主群「让涛哥更新」/「请涛哥更新」→ 从群内最近消息解析 Cursor 收工 Webhook 正文中的 `tao-update-scope:子模块`，经 daemon /send 私聊杨玉涛（正文「涛哥，{子模块}求更新~」+ 白名单则追加「需要重启」+ 结尾 `[忙疯了]`）；依赖收工推送已发助理群且含锚点
+  - digest taoge_update.recipient_cid（涛哥单聊）：监测该会话，若杨玉涛在「涛哥，{模块}求更新」之后回复完成类口令（完成/done/down/好了/哦了/…更了），向助理群 webhook 推送「涛哥已经更完了{模块}」
   - 助理群发送「版本咋样了」/「版本怎么样了」→ 触发 version_digest，向 version_digest_webhook 推送版本状态摘要
   - 备忘快捷：改描述/改版本/TR 指派（例：改备忘39描述为…、备忘39版本v1、备忘39分给张三）；选题收录（【选题】/选题：→ topic_items + TR note topic:#N）；选题改描述/删除 topic（与备忘同类指令，支持多编号顿号分隔）；「选题库」从 TR 列出全部 topic:#N 并先做一次本地同步；人员筛选（配置 person_lookup_aliases，如「洋哥」「找洋哥」→ 列出含关键词的备忘+愿望）；桌面运维（检查大门/重启大门/拉今天|昨天|YYMMDD|N天日报，开始+完成 webhook）；轮询周期对齐 TR 与本地 memo/wish/topic（选题以 TR 文案/删改/完成为准）；选题专用群 cid 可由 topic_skill_group_name 在 report_cids 中按群名解析
   - 助理群「预审」：推送路径下优先用本进程缓存的「上一条钉钉文档链接」（与备忘同源 send 事件），避免依赖 /fetch 回溯
@@ -25,7 +26,7 @@
 架构：
   - 启动时由 daemon.py 调用 SkillRouter.start()
   - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各群的新消息
-  - ct=502 且未处理过 → 交给 skills/resume_screen（时间窗以本机 PDF 落盘 mtime 为准，见 _resume_time_gate_blocks）
+  - ct=502 且未处理过 → 交给 skills/resume_screen；消息 ts 早于 resume_monitor_max_age_hours（默认 72h）的不监测；时间窗见 _resume_time_gate_blocks（48h 本机 mtime）
   - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望」/wish/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker；触发词后可跟标点空格，解析时会剥离
   - 通过 DB + 内存 seen_ids 实现幂等
   - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
@@ -107,7 +108,11 @@ from skills.doc_review import (
     send_no_active_doc_review_stop_reply,
 )
 from skills.status_check import run_morning_flow, run_inspection_flow, run_repair_flow
-from skills.taoge_update import run_taoge_update_flow
+from skills.taoge_update import (
+    get_taoge_recipient_cid,
+    handle_taoge_dm_message,
+    run_taoge_update_flow,
+)
 from lib.utils import get_webhook_url, DATA_DIR, DEFAULT_MY_UID, ContactsDB
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
@@ -148,7 +153,7 @@ def _agent_dbg(hypothesis_id: str, location: str, message: str, **data):
 
 
 def _memo_allowed_cids(memo_cfg: dict) -> set:
-    """技能路由处理的群：助理群 group_cid + colleague_skill_cids（同事指令白名单）。"""
+    """技能路由处理的群：助理群 group_cid + colleague_skill_cids（同事指令白名单）+ 涛哥单聊 cid。"""
     s = set()
     g = str(memo_cfg.get('group_cid') or '').strip()
     if g:
@@ -157,6 +162,9 @@ def _memo_allowed_cids(memo_cfg: dict) -> set:
         xs = str(x).strip()
         if xs:
             s.add(xs)
+    tx = get_taoge_recipient_cid()
+    if tx:
+        s.add(tx)
     return s
 
 
@@ -412,11 +420,15 @@ def _load_config() -> dict:
             'memo_tracker': memo_cfg,
             'doc_review': doc_review_cfg,
             'resume_name_filter': _resume_name_filter_cfg_from_root(cfg),
+            'resume_msg_max_age_ms': _resume_msg_max_age_ms_from_root(cfg),
+            'resume_bypass_filename_gate_cids': _resume_bypass_filename_gate_cids_from_root(cfg),
         }
     except Exception as e:
         _log(f'load config failed: {e}')
         return {'recruit_cids': [], 'cid_names': {}, 'notify_cid': '',
-                'memo_tracker': {}, 'resume_name_filter': dict(_RESUME_NAME_FILTER_DEFAULT)}
+                'memo_tracker': {}, 'resume_name_filter': dict(_RESUME_NAME_FILTER_DEFAULT),
+                'resume_msg_max_age_ms': DEFAULT_RESUME_MSG_MAX_AGE_MS,
+                'resume_bypass_filename_gate_cids': frozenset()}
 
 
 def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 75) -> list:
@@ -444,6 +456,8 @@ def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 75) -> list
 _HYDRATE_FETCH_MAX_DELTA_MS = 120_000
 # daemon 侧 _fetch_lock 串行 + JSAPI 重扫/等待 beacon 可达数十秒，客户端过短会先断开并触发 ConnectionAbortedError
 _HYDRATE_FETCH_TIMEOUT_S = 75
+# 招聘群热聊时仅拉 20 条会把 ct=502 挤出窗口；daemon listMessage 上限 50
+_RESUME_FETCH_COUNT = 50
 
 
 def _try_hydrate_push_message_from_fetch(msg: dict) -> None:
@@ -615,7 +629,7 @@ def _resume_name_keyword_hit(file_name: str, keyword: str) -> bool:
 
 
 def _resume_filename_looks_like_person_name(file_name: str) -> bool:
-    """姓名式命名：张三.pdf、李先生.pdf、WangSan.pdf 等。"""
+    """姓名式命名：张三.pdf、李先生.pdf、WangSan.pdf 等（含 5 字内纯中文，兼容部分导出文件名）。"""
     base = (file_name or '').strip()
     if not base:
         return False
@@ -626,8 +640,8 @@ def _resume_filename_looks_like_person_name(file_name: str) -> bool:
     norm = re.sub(r'[\s\-_().（）\[\]【】·]+', '', base)
     if not norm:
         return False
-    # 中文姓名（2~4字）及带称谓（先生/女士/小姐/同学）
-    if re.fullmatch(r'[\u4e00-\u9fff]{2,4}', norm):
+    # 中文姓名（2~5字）及带称谓（先生/女士/小姐/同学）
+    if re.fullmatch(r'[\u4e00-\u9fff]{2,5}', norm):
         return True
     if re.fullmatch(r'[\u4e00-\u9fff]{1,4}(先生|女士|小姐|同学)', norm):
         return True
@@ -637,8 +651,13 @@ def _resume_filename_looks_like_person_name(file_name: str) -> bool:
     return False
 
 
-def _resume_pdf_filename_gate(file_name: str, resume_name_filter: dict | None) -> tuple:
-    """第一层文件名门禁：先按文件名判断是否应进入简历预审。"""
+def _resume_pdf_filename_gate(
+    file_name: str, resume_name_filter: dict | None, *, blocks_only: bool = False,
+) -> tuple:
+    """第一层文件名门禁：先按文件名判断是否应进入简历预审。
+
+    blocks_only=True：仅执行 block_keywords（面试评价/周报等），不校验 allow/unknown_policy。
+    """
     cfg = resume_name_filter or _RESUME_NAME_FILTER_DEFAULT
     blocks = cfg.get('block_keywords') or []
     allows = cfg.get('allow_keywords') or []
@@ -651,6 +670,9 @@ def _resume_pdf_filename_gate(file_name: str, resume_name_filter: dict | None) -
     for kw in blocks:
         if _resume_name_keyword_hit(file_name, kw):
             return False, f'非候选人简历：文件名命中排除词[{kw}]'
+
+    if blocks_only:
+        return True, ''
 
     if allows:
         for kw in allows:
@@ -681,10 +703,39 @@ def _resume_message_is_from_me(msg: dict) -> bool:
 
 
 _RESUME_WINDOW_MS = 48 * 3600 * 1000   # 与本机 PDF mtime（下载/落盘时间）比较的滑动窗长度
+# 简历初筛：仅处理消息发送时间在此窗口内的 ct=502（默认 72h）；更早的静默跳过，不配监测
+DEFAULT_RESUME_MSG_MAX_AGE_MS = 72 * 3600 * 1000
+
+
+def _resume_msg_max_age_ms_from_root(cfg: dict) -> int:
+    """digest_config：resume_monitor_max_age_hours 或 resume_monitor.max_age_hours，默认 72。"""
+    raw = cfg.get('resume_monitor_max_age_hours')
+    if raw is None and isinstance(cfg.get('resume_monitor'), dict):
+        raw = cfg['resume_monitor'].get('max_age_hours')
+    try:
+        h = float(raw)
+        if h <= 0 or h > 8760:
+            return DEFAULT_RESUME_MSG_MAX_AGE_MS
+        return int(h * 3600 * 1000)
+    except (TypeError, ValueError):
+        return DEFAULT_RESUME_MSG_MAX_AGE_MS
+
+
+def _resume_bypass_filename_gate_cids_from_root(cfg: dict) -> frozenset:
+    """仅保留 block_keywords，不要求 allow/姓名式命名。根 resume_bypass_filename_gate_cids 与 resume_monitor.bypass_filename_gate_cids 合并。"""
+    out: set[str] = set()
+    raw = cfg.get('resume_bypass_filename_gate_cids')
+    if isinstance(raw, list):
+        out.update(str(x).strip() for x in raw if str(x).strip())
+    if isinstance(cfg.get('resume_monitor'), dict):
+        raw2 = cfg['resume_monitor'].get('bypass_filename_gate_cids')
+        if isinstance(raw2, list):
+            out.update(str(x).strip() for x in raw2 if str(x).strip())
+    return frozenset(out)
 
 
 def _resume_resolve_local_pdf_path(file_name: str, file_path_hint: str) -> str:
-    """本机已落盘的 PDF 路径（钉钉附件路径或常见下载目录按文件名命中），无则返回空串。"""
+    """本机已落盘的简历附件路径（PDF/docx；钉钉附件路径或常见下载目录按文件名命中），无则返回空串。"""
     if file_path_hint and os.path.exists(file_path_hint):
         return file_path_hint
     if (file_name or '').strip():
@@ -692,12 +743,17 @@ def _resume_resolve_local_pdf_path(file_name: str, file_path_hint: str) -> str:
     return ''
 
 
-def _resume_time_gate_blocks(file_name: str, file_path_hint: str, now_ms: int) -> bool:
+def _resume_time_gate_blocks(
+    file_name: str, file_path_hint: str, now_ms: int, msg_ts_ms: int = 0,
+) -> bool:
     """True = 仅因「下载时间窗」应跳过本条。
 
-    - 尚无本机文件：不挡（早期发送的简历可先进 pipeline，等 trigger_download 或你手动下载后再判）。
-    - 已有本机文件：只按文件 mtime 与「当前往前 48h」滑动窗比较，不掺消息发送时间、也不用 daemon 启动时刻。
+    - 消息发送时间 msg_ts 在近 48h 内：**不挡**。避免本机 Downloads 里同名旧 PDF 的 mtime 误杀刚投递的新消息。
+    - 尚无本机文件：不挡（等 trigger_download / 手动下载后再判）。
+    - 消息过旧且无可靠 ts 时：若已能解析到本机文件，仅当其 mtime 早于「当前往前 48h」才挡（挡旧缓存/重复扫）。
     """
+    if msg_ts_ms and msg_ts_ms >= (now_ms - _RESUME_WINDOW_MS):
+        return False
     p = _resume_resolve_local_pdf_path(file_name, file_path_hint)
     if not p:
         return False
@@ -708,12 +764,15 @@ def _resume_time_gate_blocks(file_name: str, file_path_hint: str, now_ms: int) -
     return mt < (now_ms - _RESUME_WINDOW_MS)
 
 
-def _fetch_resume_messages(cid: str, count: int, timeout: int) -> list:
-    """招聘群简历：优先 daemon /fetch；超时或空列表时读 _msg_log.jsonl（依赖 Monitor 为 ct=502 写入 raw）。"""
-    messages = _fetch_recent_messages(cid, count=count, timeout=timeout)
+def _fetch_resume_messages(cid: str, timeout: int, log_max_age_ms: int) -> list:
+    """招聘群简历：优先 daemon /fetch（条数见 _RESUME_FETCH_COUNT）；超时或空列表时读 _msg_log.jsonl（依赖 Monitor 为 ct=502 写入 raw）。
+
+    log_max_age_ms：与简历监测回溯一致，避免日志里捞过久历史。
+    """
+    messages = _fetch_recent_messages(cid, count=_RESUME_FETCH_COUNT, timeout=timeout)
     if messages:
         return messages
-    msgs = _read_log_messages(cid, max_count=80, max_age_ms=_RESUME_WINDOW_MS)
+    msgs = _read_log_messages(cid, max_count=80, max_age_ms=log_max_age_ms)
     if msgs:
         _log(
             'resume: /fetch 无可用数据，已改用监控日志 '
@@ -722,14 +781,27 @@ def _fetch_resume_messages(cid: str, count: int, timeout: int) -> list:
     return msgs
 
 
-def _poll_once(cid: str, seen_ids: set, source_name: str = '', resume_name_filter: dict | None = None):
+def _poll_once(
+    cid: str, seen_ids: set, source_name: str = '', resume_name_filter: dict | None = None,
+    resume_msg_max_age_ms: int | None = None,
+    resume_bypass_filename_gate_cids: frozenset | None = None,
+):
     """轮询一个招聘群/私信，处理所有新的 ct=502 消息。
     初筛结论经 resume_notify Webhook 推送（见 resume_screen）；本函数只负责在源会话上拉消息与触发下载。
     source_name: 来源的显示名（用于推送消息中告知来源）
+    resume_msg_max_age_ms: 仅监测消息 ts 早于此窗口之前的简历（默认 72h）；None 用 DEFAULT_RESUME_MSG_MAX_AGE_MS。
+    resume_bypass_filename_gate_cids: 命中的 cid 仅做 block 排除，不要求文件名含「简历」等。
     """
+    _max_age = (
+        resume_msg_max_age_ms
+        if resume_msg_max_age_ms is not None
+        else DEFAULT_RESUME_MSG_MAX_AGE_MS
+    )
+    _bypass_fn = resume_bypass_filename_gate_cids or frozenset()
+    _blocks_only = str(cid) in _bypass_fn
     # 与 _HYDRATE_FETCH_TIMEOUT_S 一致；fetch 失败时 _fetch_resume_messages 回退监控日志
     messages = _fetch_resume_messages(
-        cid, count=20, timeout=_HYDRATE_FETCH_TIMEOUT_S)
+        cid, timeout=_HYDRATE_FETCH_TIMEOUT_S, log_max_age_ms=_max_age)
     processed_count = 0
     now_ms = int(time.time() * 1000)
 
@@ -741,10 +813,16 @@ def _poll_once(cid: str, seen_ids: set, source_name: str = '', resume_name_filte
         if not msg_id:
             continue
 
-        if file_name and not file_name.lower().endswith('.pdf'):
+        _fn = (file_name or '').lower()
+        if file_name and not (_fn.endswith('.pdf') or _fn.endswith('.docx')):
             continue
 
-        if _resume_time_gate_blocks(file_name, file_path or '', now_ms):
+        _msg_ts = int(msg.get('ts') or 0)
+        # 监测回溯：早于配置窗口的消息不参与初筛（静默）
+        if _msg_ts and _msg_ts < (now_ms - _max_age):
+            continue
+        if _resume_time_gate_blocks(file_name, file_path or '', now_ms, msg_ts_ms=_msg_ts):
+            # 历史简历超过 48h 窗口：静默跳过，不打日志（避免热聊群刷屏）
             continue
 
         if msg_id in seen_ids or is_resume_processed(msg_id):
@@ -755,11 +833,12 @@ def _poll_once(cid: str, seen_ids: set, source_name: str = '', resume_name_filte
             _log(f'跳过简历初筛（本人发出的文件）: {file_name}')
             save_resume_result(
                 msg_id, cid, sender_uid, file_name, file_path or '',
-                '—', '跳过', '非候选人投递：本人发出的 PDF', reply_sent=False,
+                '—', '跳过', '非候选人投递：本人发出的简历附件', reply_sent=False,
             )
             seen_ids.add(msg_id)
             continue
-        _gate_ok, _gate_reason = _resume_pdf_filename_gate(file_name, resume_name_filter)
+        _gate_ok, _gate_reason = _resume_pdf_filename_gate(
+            file_name, resume_name_filter, blocks_only=_blocks_only)
         if not _gate_ok:
             _log(f'跳过简历初筛（文件名门禁）: {file_name} | {_gate_reason}')
             save_resume_result(
@@ -1053,6 +1132,21 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
     if _skip_msg_before_router_start(msg, router_start_ms):
         return
     msg_cid = str(msg.get('cid', '') or '')
+    tcid = get_taoge_recipient_cid()
+    if tcid and msg_cid == tcid:
+        try:
+            _ct_t = int(msg.get('content_type') or 0)
+        except (TypeError, ValueError):
+            _ct_t = 0
+        if _ct_t == 1 and not (msg.get('text') or '').strip():
+            _try_hydrate_push_message_from_fetch(msg)
+        msg_id_t = _make_msg_id(msg)
+        if msg_id_t:
+            handle_taoge_dm_message(
+                msg, memo_cfg, memo_seen_ids,
+                msg_id=msg_id_t, router_start_ms=router_start_ms, source='push',
+            )
+        return
     if msg_cid not in _memo_allowed_cids(memo_cfg):
         return
     _sender_uid = _message_sender_identity(msg)
@@ -1625,6 +1719,14 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
 
         msg_id = _make_msg_id(msg)
         if not msg_id or msg_id in seen_ids:
+            continue
+
+        tcid = get_taoge_recipient_cid()
+        if tcid and str(group_cid).strip() == tcid:
+            handle_taoge_dm_message(
+                msg, memo_cfg, seen_ids,
+                msg_id=msg_id, router_start_ms=router_start_ms, now_ms=now_ms, source='poll',
+            )
             continue
 
         if not _assistant_group_skill_sender_allowed(memo_cfg, group_cid, _message_sender_identity(msg)):
@@ -2506,6 +2608,9 @@ class SkillRouter:
         memo_cfg     = cfg.get('memo_tracker', {})
         doc_review_cfg = cfg.get('doc_review', {})
         resume_name_filter = cfg.get('resume_name_filter', {})
+        resume_msg_max_age_ms = int(
+            cfg.get('resume_msg_max_age_ms') or DEFAULT_RESUME_MSG_MAX_AGE_MS)
+        resume_bypass_fn = cfg.get('resume_bypass_filename_gate_cids') or frozenset()
 
         has_resume     = bool(recruit_cids)
         _allowed = _memo_allowed_cids(memo_cfg)
@@ -2513,7 +2618,16 @@ class SkillRouter:
         has_doc_review = bool(doc_review_cfg.get('group_cid'))
 
         if has_resume:
-            _log(f'resume watch: {recruit_cids}, notify: {notify_cid or "source group"}')
+            _h = resume_msg_max_age_ms / (3600 * 1000)
+            _log(
+                f'resume watch: {recruit_cids}, notify: {notify_cid or "source group"}, '
+                f'msg max age: {_h:g}h'
+            )
+            if resume_bypass_fn:
+                _log(
+                    'resume filename gate bypass (blocks_only): '
+                    f'{sorted(resume_bypass_fn)}'
+                )
         if has_memo:
             _col = [x for x in (memo_cfg.get('colleague_skill_cids') or []) if str(x).strip()]
             _log(
@@ -2540,7 +2654,10 @@ class SkillRouter:
 
         self._thread = threading.Thread(
             target=self._loop,
-            args=(recruit_cids, cid_names, notify_cid, memo_cfg, doc_review_cfg, resume_name_filter),
+            args=(
+                recruit_cids, cid_names, notify_cid, memo_cfg, doc_review_cfg,
+                resume_name_filter, resume_msg_max_age_ms, resume_bypass_fn,
+            ),
             daemon=True,
         )
         self._thread.start()
@@ -2581,7 +2698,9 @@ class SkillRouter:
 
     def _loop(self, recruit_cids: list, cid_names: dict,
               notify_cid: str, memo_cfg: dict, doc_review_cfg: dict = None,
-              resume_name_filter: dict | None = None):
+              resume_name_filter: dict | None = None,
+              resume_msg_max_age_ms: int | None = None,
+              resume_bypass_filename_gate_cids: frozenset | None = None):
         while self._running:
             for cid in recruit_cids:
                 source_name = cid_names.get(cid, '')
@@ -2589,6 +2708,8 @@ class SkillRouter:
                     n = _poll_once(
                         cid, self._seen_ids, source_name=source_name,
                         resume_name_filter=resume_name_filter,
+                        resume_msg_max_age_ms=resume_msg_max_age_ms,
+                        resume_bypass_filename_gate_cids=resume_bypass_filename_gate_cids,
                     )
                     if n:
                         _log(f'[{source_name or cid}] processed {n} resumes')
@@ -2648,9 +2769,16 @@ def start_router(memo_event_queue=None):
 if __name__ == '__main__':
     # 直接运行做单次测试
     init_db()
-    recruit_cids = _load_recruit_cids()
+    _cfg = _load_config()
+    recruit_cids = _cfg['recruit_cids']
+    _ram = int(_cfg.get('resume_msg_max_age_ms') or DEFAULT_RESUME_MSG_MAX_AGE_MS)
+    _bypass = _cfg.get('resume_bypass_filename_gate_cids') or frozenset()
     print('招聘群:', recruit_cids)
     seen: set = set()
+    _rf = _cfg.get('resume_name_filter', {})
     for cid in recruit_cids:
-        n = _poll_once(cid, seen)
+        n = _poll_once(
+            cid, seen, resume_name_filter=_rf, resume_msg_max_age_ms=_ram,
+            resume_bypass_filename_gate_cids=_bypass,
+        )
         print(f'群 {cid} 处理 {n} 份')

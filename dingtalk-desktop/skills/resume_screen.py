@@ -2,9 +2,9 @@
 """
 简历 AI 初筛技能
 
-触发条件：招聘群内收到 ct=502 PDF 文件消息
+触发条件：招聘群内收到 ct=502 的 PDF 或 Word（.docx）文件消息
 流程：
-  1. 从本地路径读取 PDF 文本（DingTalk 收件时已缓存到磁盘）
+  1. 从本地路径读取正文（PDF：pdfplumber；docx：python-docx）
   2. 按文件名/内容猜测岗位，加载对应初筛清单
   3. 调 LLM 做初筛，输出结论 + 要点
   4. 发文字消息到原群
@@ -579,7 +579,11 @@ def _format_reply(file_name: str, role: str, parsed: dict,
     正文避免 ###、--- 及未闭合 **，防止钉钉 Markdown 只显示标题与来源。
     """
     tpl = _load_resume_template() or _DEFAULT_TEMPLATE
-    candidate = file_name.replace('.pdf', '').replace('.PDF', '')
+    candidate = file_name
+    for _ext in ('.pdf', '.PDF', '.docx', '.DOCX'):
+        if candidate.endswith(_ext):
+            candidate = candidate[: -len(_ext)]
+            break
 
     verdict_key = {'通过': 'pass', '待定': 'pending', '不通过': 'fail'}.get(parsed['verdict'], 'pending')
     title_section = 'title_fresh' if is_fresh else 'title'
@@ -694,7 +698,7 @@ def _trigger_download(cid: str, msg_id: str, file_name: str) -> str:
 
 
 def _find_local_pdf(file_name: str) -> str:
-    """在常见下载目录里按文件名搜索 PDF，找到返回路径，否则返回空字符串。"""
+    """在常见下载目录里按文件名搜索附件（PDF/docx），找到返回路径，否则返回空字符串。"""
     for base in _SEARCH_DIRS:
         if not os.path.isdir(base):
             continue
@@ -714,6 +718,34 @@ def _find_local_pdf(file_name: str) -> str:
     return ''
 
 
+def _read_docx_text(path: str) -> str:
+    """从 .docx 抽取段落与表格单元格文本。"""
+    from docx import Document
+    doc = Document(path)
+    parts: list[str] = []
+    for p in doc.paragraphs:
+        t = (p.text or '').strip()
+        if t:
+            parts.append(t)
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [(c.text or '').strip() for c in row.cells]
+            if any(cells):
+                parts.append('\t'.join(cells))
+    return '\n'.join(parts).strip()
+
+
+def _extract_resume_text(file_path: str, file_name: str) -> str:
+    lower = (file_name or file_path or '').lower()
+    if lower.endswith('.docx'):
+        return _read_docx_text(file_path)
+    import pdfplumber
+    with pdfplumber.open(file_path) as pdf:
+        return '\n'.join(
+            (page.extract_text() or '') for page in pdf.pages
+        ).strip()
+
+
 # ── 主入口 ────────────────────────────────────────────────────
 
 def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
@@ -730,7 +762,7 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
 
     print(f'[resume_screen] 开始处理: {file_name}')
 
-    # 1. 读 PDF — file_path 可能为空（文件未被打开过）或路径不存在（未下载）
+    # 1. 读正文 — file_path 可能为空（文件未被打开过）或路径不存在（未下载）
     #    fallback：按文件名在常见下载目录里搜索
     if not file_path or not os.path.exists(file_path):
         file_path = _find_local_pdf(file_name)
@@ -742,21 +774,17 @@ def process_resume_message(msg_id: str, group_cid: str, sender_uid: str,
         return None   # 不写 DB，下次 poll 继续重试
 
     try:
-        import pdfplumber
-        with pdfplumber.open(file_path) as pdf:
-            resume_text = '\n'.join(
-                (page.extract_text() or '') for page in pdf.pages
-            ).strip()
+        resume_text = _extract_resume_text(file_path, file_name)
     except Exception as e:
-        print(f'[resume_screen] PDF读取失败: {e}')
+        print(f'[resume_screen] 简历文件读取失败: {e}')
         save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
-                           '未知', '跳过', f'PDF读取失败:{e}', reply_sent=False)
+                           '未知', '跳过', f'简历文件读取失败:{e}', reply_sent=False)
         return False
 
     if len(resume_text) < 50:
-        print('[resume_screen] PDF内容过短，可能是扫描件')
+        print('[resume_screen] 正文过短，可能是扫描件或空文档')
         save_resume_result(msg_id, group_cid, sender_uid, file_name, file_path,
-                           '未知', '跳过', 'PDF内容过短/扫描件', reply_sent=False)
+                           '未知', '跳过', '简历正文过短/扫描件/空文档', reply_sent=False)
         return False
 
     # 2. 猜岗位 + 应届识别 + 加载清单

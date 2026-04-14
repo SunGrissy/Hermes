@@ -296,7 +296,13 @@
     },
     "aider_extra_args": []
   },
-  "_note_recruit_resume": "recruit_cids 会话里 ct=502 PDF 会走简历初筛；本人发给 HR 的 PDF 由 skill_router 按 is_self/uid 排除；文件名先过 resume_name_filter 第一层门禁（block 命中直接跳过，allow 用于快速识别简历命名，unknown_policy 控制未命中 allow 的处理）。时间窗：仅看本机 PDF 的 mtime（下载/落盘）是否在近 48h；无本机文件时不做时间挡，早期发送的简历可先进 pipeline，下载后再用 mtime 判。",
+  "_note_recruit_resume": "recruit_cids 会话里 ct=502 的 PDF / .docx 会走简历初筛；本人发给 HR 的附件由 skill_router 按 is_self/uid 排除；默认文件名过 resume_name_filter（allow+unknown）；resume_bypass_filename_gate_cids 中的会话仅保留 block 排除词。resume_monitor_max_age_hours（默认 72）等见各 _note。docx 需 python-docx（见 dingtalk-desktop/requirements.txt）。",
+  "resume_bypass_filename_gate_cids": [
+    "73137527367"
+  ],
+  "_note_resume_bypass_filename_gate": "运营策划岗位招聘群等：该 cid 内 PDF/docx 一律按 block_keywords 过滤（面试评价/周报等），不要求文件名含「简历」或姓名式命名。与 resume_monitor.bypass_filename_gate_cids 二选一合并（根列表优先补全）。",
+  "resume_monitor_max_age_hours": 72,
+  "_note_resume_monitor_max_age": "简历初筛只处理消息 ts 早于此小时数内的投递；可改为 48、96 等。也可用嵌套 resume_monitor.max_age_hours（与根字段二选一，根字段优先）。",
   "resume_name_filter": {
     "_note": "简历文件名第一层门禁：block_keywords 命中即跳过；allow_keywords 用于识别明确简历命名；unknown_policy 支持 pass(未知放行)/skip(未知全拦)/skip_non_name(未知里仅姓名式命名放行，推荐)。",
     "allow_keywords": [
@@ -339,7 +345,12 @@
   "taoge_update": {
     "_note": "助理群口令「让涛哥更新/请涛哥更新」私聊目标；recipient_cid 为涛哥单聊会话，避免按姓名解析到群或其他会话",
     "recipient_cid": "46459012:611424765",
-    "recipient_display_name": "杨玉涛"
+    "recipient_display_name": "杨玉涛",
+    "done_notify_enabled": true,
+    "done_reply_max_gap_hours": 72,
+    "done_fetch_message_count": 40,
+    "done_fetch_timeout_s": 95,
+    "_note_done_notify": "涛哥单聊：monitor 监听该 cid；涛哥在「涛哥，{模块}求更新」后回复完成类口令（完成/done/down/好了/哦了/…更了）→ 助理群 webhook 推送「涛哥已经更完了{模块}」"
   },
   "recruit_cids": [
     {

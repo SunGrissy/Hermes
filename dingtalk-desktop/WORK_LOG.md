@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-04-14] 简历初筛：docx、监测 72h、运营策划招聘群文件名（保留 block）
+
+### 状态：已提交推送
+
+### 本次工作内容
+
+- `skills/resume_screen.py` + `requirements.txt`：docx 解析；PDF 仍 pdfplumber
+- `skill_router.py`：`_RESUME_FETCH_COUNT=50`；`resume_monitor_max_age_hours`；`_resume_bypass_filename_gate_cids`（73137527367 仅 `blocks_only`）；时间窗与 msg_ts；静默超窗
+- `digest_config.json`：上述配置项与 `_note`
+- `daemon.py`：`_BeaconServer` 内 `H.send_error` 忽略连接中止
+
+---
+
 ## [2026-04-09] PMO晚报 / 管线晚报（pmo-evening、pm-evening）与傍晚 18:00 计划任务
 
 ### 状态：已推送
