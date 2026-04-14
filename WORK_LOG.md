@@ -6,6 +6,7 @@
 
 **内容**:
 - `pm-system` 子模块指向 `feat(tower): TR远程导入与apiBase覆写，版本1.0.114`（`import-tr` 默认拉 114 TaskReminder 存储 API；跳过已完成；`who`=助理大白；前端 `apiBase`/localStorage；文档与 `_KEY_FILES`）
+- 根仓库推 GitHub 前合并了远端 `github/main`（含 `.cursor/rules/partner-router.mdc` 增量），合并提交后双远端已同步
 
 ---
 
