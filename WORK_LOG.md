@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - pm-system：Feature 状态「验收中」(in_acceptance)
+
+**状态**: 验收通过
+
+**内容**:
+- `pm_config.js`：`featureStatus` / `statusOrder` / 承接拥堵 `transitions` 拆分（`in_progress`→`in_acceptance`→`testing`）；`expectedProgress`、`devKickoffAfterStart.inProgressStatuses` 等同步
+- 前端：`version-planning-view.js` 工作台流水线与筛选；`version-manager.js` 版本卡片；`styles.css` / `index.html`；`backend/main.py` `APP_VERSION` 1.0.115
+- `使用手册.md` / `使用手册.html`：状态说明与手册版本 v14（单独文档提交）
+
+---
+
 ## [2026-04-14] - dingtalk-desktop：涛哥更新（锚点/CID）、ct=1200 正文、B1 与 /send 超时
 
 **状态**: 验收通过
