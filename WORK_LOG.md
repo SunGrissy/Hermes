@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - pm-system：注册 /api/pm-calendar（此前未挂载路由）
+
+**状态**: 已提交并推送
+
+**内容**:
+- `backend/main.py`：`GET /api/pm-calendar`，`holidays`/`workdays` 来自 `assemble_full_data`；`APP_VERSION` 1.0.116
+- `backend/app/routers/data.py`：移除未挂载的重复实现，注明以 `main.py` 为准
+
+---
+
 ## [2026-04-14] - scripts：notify_tao_daemon 默认读 digest 涛哥单聊 cid
 
 **状态**: 已提交并推送
