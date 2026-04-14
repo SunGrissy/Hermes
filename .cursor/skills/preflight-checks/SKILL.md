@@ -1,6 +1,6 @@
 ---
 name: preflight-checks
-description: Remediation guide for gate check failures defined in agent-core.mdc. Use when a pre-commit, pre-push, post-edit, or acceptance gate check fails and the Agent needs guidance on how to fix the issue. Also use when scanning for secrets, checking reference consistency, or auditing .gitignore coverage.
+description: Remediation guide for gate check failures defined in agent-core.mdc. Use when a pre-commit, pre-push, post-edit, or acceptance gate check fails and the Agent needs guidance on how to fix the issue. Also use when scanning for secrets, checking reference consistency, or auditing .gitignore coverage. Covers Windows .bat CRLF vs LF and .gitattributes eol=crlf overrides when cmd.exe mis-parses batch files.
 ---
 
 # 门禁检查修复指南
