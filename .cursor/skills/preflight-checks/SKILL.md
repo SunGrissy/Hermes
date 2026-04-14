@@ -129,6 +129,29 @@ cd performeval && git push origin main && cd ..
 git push origin main
 ```
 
+## Windows 批处理（`.bat`）换行与 `.gitattributes`
+
+**典型现象（cmd.exe 执行 `.bat` 时）**：`'65001'`、`'lor'`、`'eq'`、`'cho'`、`'THON_CMD'` 等被当成「不是内部或外部命令」；`echo`、`chcp`、`taskkill` 等行看似被拆碎。
+
+**根因**：`cmd.exe` 依赖 **CRLF（`\r\n`）** 作为行尾。若工作区里是 **纯 LF**，或与全局 `eol=lf` 策略叠加，解析会错位。
+
+**与仓库策略的关系**：若 `.gitattributes` 中存在 `* text=auto eol=lf`，检出会把文本统一为 LF，**`.bat` 也会被误伤**。
+
+**修复步骤：**
+
+1. **把受影响的 `.bat` 存为 CRLF**（编辑器「换行符：CRLF」，或对单文件用脚本 `open(..., newline='\r\n')` 重写）。
+2. **在 `.gitattributes` 里为批处理单独覆盖**（规则写在通配 `*` 之后，以便后行覆盖前行）：
+
+```gitattributes
+* text=auto eol=lf
+
+*.bat text eol=crlf
+```
+
+3. 变更较多时可在该仓库执行：`git add --renormalize "*.bat"`，再检查 `git diff` 确认仅换行与意图一致。
+
+**自检**：`git check-attr eol -- path/to/quick_start.bat` 应显示 `eol: crlf`；二进制查看文件头若干字节应含 `0d 0a`。
+
 ## 门禁检查速查表
 
 ```
@@ -137,3 +160,10 @@ git commit 前 → C1(暂存列表) → C2(lint) → C3(密钥) → C4(WORK_LOG)
 git push 前 → P1(子模块状态) → P2(敏感路径) → P3(推送顺序)
 验收时 → A1(=C1-C4) → A2(WORK_LOG状态) → A3(=P1-P3)
 ```
+
+## 变更记录
+
+| 日期 | 版本 | 变更 | 来源会话 |
+|------|------|------|----------|
+| 2026-04-14 | v1.1 | 新增「Windows 批处理换行与 .gitattributes」：LF-only / `eol=lf` 误伤 `.bat` 的识别与修复 | AgentFix |
+| （既有） | v1.0 | 初始内容 | 仓库既有 |

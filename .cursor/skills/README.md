@@ -65,7 +65,7 @@
 |-------|------|
 | dual-git-sync | tygit 主仓 + GitHub 可选镜像、子模块 |
 | github-ops | GitHub 仓库、分支保护、PR、gh CLI |
-| preflight-checks | 门禁失败修复（敏感信息、引用一致性等） |
+| preflight-checks | 门禁失败修复（敏感信息、引用一致性、**Windows .bat CRLF / .gitattributes**） |
 | multi-service-orchestration | 端口、启动命令、依赖、健康检查 |
 
 ### 钉钉 & 自动化

@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - preflight-checks：Windows .bat CRLF / .gitattributes；pm-system 子模块同步
+
+**状态**: 验收通过
+
+**内容**:
+- `.cursor/skills/preflight-checks/SKILL.md`：新增「Windows 批处理换行与 .gitattributes」排查与修复；变更记录 v1.1
+- `.cursor/skills/README.md`：preflight-checks 条目补充 **Windows .bat CRLF / .gitattributes**
+- `pm-system` 子模块：`.gitattributes` 增加 `*.bat text eol=crlf`（避免通配 `eol=lf` 误伤批处理）；与 `quick_start.bat` 换行修复同一轮提交
+
+---
+
 ## [2026-04-13] - 本地改动分批提交：子模块与根目录材料/工具
 
 **状态**: 已提交（本地）
