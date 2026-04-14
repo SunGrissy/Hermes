@@ -25,8 +25,8 @@ py scripts/notify_tao_daemon.py <子模块名>
 可选环境变量：
 
 - `TAO_UPDATE_SCOPE`：与传参二选一。
-- `TAO_RECIPIENT_CID`：若已采集涛哥 CID（如 `75569139709`），优先用 cid，避免姓名歧义。
-- `TAO_RECIPIENT_NAME`：默认 `杨玉涛`。
+- `TAO_RECIPIENT_CID`：可选覆盖涛哥**单聊** cid；**不设置时**脚本读取 `dingtalk-desktop/digest_config.json` 的 **`taoge_update.recipient_cid`**（与群内「让涛哥更新」一致）。勿依赖纯 `name` 解析，否则 daemon 可能把消息发到错误会话（例如含「杨玉涛」的群）。
+- `TAO_RECIPIENT_NAME`：仅当无 cid 且 digest 未配置 `recipient_cid` 时的兜底；默认 `杨玉涛`。
 - `DINGTALK_DAEMON_URL`：默认 `http://127.0.0.1:19200`。
 
 3. **禁止**：用助理群 Webhook 发「未找到 tao-update-scope」来回应 **Cursor 内**的这条指令（那是群内链路用的）。

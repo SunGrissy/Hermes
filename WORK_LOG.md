@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-14] - scripts：notify_tao_daemon 默认读 digest 涛哥单聊 cid
+
+**状态**: 已提交并推送
+
+**内容**:
+- `scripts/notify_tao_daemon.py`：未设置 `TAO_RECIPIENT_CID` 时读取 `dingtalk-desktop/digest_config.json` → `taoge_update.recipient_cid`，避免仅用 `name` 解析误发到群
+- `.cursor/skills/notify-tao-update/SKILL.md`：与上述行为一致说明
+
+---
+
 ## [2026-04-14] - pm-system：Feature 状态「验收中」(in_acceptance)
 
 **状态**: 验收通过

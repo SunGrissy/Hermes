@@ -9,9 +9,12 @@
 
 环境变量：
   DINGTALK_DAEMON_URL  默认 http://127.0.0.1:19200
-  TAO_RECIPIENT_NAME   默认 杨玉涛
-  TAO_RECIPIENT_CID    若设置则优先用 cid，不再按姓名解析
+  TAO_RECIPIENT_NAME   默认 杨玉涛；仅当无法使用 cid 时按姓名解析（易误匹配到群，不推荐）
+  TAO_RECIPIENT_CID    若设置则优先用该 cid 单聊
   DINGTALK_SEND_TIMEOUT_S  POST /send 等待秒数，默认 120（原 25 易超时误报失败）
+
+默认可从 dingtalk-desktop/digest_config.json 的 taoge_update.recipient_cid 读取涛哥单聊 cid
+（与群内技能 taoge_update 一致）；未设置环境变量 TAO_RECIPIENT_CID 时自动使用该值。
 """
 from __future__ import annotations
 
@@ -40,6 +43,21 @@ _DEFAULT_RESTART = frozenset(
 def _workspace_root() -> str:
     here = os.path.dirname(os.path.abspath(__file__))
     return os.path.normpath(os.path.join(here, ".."))
+
+
+def _load_taoge_recipient_cid(root: str) -> str:
+    """与 dingtalk-desktop/skills/taoge_update 一致：优先用 digest 里配置的单聊 cid，避免按姓名解析到群。"""
+    path = os.path.join(root, "dingtalk-desktop", "digest_config.json")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        t = cfg.get("taoge_update")
+        if not isinstance(t, dict):
+            return ""
+        cid = (t.get("recipient_cid") or "").strip()
+        return cid
+    except (OSError, json.JSONDecodeError, TypeError):
+        return ""
 
 
 def _infer_scope_from_git(root: str) -> str:
@@ -145,18 +163,25 @@ def main() -> int:
 
     daemon = os.environ.get("DINGTALK_DAEMON_URL", "http://127.0.0.1:19200").strip()
     cid = os.environ.get("TAO_RECIPIENT_CID", "").strip()
+    if not cid:
+        cid = _load_taoge_recipient_cid(root)
     name = os.environ.get("TAO_RECIPIENT_NAME", "杨玉涛").strip() or "杨玉涛"
     msg = _build_message(scope)
 
     if cid:
         body = {"cid": cid, "message": msg}
     else:
+        print(
+            "warn: no TAO_RECIPIENT_CID and no taoge_update.recipient_cid in digest_config.json; "
+            "using name resolve (may send to wrong session).",
+            file=sys.stderr,
+        )
         body = {"name": name, "message": msg}
 
     ok, detail = _post_send(daemon, body)
     if ok:
         # Windows 控制台默认 GBK，避免 print 正文含 emoji 崩溃；私聊正文仍含机器人尾标
-        print("sent_ok scope=%s recipient=%s" % (scope, "cid" if cid else name))
+        print("sent_ok scope=%s recipient=%s" % (scope, "cid" if body.get("cid") else name))
         return 0
     print("error:", detail, file=sys.stderr)
     return 1
