@@ -2,8 +2,10 @@
 """
 备忘定时提醒
 
-独立脚本, 由 Windows Task Scheduler 每日 09:30/14:00/17:30 调用。
+独立脚本, 由 Windows Task Scheduler 在工作日 08:50、17:30 各调用一次。
 从 TaskReminder (KV storage) 读取备忘类任务, 统计待跟进数, 发汇总到助理通知群。
+工作日判定与 PmSystem「假日与调休」一致：优先请求 digest_config.json 中 pm_system_url 的 /api/pm-calendar，
+失败则尝试读取仓库内 pm-system/backend/data/gamedev_pm_data.json；均不可用时本次不推送。
 
 规则：发给助理通知群（自己看的）时，分配给 default_who（如助理大白）的任务不显示分配人。
 
@@ -14,11 +16,14 @@ import os
 import sys
 import json
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT = os.path.dirname(_THIS_DIR)
 sys.path.insert(0, _THIS_DIR)
+# [AgentMemo Task] memo 提醒：仅 PM 工作日推送；计划任务 08:50 / 17:30
 from lib.utils import get_webhook_url
+from pm_work_calendar import fetch_pm_calendar_http, is_pm_workday, try_load_pm_calendar
 
 _CONFIG_PATH = os.path.join(_THIS_DIR, 'digest_config.json')
 _TEMPLATE_PATH = os.path.join(_THIS_DIR, 'message_templates.json')
@@ -28,9 +33,13 @@ def _log(msg):
     print(f'[memo_reminder][{ts}] {msg}', flush=True)
 
 
-def _load_config():
+def _load_digest_root() -> dict:
     with open(_CONFIG_PATH, 'r', encoding='utf-8') as f:
-        cfg = json.load(f)
+        return json.load(f)
+
+
+def _load_config():
+    cfg = _load_digest_root()
     memo_cfg = cfg.get('memo_tracker', {})
     if not memo_cfg.get('group_cid'):
         memo_cfg['group_cid'] = cfg.get('notify_target', '')
@@ -39,6 +48,27 @@ def _load_config():
         'memo_tracker', memo_cfg.get('webhook_url') or cfg.get('webhook_url', '')
     )
     return memo_cfg
+
+
+def _load_pm_holidays_workdays():
+    """
+    返回 (holidays, workdays)，与 PM 前端 isWorkday 同源。
+    不可用时返回 None（调用方应跳过推送，避免法定假误推）。
+    """
+    cfg = _load_digest_root()
+    base = (cfg.get('pm_system_url') or '').strip()
+    timeout = int(cfg.get('pm_calendar_timeout_sec') or 15)
+    if base:
+        url = base.rstrip('/') + '/api/pm-calendar'
+        loaded = fetch_pm_calendar_http(url, timeout_sec=max(3, timeout))
+        if loaded:
+            h, w, _ = loaded
+            return h, w
+    tried = try_load_pm_calendar('pm-system/backend/data/gamedev_pm_data.json', _ROOT)
+    if tried:
+        h, w, _ = tried
+        return h, w
+    return None
 
 
 _DEFAULT_TEMPLATES = {
@@ -226,6 +256,16 @@ def _build_message(memos, config=None):
 
 def main():
     _log('starting memo reminder...')
+
+    cal = _load_pm_holidays_workdays()
+    if cal is None:
+        _log('pm calendar unavailable, skip (no push)')
+        return
+    h, w = cal
+    today = date.today()
+    if not is_pm_workday(today, h, w):
+        _log(f'today {today.isoformat()} is not a PM workday, skip')
+        return
 
     config = _load_config()
     webhook_url = config.get('webhook_url', '')

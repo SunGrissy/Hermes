@@ -17,7 +17,7 @@ _WS = os.path.abspath(os.path.join(_ROOT, ".."))
 
 from lib.daemon_spawn import start_daemon_background  # noqa: E402
 _SEND = os.path.join(
-    _WS, ".cursor", "skills", "cursor-to-dingtalk", "scripts", "send_result_webhook.py"
+    _WS, ".cursor", "skills", "dingtalk-actions", "scripts", "send_result_webhook.py"
 )
 
 DOC_URL = (

@@ -131,7 +131,7 @@ def main() -> int:
     role = args.role.strip() or _infer_role_from_readme(abs_md)
     body = _build_body(rel_path, reader_url, args.agent, role)
 
-    webhook_script = workspace / ".cursor" / "skills" / "cursor-to-dingtalk" / "scripts" / "send_result_webhook.py"
+    webhook_script = workspace / ".cursor" / "skills" / "dingtalk-actions" / "scripts" / "send_result_webhook.py"
     if not webhook_script.is_file():
         print(f"error: missing {webhook_script}", file=sys.stderr)
         return 1

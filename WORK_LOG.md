@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## [2026-04-16] - dingtalk-desktop：Webhook 脚本迁至 dingtalk-actions；日报名单与 digest 配置
+
+**状态**: 验收通过
+
+**内容**:
+- `work_report_assistant_run.py`：`_WEBHOOK_SCRIPT` 指向 `.cursor/skills/dingtalk-actions/scripts/send_result_webhook.py`
+- `work_report_assistant_roster.json`：战斗组名单调整
+- `digest_config.json`：`team_members` / `member_roles` / `person_lookup_aliases` 与名单一致
+- `restart_fetch_notify_assistant.py`、`memo_reminder` 与 `run_memo_reminder`、`register_memo_reminder_task`、`skills/taoge_update.py`、`docs/work-report-assistant.md`、`WEBHOOK_关键词说明.md`：同步路径与说明
+- 新增 `.cursor/skills/dingtalk-actions/`；`interview-checklist-dingtalk`、`work-report-assistant` SKILL 引用更新
+
+---
+
 ## [2026-04-15] - pm-system：quick_start 参数化与中文交互菜单
 
 **状态**: 验收通过

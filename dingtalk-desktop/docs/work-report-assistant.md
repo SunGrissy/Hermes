@@ -49,7 +49,7 @@ py work_report_assistant_run.py --scenario morning_digest
 
 - 本机可访问 `https://zxty.tuyoo.com/work-report`
 - Python 3.9+，无需额外 pip 包（标准库 `urllib`）
-- 与 [`cursor-to-dingtalk`](../.cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py) 同仓库路径
+- 与 [`dingtalk-actions`](../.cursor/skills/dingtalk-actions/scripts/send_result_webhook.py) 同仓库路径
 
 ## 排错
 

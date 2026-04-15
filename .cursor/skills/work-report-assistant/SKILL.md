@@ -46,7 +46,7 @@ Windows 计划任务（schtasks）
 | `dingtalk-desktop/run_work_report_assistant.ps1` | PS 包装（日志、错误处理） | ✅ |
 | `dingtalk-desktop/register_work_report_assistant_tasks.ps1` | 注册 4 个 Windows 计划任务 | ✅ |
 | `dingtalk-desktop/pm_work_calendar.py` | 与 PM `isWorkday` 一致的工作日 / 上一工作日 | ✅ |
-| `.cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py` | Webhook 发送（读 webhook_config.json） | ✅ |
+| `.cursor/skills/dingtalk-actions/scripts/send_result_webhook.py` | Webhook 发送（读 webhook_config.json） | ✅ |
 | `dingtalk-desktop/webhook_config.json` | 钉钉机器人 URL（默认键 `hr`） | ❌ .gitignore |
 
 ## 配置与密钥

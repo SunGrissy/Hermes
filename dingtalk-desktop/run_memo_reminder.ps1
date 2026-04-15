@@ -1,5 +1,5 @@
 # run_memo_reminder.ps1
-# 备忘定时提醒（每日 09:30、14:00、17:30 各一次）
+# 备忘定时提醒（计划任务每日 08:50、17:30；仅 PM 工作日才推送）
 # 从 TaskReminder 读取待跟进备忘，通过 memo_tracker webhook 发到钉钉
 
 $ErrorActionPreference = "Continue"

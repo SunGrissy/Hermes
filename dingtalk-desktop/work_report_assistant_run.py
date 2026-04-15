@@ -29,7 +29,7 @@ _WEBHOOK_SCRIPT = os.path.join(
     _ROOT,
     ".cursor",
     "skills",
-    "cursor-to-dingtalk",
+    "dingtalk-actions",
     "scripts",
     "send_result_webhook.py",
 )
@@ -284,7 +284,7 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
             "每个聚类主题用 ### 三级标题单独一行，下面用 bullet 列出具体内容。示例：\n\n"
             "### AI 视频/图片素材生成\n"
             "- 用 Seedance 2.0 生成摩托车 BOSS 设计参考（胡亚飞）\n"
-            "- 用 AI 生成壮汉形象，计划完成脚本与视频 demo（张旭哲）\n\n"
+            "- 用 AI 生成壮汉形象，计划完成脚本与视频 demo（赵宇驰）\n\n"
             "### Cursor 辅助开发\n"
             "- 用 Cursor Skill 书写 iOS 活动页文案（张颖）\n\n"
             "以此类推，每个聚类一个 ### 标题 + bullet 列表。\n\n"

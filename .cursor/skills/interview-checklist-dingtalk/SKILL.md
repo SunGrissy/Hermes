@@ -37,10 +37,10 @@ py .cursor/skills/interview-checklist-dingtalk/scripts/notify_interview_md_reade
 4. 成功时脚本退出码 0 且输出 `sent`（由 `send_result_webhook.py` 打印）；失败看 stderr。
 5. 钉钉正文需包含 **本会话代号**（`--agent` 或 `AGENT_SESSION_CODE`）；**不要**再堆「使用前请确认」类冗长说明。footer 仍由 Webhook 脚本自动加 `###### ※ 小秘书提醒`。
 
-## 与 cursor-to-dingtalk 的关系
+## 与 dingtalk-actions 的关系
 
 - 仍走 **机器人 Webhook**，不用 daemon `/send`。
-- 使用 `send_result_webhook.py`，通过环境变量 **`DINGTALK_WEBHOOK_KEY=interview_checklist`** 选择配置项；发送记录写入 `dingtalk-desktop/logs/cursor_webhook_sends.log`，标题为 **`面试清单-md-reader`**。
+- 使用 `.cursor/skills/dingtalk-actions/scripts/send_result_webhook.py`，通过环境变量 **`DINGTALK_WEBHOOK_KEY=interview_checklist`** 选择配置项；发送记录写入 `dingtalk-desktop/logs/cursor_webhook_sends.log`，标题为 **`面试清单-md-reader`**。
 
 ## md-reader 深链说明
 

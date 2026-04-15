@@ -1,5 +1,5 @@
 # register_memo_reminder_task.ps1
-# 注册 Windows 计划任务：每日 09:30、14:00、17:30 各执行一次备忘提醒
+# 注册 Windows 计划任务：每日 08:50、17:30 各执行一次备忘提醒（脚本内按 PM 日历跳过非工作日）
 
 $taskName = "MemoReminder"
 $scriptPath = Join-Path $PSScriptRoot "run_memo_reminder.ps1"
@@ -9,9 +9,8 @@ $action = New-ScheduledTaskAction `
     -Argument "-ExecutionPolicy Bypass -File `"$scriptPath`"" `
     -WorkingDirectory $PSScriptRoot
 
-$trigger1 = New-ScheduledTaskTrigger -Daily -At "09:30"
-$trigger2 = New-ScheduledTaskTrigger -Daily -At "14:00"
-$trigger3 = New-ScheduledTaskTrigger -Daily -At "17:30"
+$trigger1 = New-ScheduledTaskTrigger -Daily -At "08:50"
+$trigger2 = New-ScheduledTaskTrigger -Daily -At "17:30"
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
@@ -29,9 +28,9 @@ if ($existing) {
 Register-ScheduledTask `
     -TaskName $taskName `
     -Action $action `
-    -Trigger $trigger1, $trigger2, $trigger3 `
+    -Trigger $trigger1, $trigger2 `
     -Settings $settings `
-    -Description "Memo follow-up to DingTalk: 09:30, 14:00, 17:30" `
+    -Description "Memo follow-up to DingTalk: 08:50, 17:30 (workdays only, PM calendar)" `
     -Force
 
-Write-Host "registered: $taskName (09:30, 14:00, 17:30)"
+Write-Host "registered: $taskName (08:50, 17:30; workday check in memo_reminder.py)"

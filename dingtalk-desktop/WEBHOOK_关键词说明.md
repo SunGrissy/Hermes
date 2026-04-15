@@ -41,7 +41,7 @@
 
 ### 代码写死的关键词（需同步改）
 
-- **.cursor/skills/cursor-to-dingtalk/scripts/send_result_webhook.py**  
+- **.cursor/skills/dingtalk-actions/scripts/send_result_webhook.py**  
   - `FOOTER = "\n\n###### ※ 小秘书提醒"`
 - **dingtalk-desktop/skills/memo_tracker.py**  
   - 默认 `webhook_keyword` / `footer`：`'[小秘书提醒]'`、`'###### ※ 小秘书提醒'`

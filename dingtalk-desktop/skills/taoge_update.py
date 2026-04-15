@@ -3,7 +3,10 @@
 助理通知主群：口令「让涛哥更新」→ 从群内最近消息里解析 Cursor 收工推送里的锚点 `tao-update-scope:子模块`，
 再以用户本人身份经 daemon POST /send 单聊杨玉涛（需本机钉钉 + daemon）。
 
-锚点由 Cursor 发助理群 Webhook 时在正文中写入（见 .cursor/skills/cursor-to-dingtalk）。
+锚点由 Cursor 发助理群 Webhook 时在正文中写入（见 .cursor/skills/dingtalk-actions）。
+
+涛哥单聊（digest taoge_update.recipient_cid）：监测 Frida 推送 + /fetch 轮询；
+若涛哥在「涛哥，{模块}求更新」之后回复完成类口令，向助理群 webhook 推送「涛哥已经更完了{模块}」。
 """
 import json
 import os
@@ -11,15 +14,17 @@ import re
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 
 from skills.memo_tracker import _send_wish_webhook, _wish_webhook_for_cid
-from lib.utils import extract_markdown_body_from_ct1200_raw
+from lib.utils import ContactsDB, DEFAULT_MY_UID, extract_markdown_body_from_ct1200_raw
 
 _THIS = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_THIS)
 _DIGEST_PATH = os.path.join(_ROOT, 'digest_config.json')
 
 TAO_SCOPE_RE = re.compile(r"tao-update-scope:\s*(\S+)", re.IGNORECASE)
+TAO_REQUEST_LINE_RE = re.compile(r"涛哥，(.+?)求更新")
 
 # POST /send 会等 B1 就绪 + exec_js + beacon；过短易在客户端先超时，daemon 仍可能已发出，误报失败
 try:
@@ -51,6 +56,173 @@ def _load_taoge_cfg() -> dict:
         return t if isinstance(t, dict) else {}
     except (OSError, json.JSONDecodeError, TypeError):
         return {}
+
+
+def get_taoge_recipient_cid() -> str:
+    return str(_load_taoge_cfg().get("recipient_cid") or "").strip()
+
+
+def _normalize_person_display(s: str) -> str:
+    t = (s or "").strip()
+    if not t:
+        return ""
+    for sep in ("（", "("):
+        if sep in t:
+            t = t.split(sep, 1)[0].strip()
+    return t
+
+
+def _msg_is_self(msg: dict) -> bool:
+    if msg.get("is_self") is True:
+        return True
+    uid = str(msg.get("uid") or "").strip()
+    my_uid = str(os.environ.get("DINGTALK_MY_UID", DEFAULT_MY_UID)).strip()
+    return bool(uid and my_uid and uid == my_uid)
+
+
+def _identity_matches_tao(msg: dict, tcfg: dict) -> bool:
+    target = str(tcfg.get("recipient_display_name") or "杨玉涛").strip()
+    uid = str(msg.get("uid") or "").strip()
+    sender = str(msg.get("sender") or "").strip()
+    for part in (uid, sender):
+        if not part or part == "?":
+            continue
+        if part == target:
+            return True
+        if _normalize_person_display(part) == target:
+            return True
+    if uid.isdigit():
+        try:
+            nm = ContactsDB._resolve_name(uid)
+            if nm and _normalize_person_display(nm) == target:
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _text_looks_like_tao_done(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    if any(x in t for x in ("完成", "好了", "哦了")):
+        return True
+    if "更了" in t:
+        return True
+    tl = t.lower()
+    if re.search(r"(?i)\bdone\b", tl):
+        return True
+    if re.search(r"(?i)\bdown\b", tl):
+        return True
+    return False
+
+
+def _parse_scope_from_our_request_line(text: str) -> str | None:
+    m = TAO_REQUEST_LINE_RE.search((text or "").replace("\n", " "))
+    if not m:
+        return None
+    scope = m.group(1).strip().rstrip("~").strip()
+    if scope.endswith("需要重启"):
+        scope = scope[: -4].strip()
+    scope = re.sub(r"\s*\[忙疯了\]\s*$", "", scope).strip()
+    return scope or None
+
+
+def _skip_msg_before_router_start(msg: dict, router_start_ms: int) -> bool:
+    if not router_start_ms or router_start_ms <= 0:
+        return False
+    ts = int(msg.get("ts") or 0)
+    if ts <= 0:
+        return msg.get("ding_mid") is None
+    return ts < router_start_ms
+
+
+def _taoge_notify_log(msg: str) -> None:
+    ts = datetime.now().strftime("%H:%M:%S")
+    print(f"[skill_router][{ts}] {msg}", flush=True)
+
+
+def _find_scope_for_tao_done_reply(tcfg: dict, dm_cid: str, tao_ts: int) -> str | None:
+    count = int(tcfg.get("done_fetch_message_count") or 40)
+    timeout = int(tcfg.get("done_fetch_timeout_s") or 95)
+    max_gap_ms = int(float(tcfg.get("done_reply_max_gap_hours") or 72) * 3600 * 1000)
+    rows = _fetch_recent_messages(dm_cid, count=count, timeout=timeout)
+    if not rows:
+        return None
+    best_ts = -1
+    best_scope = None
+    for m in rows:
+        if not m.get("is_self"):
+            continue
+        ts = int(m.get("ts") or 0)
+        if ts <= 0 or ts >= tao_ts:
+            continue
+        if max_gap_ms > 0 and (tao_ts - ts) > max_gap_ms:
+            continue
+        scope = _parse_scope_from_our_request_line(m.get("text") or "")
+        if not scope:
+            continue
+        if ts > best_ts:
+            best_ts = ts
+            best_scope = scope
+    return best_scope
+
+
+def handle_taoge_dm_message(
+    msg: dict,
+    memo_cfg: dict,
+    seen_ids: set,
+    *,
+    msg_id: str,
+    router_start_ms: int = 0,
+    now_ms: int | None = None,
+    source: str = "poll",
+) -> None:
+    """涛哥单聊会话：完成回执 → 助理群 webhook。幂等依赖 seen_ids。"""
+    tcfg = _load_taoge_cfg()
+    if tcfg.get("done_notify_enabled") is False:
+        return
+    if msg_id in seen_ids:
+        return
+    if _skip_msg_before_router_start(msg, router_start_ms):
+        seen_ids.add(msg_id)
+        return
+    if _msg_is_self(msg):
+        seen_ids.add(msg_id)
+        return
+    if not _identity_matches_tao(msg, tcfg):
+        seen_ids.add(msg_id)
+        return
+    import skill_router as _sr
+
+    text = _sr._normalize_command_text(_sr._extract_message_text(msg)).strip()
+    if not _text_looks_like_tao_done(text):
+        seen_ids.add(msg_id)
+        return
+    dm_cid = get_taoge_recipient_cid()
+    tao_ts = int(msg.get("ts") or 0)
+    if tao_ts <= 0:
+        tao_ts = int((now_ms or int(time.time() * 1000)))
+    scope = _find_scope_for_tao_done_reply(tcfg, dm_cid, tao_ts)
+    if not scope:
+        _taoge_notify_log(
+            f"taoge_done_notify ({source}): 未在单聊历史中找到前置「涛哥，…求更新」或超出时间窗"
+        )
+        seen_ids.add(msg_id)
+        return
+    group_cid = str(memo_cfg.get("group_cid") or "").strip()
+    body = f"涛哥已经更完了{scope}"
+    wh = _wish_webhook_for_cid(memo_cfg, group_cid)
+    if not wh:
+        _taoge_notify_log(f"taoge_done_notify ({source}): 无助理群 webhook，跳过")
+        seen_ids.add(msg_id)
+        return
+    try:
+        _send_wish_webhook(body, memo_cfg, group_cid=group_cid)
+        _taoge_notify_log(f"taoge_done_notify ({source}): 已推送 -> {scope!r}")
+    except Exception as e:
+        _taoge_notify_log(f"taoge_done_notify ({source}): webhook 异常 {e}")
+    seen_ids.add(msg_id)
 
 
 def _restart_modules(cfg: dict) -> frozenset:
