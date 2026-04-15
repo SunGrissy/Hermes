@@ -1,5 +1,18 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-04-15] check_tracker：引用回复 TR 标注转跟进任务
+
+### 状态：已验收，待推送
+
+### 本次工作内容
+
+- `skills/check_tracker.py`（新增）：TR 跟进任务主逻辑；解析引用回复格式、提取任务标题与 DDL、写入 TaskReminder、发 Webhook 确认
+- `db/store.py`：新增 `check_items` 表及 CRUD（`get_next_check_seq`、`is_check_processed`、`save_check_item`）
+- `skill_router.py`：在 push/poll 两条路径接入 check_tracker；P2P 私聊（CID 含 `:`）跳过 is_self 检查（JSAPI 路径该字段不可靠）；send 路径 msg_id=0 时补打 log 便于 debug；内容去重防双路径重复创建
+- `digest_config.json`：`memo_tracker.check_tracker` 配置节（`allowed_cids`、`cid_names`）；`colleague_skill_cids` 新增车君怡私聊 CID
+
+---
+
 ## [2026-04-14] 简历初筛：docx、监测 72h、运营策划招聘群文件名（保留 block）
 
 ### 状态：已提交推送

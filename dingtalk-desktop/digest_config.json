@@ -8,7 +8,6 @@
     "任鹏锐",
     "屈丽茹",
     "张梦君",
-    "郑杉",
     "李振源",
     "崔忠仁",
     "刘泊霆",
@@ -19,8 +18,6 @@
     "龚锦",
     "穆建博",
     "张颖",
-    "张旭哲",
-    "王翕然",
     "赵宇驰",
     "车君怡",
     "崔正钦",
@@ -147,15 +144,19 @@
       "focus": "APM，重点关注管线推进和人力资源协调，评估日报有效信息含量"
     },
     "pld_candidate": {
-      "members": ["刘泊霆", "崔忠仁", "郑杉"],
+      "members": ["刘泊霆", "崔忠仁", "吕佳悦"],
       "focus": "可能担任PLD（策划管线负责人），除策划本职外还需关注管线推进方面的信息"
+    },
+    "numeric_data": {
+      "members": ["杨琳", "毛永林"],
+      "focus": "数据与数值方向，关注指标结论、实验与版本关联、风险与依赖，评估日报有效信息含量"
     },
     "ue_designer": {
       "members": ["龚锦", "孙悦", "穆建博"],
       "focus": "UE设计，额外关注设计目的和预期体验的理解深度；若涉及PLE职责还需关注管线顺畅情况"
     },
     "combat": {
-      "members": ["张旭哲", "张颖", "王翕然", "胡亚飞", "赵宇驰"],
+      "members": ["张颖", "胡亚飞", "赵宇驰"],
       "focus": "战斗方向，可能成为APM和主美的卡点，关注工作内容与管线PM/主美日报的关联度"
     }
   },
@@ -228,7 +229,8 @@
       "73472166912",
       "47857575121",
       "46459012:436804184",
-      "46459012:3600063488"
+      "46459012:3600063488",
+      "46459012:316550726"
     ],
     "_note_colleague_skill_cids": "他人发言仅白名单群/单聊入队（例：杨琳汇报直通车；崔忠仁/刘泊霆单聊 CID 见上）；本人仍可在 group_cid 或白名单群发指令。助理群内同事发言默认忽略。",
     "_note_wish_reply_webhook_by_cid": "备忘/TR/完成/删除 memo、今日/明日/本周关注、许愿/愿望单/删除或完成 wish 等技能回复均按「发言群」选 Webhook：wish_reply_webhook_by_cid 键为群 CID，值为该群机器人 URL；未映射的群用下方 webhook_url（或 webhook_config.json 的 memo_tracker）。",
@@ -247,7 +249,7 @@
     "topic_skill_group_cid": "47857575121",
     "topic_skill_webhook_key": "memo_tracker_topic_room",
     "_note_topic_skill_room": "选题专用群：可填 topic_skill_group_cid；若为空则按 topic_skill_group_name 在根配置 report_cids 里匹配群名（全等或子串，如 4S）。匹配到后仍会并入 colleague_skill_cids。机器人 URL 在 webhook_config.json 的 memo_tracker_topic_room（有 URL 时写入 wish_reply_webhook_by_cid；无则回退助理群机器人）。无按人白名单。注意：白名单群内同样会触发备忘、愿望等指令；请在 report_cids 中为 4S 群填写真实 cid。",
-    "person_lookup_aliases": ["洋哥", "崔哥", "UX", "战斗","崔忠仁","刘泊霆","张旭哲","王翕然","赵宇驰","车君怡","张颖","张梦君","郑杉","李振源","穆建博","吕佳悦","毛永林","程家叙","孙悦","龚锦","杨琳"],
+    "person_lookup_aliases": ["洋哥", "崔哥", "UX", "战斗","崔忠仁","刘泊霆","赵宇驰","车君怡","张颖","张梦君","李振源","穆建博","吕佳悦","毛永林","程家叙","孙悦","龚锦","杨琳"],
     "_note_person_lookup": "群内仅发「洋哥」「找洋哥」等（须与列表完全一致）→ 列出正文含该词的进行中备忘与愿望",
     "desk_ops_enabled": true,
     "_note_desk_ops": "启动PM / 启动 PM（中间可空格，PM 大小写均可）→ taskkill + quick_start_headless.bat，约 8s 后探活并 webhook。查看进程 / 关进程 N；检查大门；重启大门；拉日报 digest-group；设 desk_ops_enabled false 关闭",
@@ -256,7 +258,15 @@
     "wish_assignee": "愿望单",
     "wish_module": "愿望单",
     "task_reminder_base": "http://192.168.20.114:8111",
-    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117"
+    "webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=1ebdeae562f7d49070961d2442f39fb9a539cf6f220ba3e73ff82177a0ac2117",
+    "check_tracker": {
+      "_note": "引用回复 TR → 跟进任务（check:#N）。本人在 allowed_cids 白名单群引用任意消息并回复「TR[可选内容]」即触发；cid_names 用于确认消息的来源描述。",
+      "allowed_cids": ["73216314617", "46459012:316550726"],
+      "cid_names": {
+        "73216314617": "助理通知群",
+        "46459012:316550726": "车君怡单聊"
+      }
+    }
   },
   "doc_review": {
     "group_cid": "73216314617",

@@ -114,6 +114,7 @@ from skills.taoge_update import (
     run_taoge_update_flow,
 )
 from lib.utils import get_webhook_url, DATA_DIR, DEFAULT_MY_UID, ContactsDB
+from skills.check_tracker import process_check, parse_check_trigger
 
 DAEMON_URL    = os.environ.get('DINGTALK_DAEMON_URL', 'http://127.0.0.1:19200')
 POLL_INTERVAL = int(os.environ.get('SKILL_ROUTER_INTERVAL', '20'))   # 秒（推送未接入时兜底；可设 SKILL_ROUTER_INTERVAL=60 恢复）
@@ -1169,6 +1170,9 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         return
     msg_id = _make_msg_id(msg)
     if not msg_id:
+        # send 钩子捕获的自发消息在上传前 msg_id=0，由 poll 路径负责处理
+        if msg.get('is_self') is True and text:
+            _log(f'push: self-send captured (no msg_id yet, poll will handle) cid={msg_cid} text={text[:40]}')
         return
 
     # 预审所在群：用户叫停（终止 Palace + 停进度推送）
@@ -1660,6 +1664,48 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
     except Exception as e:
         _log(f'topic_pick error: {e}')
 
+    # check_tracker: 本人发出的引用回复 TR → 跟进任务（push 路径）
+    _check_cfg_p = memo_cfg.get('check_tracker', {})
+    _check_allowed_p = set(
+        str(c).strip() for c in (_check_cfg_p.get('allowed_cids') or []) if str(c).strip()
+    )
+    _check_my_uids_p = (
+        set(str(u).strip() for u in (memo_cfg.get('assistant_group_skill_uids') or []) if str(u).strip())
+        | set(str(a).strip() for a in (memo_cfg.get('assistant_group_skill_aliases') or []) if str(a).strip())
+        | {str(os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)).strip()}
+    )
+    # P2P 私聊（CID 含 ':'）依赖 CID 白名单已足够，JSAPI 路径 is_self 不可靠；群聊仍要验证发送者
+    _check_is_p2p_p = ':' in msg_cid
+    _check_is_self_p = (
+        _check_is_p2p_p
+        or msg.get('is_self') is True
+        or _message_sender_identity(msg) in _check_my_uids_p
+    )
+    if (
+        _check_allowed_p
+        and msg_cid in _check_allowed_p
+        and _check_is_self_p
+        and parse_check_trigger(text)
+    ):
+        # 内容去重：防止 push+poll 双路径对同一消息重复创建
+        _check_content_key_p = text[:200]
+        _check_dedup_id_p = 'check_c:' + msg_cid + ':' + _check_content_key_p
+        if _check_dedup_id_p in memo_seen_ids:
+            memo_seen_ids.add(msg_id)
+            return
+        memo_seen_ids.add(_check_dedup_id_p)
+        try:
+            r = process_check(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg)
+            memo_seen_ids.add(msg_id)
+            if r is True:
+                _log('push: check TR -> 已创建')
+            else:
+                _log('push: check TR -> TaskReminder 不可用')
+        except Exception as e:
+            memo_seen_ids.add(msg_id)
+            _log(f'check error: {e}')
+        return
+
     if _RE_MEMO.search(text):
         if is_memo_processed(msg_id):
             memo_seen_ids.add(msg_id)
@@ -2128,6 +2174,49 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 continue
         except Exception as e:
             _log(f'topic_pick error: {e}')
+
+        # check_tracker: 本人发出的引用回复 TR → 跟进任务
+        _check_cfg = memo_cfg.get('check_tracker', {})
+        _check_allowed = set(
+            str(c).strip() for c in (_check_cfg.get('allowed_cids') or []) if str(c).strip()
+        )
+        _check_my_uids = (
+            set(str(u).strip() for u in (memo_cfg.get('assistant_group_skill_uids') or []) if str(u).strip())
+            | set(str(a).strip() for a in (memo_cfg.get('assistant_group_skill_aliases') or []) if str(a).strip())
+            | {str(os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)).strip()}
+        )
+        # P2P 私聊（CID 含 ':'）依赖 CID 白名单已足够，JSAPI 路径 is_self 不可靠；群聊仍要验证发送者
+        _check_cid_str = str(group_cid).strip()
+        _check_is_p2p = ':' in _check_cid_str
+        _check_is_self = (
+            _check_is_p2p
+            or msg.get('is_self') is True
+            or _message_sender_identity(msg) in _check_my_uids
+        )
+        if (
+            _check_allowed
+            and _check_cid_str in _check_allowed
+            and _check_is_self
+            and parse_check_trigger(text)
+        ):
+            # 内容去重：防止 push+poll 双路径对同一消息重复创建（与 memo content_dedup_id 同源）
+            _check_content_key = text[:200]
+            _check_dedup_id = 'check_c:' + str(group_cid) + ':' + _check_content_key
+            if _check_dedup_id in seen_ids:
+                seen_ids.add(msg_id)
+                continue
+            seen_ids.add(_check_dedup_id)
+            try:
+                r = process_check(msg_id=msg_id, text=text, group_cid=group_cid, config=memo_cfg)
+                seen_ids.add(msg_id)
+                if r is True:
+                    _log('poll: check TR -> 已创建')
+                else:
+                    _log('poll: check TR -> TaskReminder 不可用')
+            except Exception as e:
+                seen_ids.add(msg_id)
+                _log(f'check error: {e}')
+            continue
 
         if _RE_MEMO.search(text):
             if is_memo_processed(msg_id):

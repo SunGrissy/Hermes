@@ -124,6 +124,21 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_topic_seq
                 ON topic_items(topic_seq);
+
+            CREATE TABLE IF NOT EXISTS check_items (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                check_seq        INTEGER NOT NULL,
+                msg_id           TEXT NOT NULL UNIQUE,
+                title            TEXT NOT NULL,
+                due              TEXT,
+                source_text      TEXT,
+                group_cid        TEXT,
+                task_reminder_id INTEGER,
+                status           TEXT DEFAULT 'active',
+                ts_created       INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_check_seq
+                ON check_items(check_seq);
         """)
         # 兼容旧库：增加规范化 URL 列（用于同一文档时间窗口去重）
         try:
@@ -661,6 +676,53 @@ def was_doc_attempted_recently(normalized_url: str, window_seconds: int) -> bool
             row = None  # 旧库无 doc_url_normalized 列时视为未尝试
         c.close()
     return row is not None
+
+
+# ── check_items（引用回复 TR → 跟进任务）───────────────────────
+
+def get_next_check_seq():
+    with _lock:
+        c = _conn()
+        row = c.execute("SELECT MAX(check_seq) FROM check_items").fetchone()
+        c.close()
+        return (row[0] or 0) + 1
+
+
+def is_check_processed(msg_id):
+    with _lock:
+        c = _conn()
+        row = c.execute(
+            "SELECT id FROM check_items WHERE msg_id=?", (str(msg_id),)
+        ).fetchone()
+        c.close()
+        return row is not None
+
+
+def save_check_item(check_seq, msg_id, title, due=None,
+                    source_text=None, group_cid=None, task_reminder_id=None):
+    with _lock:
+        c = _conn()
+        c.execute(
+            "INSERT OR IGNORE INTO check_items "
+            "(check_seq, msg_id, title, due, source_text, group_cid, "
+            " task_reminder_id, status, ts_created) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (check_seq, str(msg_id), title, due, source_text,
+             str(group_cid or ''), task_reminder_id,
+             'active', int(datetime.now().timestamp())),
+        )
+        c.commit()
+        c.close()
+
+
+def get_pending_checks():
+    with _lock:
+        c = _conn()
+        rows = c.execute(
+            "SELECT * FROM check_items WHERE status='active' ORDER BY check_seq"
+        ).fetchall()
+        c.close()
+        return [dict(r) for r in rows]
 
 
 if __name__ == '__main__':
