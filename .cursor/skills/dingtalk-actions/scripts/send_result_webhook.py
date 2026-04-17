@@ -61,8 +61,8 @@ def _get_webhook_url() -> str:
         return ""
 
 
-def send_markdown(webhook_url: str, title: str, text: str) -> tuple[bool, str]:
-    """发送 Markdown 类型消息，text 末尾已带 footer。"""
+def send_markdown(webhook_url: str, title: str, text: str, at_mobiles: list[str] | None = None) -> tuple[bool, str]:
+    """发送 Markdown 类型消息，text 末尾已带 footer。at_mobiles 非空时注入 @mention 通知。"""
     body = {
         "msgtype": "markdown",
         "markdown": {
@@ -70,6 +70,8 @@ def send_markdown(webhook_url: str, title: str, text: str) -> tuple[bool, str]:
             "text": text,
         },
     }
+    if at_mobiles:
+        body["at"] = {"atMobiles": at_mobiles, "isAtAll": False}
     req = urllib.request.Request(
         webhook_url,
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
@@ -131,9 +133,17 @@ def main():
     if scope and "tao-update-scope:" not in content:
         content = content + "\n\ntao-update-scope:" + scope
 
-    text = content + FOOTER
     title = os.environ.get("DINGTALK_TITLE", "").strip() or DEFAULT_TITLE
-    ok, msg = send_markdown(url, title, text)
+    at_mobiles_raw = os.environ.get("DINGTALK_AT_MOBILES", "").strip()
+    at_mobiles = [m.strip() for m in at_mobiles_raw.split(",") if m.strip()] if at_mobiles_raw else None
+    # @mention 附在 footer 后面，而不是正文里
+    if at_mobiles:
+        mention_line = " ".join(f"@{m}" for m in at_mobiles) + " 请关注，阅读完回👌"
+        footer = "\n\n" + mention_line + FOOTER
+    else:
+        footer = FOOTER
+    text = content + footer
+    ok, msg = send_markdown(url, title, text, at_mobiles)
     if ok:
         _log_send(title, len(content))
         print("sent")

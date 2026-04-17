@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,14 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 # 与 PM 后端 data/gamedev_pm_data.json 默认相对路径（含 holidays / workdays）
 _DEFAULT_PM_DATA_REL = "pm-system/backend/data/gamedev_pm_data.json"
+
+# 管线卡点4模块：(模块名, 负责人手机号, webhook_key)
+# 手机号来自 PmSystem /api/data users[].externalIds.dingtalk_mobile
+_PIPELINE_MODULES = [
+    ("PM 关注",  "17610735216", "version_digest_pmo"),  # 张梦君
+    ("APM 关注", "13269668329", "version_digest_pmo"),  # 屈丽茹
+    ("QA 关注",  "15850506062", "version_digest_pmo"),  # 任鹏锐
+]
 _CONFIG_NAME = "work_report_assistant_config.json"
 _ROSTER_NAME = "work_report_assistant_roster.json"
 _CHAT_PATH = "/api/v1/chat"
@@ -193,12 +202,41 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
             "【任务类型】工作日早报\n"
             f"{cal_line}"
             f"【目标日报日期】{pw}（前一工作日，相对运行日）\n\n"
-            "【非技术组】请对照模板「四要素」与上下游表述，识别是否存在信息不对称或可对齐而未对齐之处。\n"
+            "【名单外人员处理铁律】汇总范围严格限于上方人员名单。名单之外的任何人员，"
+            "不得出现在回复的任何部分——包括括号注释、补充说明、漏交提示、「不在汇总范围」等说明，一律不提及。\n\n"
+            "【非技术组】请对照模板「四要素」与上下游表述，识别信息不对称或可对齐而未对齐之处。\n"
             f"【技术组】{tech_note}\n\n"
-            "【输出结构】\n"
-            "1) 上述范围内人员在目标日期的日报提交情况（已交/未交）\n"
-            "2) 未交名单（姓名）\n"
-            "3) 从正文中识别的信息不对称或风险点（分人分点，技术组侧重在做什么与阻塞是否说清）\n"
+            "【格式铁律】\n"
+            "- 回复必须是 Markdown 格式\n"
+            "- 禁止使用表格，全部用列表 + 加粗\n"
+            "- 禁止逐人逐条展开正文原文\n"
+            "- 每条不超过两行\n"
+            "- 禁止在回复任何位置附加「数据说明」「⚠ 数据说明」「注：」等脚注、免责声明或补充说明段落\n\n"
+            "【输出结构（严格按此三节，不增不减）】\n\n"
+            "## 一、提交异常\n\n"
+            "仅列出未提交或内容有明显异常的成员，格式：\n"
+            "- **姓名**：异常情况（未提交 / 内容异常：一句话简述）\n"
+            "全员正常提交时只写：全员已提交，无异常\n\n"
+            "## 二、管线卡点 & 风险\n\n"
+            "将识别到的风险按以下四个模块分类，每模块内按严重程度排列（高→低）。\n"
+            "若某模块无相关风险，该模块只写「暂无」，模块标题不得省略。\n\n"
+            "每条严格使用以下格式（小标题 + 两行 bullet + 空行）：\n"
+            "#### 🔴/🟡/⚠️ **风险点标题**\n"
+            "- 一句话描述（涉及人员）\n"
+            "- **建议确认**：一句话行动指引\n"
+            "（每条结束后空一行，再写下一条）\n\n"
+            "图标规则：🔴 高风险（影响版本节点或跨组阻塞）；🟡 中风险（信息不对称、节点不明）；⚠️ 低风险/数据层面需关注。禁止使用🟢。\n\n"
+            "### PM 关注\n"
+            "开发进度、策划工作推进、版本节点、热更排期、功能开发阻塞\n\n"
+            "### APM 关注\n"
+            "美术资源、外包进度、视觉/动效/音频制作、资产交付\n\n"
+            "### PMO 关注\n"
+            "数据指标波动（付费率、LTV、消耗速率、留存等）、玩家体验洞察、设计决策反馈、产品洞察；注意：所有涉及数据、付费、留存、消耗的风险一律归入本模块，不归 PM 关注\n\n"
+            "### QA 关注\n"
+            "测试验收、热更质量、上线风险、Bug 修复节点\n\n"
+            "## 三、各组一句话\n\n"
+            "每组一行，只写最值得关注的进展或状态，无特别情况写「无异常」：\n"
+            "- **组名**：核心进展/状态\n"
         )
 
     if scenario_id == "weekly_material":
@@ -342,6 +380,43 @@ def post_chat(base_url: str, api_key: str, message: str, timeout: int) -> str:
     return str(reply)
 
 
+def split_pipeline_modules(text: str, modules: list[tuple[str, str, str]]) -> list[tuple[str, str, str, str]]:
+    """
+    将管线卡点正文按模块拆分，返回 [(module_name, phone, content)]。
+    content 不含 ### 标题行，只含子弹列表内容。
+    """
+    results = []
+    for module_name, phone, webhook_key in modules:
+        start_m = re.search(rf"###\s*{re.escape(module_name)}[^\n]*\n", text)
+        if not start_m:
+            results.append((module_name, phone, "暂无", webhook_key))
+            continue
+        content_start = start_m.end()
+        next_m = re.search(r"\n###\s", text[content_start:])
+        if next_m:
+            content = text[content_start: content_start + next_m.start()].strip()
+        else:
+            content = text[content_start:].strip()
+        # 每个 #### 标题前补空行；DingTalk 折叠纯空行，用 \xa0（不换行空格）撑开
+        lines = content.split("\n")
+        spaced: list[str] = []
+        for i, line in enumerate(lines):
+            if line.startswith("####") and i > 0:
+                spaced.append("\xa0")
+            spaced.append(line)
+        content = "\n".join(spaced)
+        results.append((module_name, phone, content or "暂无", webhook_key))
+    return results
+
+
+def extract_pipeline_section(text: str) -> str:
+    """从早报正文中提取「管线卡点 & 风险」一节（## 二 到下一个 ## 之间）。"""
+    m = re.search(r"(##[^\n]*管线卡点[^\n]*\n.*?)(?=\n##\s|\Z)", text, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    return ""
+
+
 def chunk_text(text: str, max_len: int) -> list[str]:
     if len(text) <= max_len:
         return [text]
@@ -361,7 +436,7 @@ def chunk_text(text: str, max_len: int) -> list[str]:
     return [p for p in parts if p]
 
 
-def send_dingtalk_markdown(title: str, text: str, webhook_key: str) -> None:
+def send_dingtalk_markdown(title: str, text: str, webhook_key: str, at_mobiles: list[str] | None = None) -> None:
     if not os.path.isfile(_WEBHOOK_SCRIPT):
         raise FileNotFoundError(f"missing webhook script: {_WEBHOOK_SCRIPT}")
 
@@ -374,6 +449,8 @@ def send_dingtalk_markdown(title: str, text: str, webhook_key: str) -> None:
         env = os.environ.copy()
         env["DINGTALK_TITLE"] = t
         env["DINGTALK_WEBHOOK_KEY"] = webhook_key
+        if at_mobiles:
+            env["DINGTALK_AT_MOBILES"] = ",".join(at_mobiles)
 
         fd, tmp_path = tempfile.mkstemp(suffix=".md", prefix="wra_", text=False)
         try:
@@ -478,11 +555,28 @@ def main() -> int:
         return 1
 
     _log(f"reply length={len(reply)}")
+    pw = ""
+    if args.scenario == "morning_digest":
+        pw = ctx.get("prev_workday", "")
+        if pw:
+            reply = f"# 日报汇总-{pw}\n\n" + reply
     try:
         send_dingtalk_markdown(title, reply, wk)
     except Exception as e:
         _log(f"dingtalk error: {e}")
         return 1
+
+    if args.scenario == "morning_digest" and pw:
+        pipeline_text = extract_pipeline_section(reply)
+        if pipeline_text:
+            for module_name, phone, content, wk_key in split_pipeline_modules(pipeline_text, _PIPELINE_MODULES):
+                module_title = f"{module_name}-{pw}"
+                body = f"## {module_title}\n\n***\n\n{content}"
+                try:
+                    send_dingtalk_markdown(module_title, body, wk_key, at_mobiles=[phone] if phone else None)
+                    _log(f"pipeline '{module_name}' sent to {wk_key}")
+                except Exception as e:
+                    _log(f"webhook error ({module_name}/{wk_key}): {e}")
 
     _log("done")
     return 0
