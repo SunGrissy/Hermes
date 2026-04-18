@@ -53,6 +53,7 @@
 ### 开发工具
 | Skill | 用途 |
 |-------|------|
+| coding-execution-discipline | **写码中与收尾**——方案过重先收敛/回检查点；只清理本次改动引入的孤儿符号；与 `agentx`「事前路径选择」配套，单仓正本 |
 | fastapi-router | FastAPI 路由与 CRUD、鉴权、Pydantic 模型 |
 | frontend-design | 高区分度前端界面设计（v2.0：SAFE/RISK 框架、Anti-Slop 清单、字体三级分类、DESIGN.md 集成） |
 | vanilla-js-ui-patterns | 原生 JS 弹窗、Toast、表格等 UI 模式 |

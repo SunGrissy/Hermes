@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：agentx 事前路径选择 + coding-execution-discipline Skill
+
+**状态**: 已提交并推送
+
+**内容**:
+- `.cursor/rules/agentx.mdc`：新增「事前路径选择（写码前）」；指向 Skill `coding-execution-discipline`；不扩展 GATE 表
+- `.cursor/skills/coding-execution-discipline/SKILL.md`：事中过重收敛、孤儿符号只收本次改动；单仓正本
+- `.cursor/skills/README.md`：清单登记
+
+---
+
 ## [2026-04-18] - 根仓：Design Council / game-review 类 Skill 优化提醒文档
 
 **状态**: 已提交并推送
