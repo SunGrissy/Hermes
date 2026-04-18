@@ -199,7 +199,7 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
             )
         return (
             f"{hard}\n"
-            "【任务类型】工作日早报\n"
+            "【任务类型】工作日早报（V2 战情版）\n"
             f"{cal_line}"
             f"【目标日报日期】{pw}（前一工作日，相对运行日）\n\n"
             "【名单外人员处理铁律】汇总范围严格限于上方人员名单。名单之外的任何人员，"
@@ -209,34 +209,25 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
             "【格式铁律】\n"
             "- 回复必须是 Markdown 格式\n"
             "- 禁止使用表格，全部用列表 + 加粗\n"
-            "- 禁止逐人逐条展开正文原文\n"
+            "- 禁止按人头罗列流水账，必须按「事件状态」聚合\n"
             "- 每条不超过两行\n"
             "- 禁止在回复任何位置附加「数据说明」「⚠ 数据说明」「注：」等脚注、免责声明或补充说明段落\n\n"
-            "【输出结构（严格按此三节，不增不减）】\n\n"
-            "## 一、提交异常\n\n"
-            "仅列出未提交或内容有明显异常的成员，格式：\n"
-            "- **姓名**：异常情况（未提交 / 内容异常：一句话简述）\n"
-            "全员正常提交时只写：全员已提交，无异常\n\n"
-            "## 二、管线卡点 & 风险\n\n"
-            "将识别到的风险按以下四个模块分类，每模块内按严重程度排列（高→低）。\n"
-            "若某模块无相关风险，该模块只写「暂无」，模块标题不得省略。\n\n"
-            "每条严格使用以下格式（小标题 + 两行 bullet + 空行）：\n"
-            "#### 🔴/🟡/⚠️ **风险点标题**\n"
-            "- 一句话描述（涉及人员）\n"
-            "- **建议确认**：一句话行动指引\n"
-            "（每条结束后空一行，再写下一条）\n\n"
-            "图标规则：🔴 高风险（影响版本节点或跨组阻塞）；🟡 中风险（信息不对称、节点不明）；⚠️ 低风险/数据层面需关注。禁止使用🟢。\n\n"
-            "### PM 关注\n"
-            "开发进度、策划工作推进、版本节点、热更排期、功能开发阻塞\n\n"
-            "### APM 关注\n"
-            "美术资源、外包进度、视觉/动效/音频制作、资产交付\n\n"
-            "### PMO 关注\n"
-            "数据指标波动（付费率、LTV、消耗速率、留存等）、玩家体验洞察、设计决策反馈、产品洞察；注意：所有涉及数据、付费、留存、消耗的风险一律归入本模块，不归 PM 关注\n\n"
-            "### QA 关注\n"
-            "测试验收、热更质量、上线风险、Bug 修复节点\n\n"
-            "## 三、各组一句话\n\n"
-            "每组一行，只写最值得关注的进展或状态，无特别情况写「无异常」：\n"
-            "- **组名**：核心进展/状态\n"
+            "【输出结构（严格按此四个 Markdown 标题输出，不增不减）】\n\n"
+            "## 📍 昨日核心推进 (Tracking)\n"
+            "按版本或核心事项聚合昨天的重要进展。格式要求：\n"
+            "- 【版本/事项名】一句话描述进展（@相关人员）\n"
+            "（如果没有核心推进，写「无」）\n\n"
+            "## 🚨 管线摩擦与卡点 (Alerts)\n"
+            "识别跨组阻塞、依赖未决、延期风险、信息不对称。格式要求：\n"
+            "- **风险类型**：一句话描述卡点及影响（@相关人员）\n"
+            "（如果没有卡点，写「无」）\n\n"
+            "## 🎯 今日管理动作 (Actions)\n"
+            "提炼出需要制作人或 PMO 今天介入决策、拍板或跟进的事项。格式要求：\n"
+            "- **需跟进/决策**：一句话说明需要谁做什么\n"
+            "（如果没有需要管理层介入的，写「无」）\n\n"
+            "## 📝 其他常规推进 (Routine)\n"
+            "将不属于核心推进、无风险的日常开发/配置工作一笔带过。格式要求：\n"
+            "- 一句话概括（如：X人正常开发中，无异常）\n"
         )
 
     if scenario_id == "weekly_material":
@@ -336,7 +327,7 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
     raise ValueError(f"unknown scenario: {scenario_id}")
 
 
-def scenario_title(scenario_id: str, ctx: dict[str, str] | None = None) -> str:
+def scenario_title(scenario_id: str, ctx: Optional[dict[str, str]] = None) -> str:
     if scenario_id == "weekly_material" and ctx:
         return f"{ctx.get('range_start', '')}~{ctx.get('range_end', '')} 周报素材"
     titles = {
@@ -350,9 +341,43 @@ def scenario_title(scenario_id: str, ctx: dict[str, str] | None = None) -> str:
     return titles[scenario_id]
 
 
-def post_chat(base_url: str, api_key: str, message: str, timeout: int) -> str:
+def post_chat(base_url: str, api_key: str, message: str, timeout: int, model: Optional[str] = None) -> str:
+    # Support OpenAI compatible endpoint if base_url doesn't end with work-report
+    if "chat/completions" in base_url or "open.bigmodel.cn" in base_url:
+        url = base_url.rstrip("/")
+        if not url.endswith("chat/completions"):
+            url += "/chat/completions"
+        payload = {
+            "model": model or "glm-4",
+            "messages": [{"role": "user", "content": message}]
+        }
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read().decode("utf-8")
+                data = json.loads(raw)
+                return data["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            err_body = e.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"HTTP {e.code}: {err_body}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"network error: {e}") from e
+
+    # Legacy work-report endpoint
     url = base_url.rstrip("/") + _CHAT_PATH
-    body = json.dumps({"message": message}, ensure_ascii=False).encode("utf-8")
+    payload = {"message": message}
+    if model:
+        payload["model"] = model
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         url,
         data=body,
@@ -436,7 +461,7 @@ def chunk_text(text: str, max_len: int) -> list[str]:
     return [p for p in parts if p]
 
 
-def send_dingtalk_markdown(title: str, text: str, webhook_key: str, at_mobiles: list[str] | None = None) -> None:
+def send_dingtalk_markdown(title: str, text: str, webhook_key: str, at_mobiles: Optional[list[str]] = None) -> None:
     if not os.path.isfile(_WEBHOOK_SCRIPT):
         raise FileNotFoundError(f"missing webhook script: {_WEBHOOK_SCRIPT}")
 
@@ -546,10 +571,12 @@ def main() -> int:
         _log("error: base_url missing")
         return 1
 
+    model = (cfg.get("model") or "").strip()
+
     _log(f"scenario={args.scenario} today={today.isoformat()} webhook_key={wk}")
 
     try:
-        reply = post_chat(base_url, api_key, message, timeout)
+        reply = post_chat(base_url, api_key, message, timeout, model=model if model else None)
     except Exception as e:
         _log(f"chat API error: {e}")
         return 1

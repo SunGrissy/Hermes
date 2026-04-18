@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：日志助手早报升级为 V2 战情版
+
+**状态**: 验收通过
+
+**内容**:
+- `dingtalk-desktop/work_report_assistant_run.py`：早报（morning_digest）Prompt 升级为 V2 战情版（📍昨日核心推进、🚨管线摩擦与卡点、🎯今日管理动作、📝其他常规推进）。
+- `dingtalk-desktop/work_report_assistant_run.py`：`post_chat` 接口支持传递 `model` 参数（兼容 OpenAI 格式的网关）。
+
+---
+
+
 ## [2026-04-18] - 根仓：Multica plan 收工快照 + PC 试用 Claude Code 注意事项
 
 **状态**: 已提交并推送
