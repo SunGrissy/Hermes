@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：context-length-reminder 收紧（工具密集/多文件探索强触发）
+
+**状态**: 已提交并推送
+
+**内容**:
+- `.cursor/rules/context-length-reminder.mdc`：强触发类型 3「工具密集 / 多文件探索结束（必提醒）」、《强触发口径》小节、单点小改例外、类型 3/4 合并一条提醒、频率示例用语更新
+
+---
+
 ## [2026-04-18] - external：Khazix skills 克隆说明；根仓同步 cci_system、performeval 子模块指针
 
 **状态**: 已提交并推送
