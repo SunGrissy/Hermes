@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：Skill 迭代 - structured-communication 新增管理沟通公式
+
+**状态**: 验收通过
+
+**内容**:
+- `.cursor/skills/structured-communication/SKILL.md`：新增「管理沟通的有效信息公式」（谁/时间/事/程度 + 受众优先原则），从日志助手 V2 战情版提炼。
+- `.cursor/skills/README.md`：更新 Skill 清单描述，纳入新增的管理沟通公式。
+
+**Skill 改进建议**: 本次迭代遵循 `skill-evolution.mdc` 规范，将实战中的日志汇总经验沉淀为跨场景复用的认知框架。
+
+---
+
+
 ## [2026-04-18] - 根仓：日志助手早报升级为 V2 战情版
 
 **状态**: 验收通过
