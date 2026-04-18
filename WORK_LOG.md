@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：Design Council / game-review 类 Skill 优化提醒文档
+
+**状态**: 已提交并推送
+
+**内容**:
+- 新增 `docs/superpowers/design-council-review-skills-optimization-reminder.md`：`boss-design-council`、`game-design-council`、`game-review` 分工、北极星、达尔文式迭代流程、最低输出 schema、简版 rubric、反模式与合并前自检
+
+---
+
 ## [2026-04-18] - 根仓：context-length-reminder 收紧（工具密集/多文件探索强触发）
 
 **状态**: 已提交并推送
