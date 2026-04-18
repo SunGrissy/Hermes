@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：Multica 接入 spec 与 writing-plans 实施计划
+
+**状态**: 验收通过
+
+**内容**:
+- `docs/superpowers/specs/2026-04-18-multica-integration-design.md`：方案 A 与 pm-system 试点定稿（§3.1、§8）、钉钉与 Multica 端到端及能力边界（§5–§6）、writing-plans 引用更新（§9、§10）
+- `docs/superpowers/plans/2026-04-18-multica-integration.md`：Task1–6 实施清单（Multica CLI、试点、钉钉 Stream 桥、可选 WORK_LOG 提示与试点验收）
+
+---
+
 ## [2026-04-18] - 根仓：agentx 事前路径选择 + coding-execution-discipline Skill
 
 **状态**: 已提交并推送
