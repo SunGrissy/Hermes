@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - external：Khazix skills 克隆说明；根仓同步 cci_system、performeval 子模块指针
+
+**状态**: 已提交并推送
+
+**内容**:
+- 新增 `external/README.md`：说明 [KKKKhazix/khazix-skills](https://github.com/KKKKhazix/khazix-skills) 在本机 `git clone` / ZIP 解压方式及与 `.cursor/skills/` 的衔接注意点
+- 父仓库子模块指针：`cci_system` → `01f8a50`、`performeval` → `4c6d589`（与各自 `origin` 当前 `HEAD` 一致；`pm-system` / `task_reminder` / `teamscore` 因子模块内仍有本地变更未纳入本次提交）
+
+---
+
 ## [2026-04-16] - dingtalk-desktop：Webhook 脚本迁至 dingtalk-actions；日报名单与 digest 配置
 
 **状态**: 验收通过
