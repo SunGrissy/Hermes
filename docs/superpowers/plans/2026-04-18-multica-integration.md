@@ -384,3 +384,82 @@ Plan 已保存至 `docs/superpowers/plans/2026-04-18-multica-integration.md`。
 **2. Inline Execution** — 本会话用 executing-plans 按 Task 顺序执行，遇钉钉/Multica 真机步骤暂停等你操作。
 
 回复 **「1」** 或 **「2」** 即表示选择的执行模式（由你或后续会话实施；本回复不自动执行 Task 1 的安装命令）。
+
+---
+
+## 收工快照（2026-04-18）
+
+> 本会话整理：进展 + 剩余 ToDo + **周一换工作用 Windows PC** 的迁移要点。  
+> 权威 spec：`docs/superpowers/specs/2026-04-18-multica-integration-design.md`。
+
+### 当前进展（已达成）
+
+| 项 | 状态 |
+|----|------|
+| **Multica Cloud** | 已在 Web 登录；workspace（如 UU-MyAgents）与试点 **Project** 已创建。 |
+| **CLI 建单闭环** | `multica issue create`（含 `--project <项目 UUID>`）已验证：**看板可即时出现新 Issue**。Project ID 即浏览器地址栏 `/projects/` 后一段 UUID。 |
+| **仓库落地** | `tools/multica-dingtalk-bridge/`：`README.md`、`requirements.txt`、`dispatch_bot.py` 已就绪（钉钉 Stream → 本机 `multica issue create`）。 |
+| **macOS CLI** | 可通过 `brew install multica-ai/tap/multica` 安装 `multica`（本机曾用此路径装通）。 |
+
+### 已知坑（已记录，不必重复踩）
+
+| 项 | 说明 |
+|----|------|
+| **daemon 起不来** | `~/.multica/daemon.log` 若提示 **no agent CLI**，需在 PATH 中提供 `cursor-agent`（或 `claude` / `codex` 等其一）。Cursor 侧可装官方 CLI 并保证 `~/.local/bin` 等在 PATH；**仅钉钉派单建单**不依赖 daemon。 |
+| **子模块 / 根仓库** | 根目录若有其他子模块或脏文件，与 Multica 工具目录无关；提交时只 `git add tools/multica-dingtalk-bridge/` 下需入库文件即可。 |
+
+### 剩余 ToDo（按 plan / spec）
+
+| 优先级 | 内容 | 对应 |
+|--------|------|------|
+| 高 | **钉钉 Stream 真机联调**（若尚未做）：开放平台机器人 + Stream、`DINGTALK_CLIENT_*`、运行 `dispatch_bot.py`，私聊/群 `@` 发 `#派单 标题` + 可选第二行描述，确认 Multica 与机器人回复。 | Task 4 Step 3 |
+| 中 | **`tools/.../README.md` 试点表**：填入默认 `workspace_id`、project 名称与 **project id**（勿写 Client Secret）。 | Task 2 Step 5 |
+| 中 | **`multica daemon start`**：在已安装编码 Agent CLI 的前提下确认 `multica daemon status` 为 running（需要本机 Runtime 再接）。 | Task 1 |
+| 低 | **`pm-system/WORK_LOG.md` 顶部**增加「Multica 协作提示」小节（plan Task 5，推荐）。 | Task 5 |
+| 持续 | **4 周试点验收**：≥10 条 pm-system 相关 Issue、≥1 条非本人认领、关单与 WORK_LOG 互链、复盘 A/B（plan Task 6）。 | Task 6 |
+| 流程 | 根仓库 **git commit**：按 `git-workflow.mdc`，在用户明确「请提交 / 验收通过」时再提交 `tools/multica-dingtalk-bridge/`（勿夹带其他会话脏文件）。 | — |
+
+### 周一换到工作电脑（Windows PC）要做啥
+
+工作区约定：**主力开发环境为 Windows PowerShell**（见 `shell-git.mdc`）。换机本质是 **重装 CLI + 重登 Multica + 重建 Python 虚拟环境 + 钉钉凭据**，不依赖把 Mac 整机搬过去。
+
+1. **拉代码**  
+   - 在新 PC 上 clone / pull **MyAgents** 根仓库，确认存在 `tools/multica-dingtalk-bridge/`。
+
+2. **安装 Multica CLI（Windows，无 Homebrew）**  
+   - 使用 [Multica 官方文档 / 安装方式](https://raw.githubusercontent.com/multica-ai/multica/main/CLI_AND_DAEMON.md) 中适用于 Windows 的安装指引（安装包或官方脚本等，以当前文档为准）。  
+   - 在 **PowerShell** 中验证：`multica version`（若 `python` 不可用，优先用 `py` 仅针对本仓库 Python 脚本，**multica 为独立二进制则直接调用 `multica`**）。
+
+3. **重新接入 Cloud**  
+   - 执行 `multica setup`，用浏览器完成登录（与 Mac 上同一账号即可）。  
+   - `multica config show`，必要时 `multica config set workspace_id <与现网一致的 UUID>`。  
+   - **一般不建议**把 Mac 上 `~/.multica/` 整目录裸拷到工作机（含 token，且路径/权限易出问题）；除非内控允许且你清楚风险。
+
+4. **确认试点项目**  
+   - Project ID 与 Mac 相同：`https://multica.ai/.../projects/<uuid>` 最后一节；CLI 试跑一条 `multica issue create ... --project <uuid>` 验证。
+
+5. **钉钉桥（Python）**  
+   - `cd tools\multica-dingtalk-bridge`  
+   - `py -m venv .venv`  
+   - `.\.venv\Scripts\Activate.ps1`  
+   - `pip install -r requirements.txt`  
+   - 设置环境变量或参数传入 **Client ID / Client Secret**（勿写入仓库）；可选 `DINGTALK_WEBHOOK_URL`。  
+   - `python dispatch_bot.py`（或 `py dispatch_bot.py`，以本机 PATH 为准）。
+
+6. **daemon（若需要）**  
+   - 在工作机安装并配置 **Cursor CLI / 其他受支持 Agent CLI**，保证 PowerShell 里 `Get-Command cursor-agent`（或文档列出的名称）可用，再 `multica daemon start`。  
+   - 仍失败则读 **`%USERPROFILE%\.multica\daemon.log`**（路径以本机为准，与 Mac 的 `~/.multica/daemon.log` 对应）。
+
+7. **网络与公司策略**  
+   - 放行本机访问 **钉钉开放平台 / Stream** 与 **multica.ai**（及 CLI 所需端点），否则建单或长连会失败。
+
+8. **编码习惯（Windows）**  
+   - PowerShell 下**不要用 `&&` 串联**（用 `;`）；本仓库 Python **避免在 print 里用 emoji**（部分终端 GBK 会炸）。桥接脚本本身以英文/ASCII 日志为主，一般无妨。
+
+### PC 试用 Claude Code（明日，工作机）
+
+- **安装与 PATH**：按 Anthropic 官方「Claude Code」Windows 安装指引装好后，**新开一个 PowerShell**，执行 `Get-Command claude`（或文档给出的命令名）确认在 PATH 里；不要只在安装向导里点完就关窗，避免当前会话拿不到 PATH。  
+- **登录与密钥**：首次运行会走浏览器/账号流程；API Key、组织配置等只放在 **Claude 官方配置 / 本机环境变量**，**不要**写进仓库、不要贴进钉钉/邮件正文。  
+- **与 Multica daemon**：`~/.multica/daemon.log` 里列出的受支持 CLI 含 **`claude`**。若你希望工作机上 **Multica 本机 runtime** 能拉起：先在同一 PowerShell 里确认 `claude` 可执行，再 `multica daemon start`；仍失败就看 `%USERPROFILE%\.multica\daemon.log`。  
+- **网络**：公司出口若拦截 Anthropic API，需提前问 IT 或走合规通道；否则会出现「能装不能连」。  
+- **习惯对齐本仓**：PowerShell 用 `;` 串联命令；终端里少依赖 emoji 输出；先在 **小目录 / 单任务** 试跑，再进大仓库，避免一上来全仓索引拖慢或误改。

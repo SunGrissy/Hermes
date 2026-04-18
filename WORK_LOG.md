@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-18] - 根仓：Multica plan 收工快照 + PC 试用 Claude Code 注意事项
+
+**状态**: 已提交并推送
+
+**内容**:
+- `docs/superpowers/plans/2026-04-18-multica-integration.md`：收工快照后续补充「PC 试用 Claude Code（明日，工作机）」— 安装/PATH、密钥、与 `multica daemon`、网络、PowerShell 与试跑习惯
+- `tools/multica-dingtalk-bridge/`：README、requirements、`dispatch_bot.py` 纳入版本库（钉钉 Stream → 本机 `multica issue create`）
+
+---
+
 ## [2026-04-18] - 根仓：Multica 接入 spec 与 writing-plans 实施计划
 
 **状态**: 验收通过
