@@ -10,6 +10,19 @@
 
 ---
 
+## [2026-04-19] - 根仓：Skill 互补 — frontend-design / html-slide-deck 吸收 Claude Design 纪律
+
+**状态**: 已提交并推送
+
+**内容**:
+- `.cursor/skills/frontend-design/SKILL.md`：YAML 头、姊妹 Skill、HTML 通用交付物与 Claude Design 提炼（需求门禁、固定画幅、localStorage、探索交付、反填充与版权）、与 structured-communication 分工说明（v2.1）。
+- `.cursor/skills/html-slide-deck/SKILL.md`：description 与姊妹引用、幻灯工程可选习惯、变更记录（v1.1）。
+- `.cursor/skills/README.md`：清单描述与 ai-content-collaboration 分流说明。
+
+**备注**: 未纳入本次提交——`.cursor/skills/data-investigation-playbook/README.md`、`.cursor/skills/gelman-perspective/README.md` 等其余工作区改动（属其他会话或未决项）。
+
+---
+
 ## [2026-04-18] - 根仓：Skill 迭代 - structured-communication 新增管理沟通公式
 
 **状态**: 验收通过

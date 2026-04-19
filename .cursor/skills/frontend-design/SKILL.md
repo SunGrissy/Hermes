@@ -1,6 +1,23 @@
+---
+name: frontend-design
+description: >-
+  高区分度前端与 HTML 视觉交付：Web 界面 + 非网页类 HTML（幻灯/一屏原型/印刷页）。
+  SAFE/RISK、Anti-Slop、字体分级、DESIGN.md；并吸收「Claude Design」式需求门禁与交付纪律（宿主无关）。
+  Use when building or redesigning web UI, landing pages, dashboards, or HTML-first visual artifacts outside classic web patterns.
+---
+
 # 前端设计 Skill
 
-> 生成有辨识度、生产级前端界面，拒绝 AI 审美流水线。
+> 生成有辨识度、生产级前端界面，拒绝 AI 审美流水线；**HTML 亦是通用视觉媒介**，不限于传统网页。
+
+## 姊妹 Skill
+
+| 场景 | 优先加载 |
+|------|-----------|
+| **演示文稿 / 打印 PDF 幻灯** | `html-slide-deck`（叙事密度、内嵌组件库、`@media print`） |
+| **应用界面 / 落地页 / 仪表盘** | 本 Skill（SAFE/RISK、字体与 token、反套路） |
+
+两者**不合并为单文件**：触发词不同，避免一个超长 Skill 难以被路由命中。内容上用交叉引用补齐边界。
 
 ## 触发条件
 
@@ -11,8 +28,38 @@
 
 ## 适用场景
 
-- 适用于：HTML/CSS/JS 原生页面、React/Vue 组件、Streamlit 自定义样式、静态站点、内部工具 UI
+- 适用于：HTML/CSS/JS 原生页面、React/Vue 组件、Streamlit 自定义样式、静态站点、内部工具 UI；**以及**固定画幅的 HTML 幻灯、单文件可点原型、打印导向的单页物料
 - 不适用于：移动端原生应用（iOS/Android）、游戏内 UI（引擎内 Widget）、纯后端 API 设计
+
+---
+
+## HTML 通用交付物：Claude Design 流程提炼（宿主无关）
+
+以下从「Claude Design」类工作流抽取**可落在任意编辑器/仓库**的纪律，不依赖特定预览器或私有协议。
+
+### 需求与依据（动手前）
+
+1. **先对齐交付形态**：网页 / 幻灯 / 原型 / 印刷，各自信息密度与字号下限不同（幻灯见 `html-slide-deck` 的密度原则）。
+2. **先找视觉依据**：`DESIGN.md`、代码里的主题/token、品牌色与字体、或用户提供的截图/Figma 说明。无依据时宁可明确假设，也不要默默套通用 SaaS 模板。
+3. **门禁强度**：需求模糊时做**一轮**精简澄清（受众、时长或页数、必须离线与否、变体数量）；上下文已足则直接出 v0 再迭代，不必为问而问。
+
+### 版式与状态（固定画幅类）
+
+- **固定比例画布**（如 16:9）：外层 letterbox（黑边或中性底）+ `transform: scale()` 适配视口；**翻页/进度控件放在缩放区域外**，避免小屏上点不到。
+- **迭代友好**：幻灯或时间轴类，建议用 `localStorage` 记录当前页码或播放头，刷新不丢位置（键名与数据结构在实现里写清即可）。
+
+### 探索型交付
+
+- 用户明确要求「多方案 / 对比 / A-B」时：在**单文件**内用分区、多 slide 或显式变体切换，优先覆盖**多个维度**（信息架构、色温、密度），避免仅换主色敷衍。
+
+### 内容与版权
+
+- **反填充**：无信息增量的占位段落、套路 KPI、纯装饰图标——默认拒绝；每一屏都应对叙事或决策有贡献。
+- **版权与山寨**：不 1:1 复刻他人产品专有界面或识别性布局；可抽象需求后做原创结构。
+
+### 与 `ai-content-collaboration` 的关系
+
+该 Skill **已废弃**，合并至 **`structured-communication`**（文案协作、反馈句式、节奏）。**视觉与 HTML 工程**不走那条线，避免把「写清楚」和「画出来」混在一个 Skill 里。
 
 ---
 
@@ -199,3 +246,4 @@ Inter, Roboto, Arial, Helvetica, Open Sans, Lato, Montserrat, Poppins, Raleway
 |------|------|------|----------|
 | 2025-03 | v1.0 | 初始创建，基础美学指导 | — |
 | 2026-04-12 | v2.0 | 重大升级：融入 gstack 设计体系借鉴（SAFE/RISK 框架、Anti-Slop 清单、字体三级分类、DESIGN.md 集成、Agentic Protocol 三步工作流、诚实边界），符合 skill-quality-gate 标准 | AgentGstk |
+| 2026-04-19 | v2.1 | 增加 YAML 头与「姊妹 Skill」；吸收 Claude Design 式 HTML 通用交付纪律；明确与 structured-communication / html-slide-deck 分工 | AgentDesn |

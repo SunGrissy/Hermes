@@ -12,7 +12,7 @@
 | structured-communication | **结构化表达教练**——表达纪律（先结论后展开、说人话、密度控制）+ **管理沟通有效信息公式**（谁/时间/事/程度 + 受众优先）+ 三种协作模式 + 高效反馈指南，Agent 自己的输出也遵守 |
 | digital-twin-voice | 数字分身措辞与主人翁立场（禁用「你们」）；含双目录同步说明 |
 | leadership-report-craft | 向上汇报结构化方法（思考作业 vs 成果汇报、受众校准、敏感信息处理） |
-| ai-content-collaboration | ⚠️ **已废弃**，合并至 `structured-communication` |
+| ai-content-collaboration | ⚠️ **已废弃**，合并至 `structured-communication`（文案与反馈节奏；**不**承担 HTML/视觉交付——幻灯见 `html-slide-deck`，界面见 `frontend-design`） |
 | producer-dialogue | ⚠️ **已废弃**，表达纪律迁入 `structured-communication`，同步规则见 `digital-twin-voice` |
 
 ### Agent 体系自治
@@ -55,10 +55,10 @@
 |-------|------|
 | coding-execution-discipline | **写码中与收尾**——方案过重先收敛/回检查点；只清理本次改动引入的孤儿符号；与 `agentx`「事前路径选择」配套，单仓正本 |
 | fastapi-router | FastAPI 路由与 CRUD、鉴权、Pydantic 模型 |
-| frontend-design | 高区分度前端界面设计（v2.0：SAFE/RISK 框架、Anti-Slop 清单、字体三级分类、DESIGN.md 集成） |
+| frontend-design | 高区分度前端 + **HTML 通用视觉交付**（SAFE/RISK、Anti-Slop、DESIGN.md；含「Claude Design」式需求门禁与固定画幅纪律）；与 `html-slide-deck` **互补不合并** |
 | vanilla-js-ui-patterns | 原生 JS 弹窗、Toast、表格等 UI 模式 |
 | webapp-testing | Playwright 本地 Web 应用测试 |
-| html-slide-deck | HTML 演示文稿生成（深色主题，浏览器打印为 PDF） |
+| html-slide-deck | HTML 演示文稿（深色主题、打印 PDF、叙事密度与内嵌组件库）；审美与落地页反套路见 `frontend-design` |
 | pm-data-sync | PmSystem 数据同步与冲突合并 |
 
 ### Git & 部署

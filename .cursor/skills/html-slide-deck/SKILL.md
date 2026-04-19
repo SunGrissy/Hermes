@@ -1,6 +1,9 @@
 ---
 name: html-slide-deck
-description: 用 HTML/CSS 生成演示文稿级别的幻灯片，深色主题，支持浏览器直接打印为 PDF。包含完整组件库（数据卡片、高亮框、双栏、步骤列表、表格等）。Use when the user asks to create slides, presentations, decks, 演示文稿, 汇报材料, PPT, or wants to turn documents/notes into visual presentation format.
+description: >-
+  用 HTML/CSS 生成演示文稿级幻灯片（深色主题、浏览器打印 PDF），含数据卡片/高亮框/双栏等组件库。
+  与 frontend-design 互补：本 Skill 管叙事与幻灯工程；差异化审美与反套路落地页见 frontend-design。
+  Use when the user asks for slides, decks, 演示文稿, 汇报材料, PPT, or turning notes into a print-ready HTML deck.
 ---
 
 # HTML 演示文稿生成
@@ -18,6 +21,22 @@ description: 用 HTML/CSS 生成演示文稿级别的幻灯片，深色主题，
 CSS 样式系统已**完整内嵌在本 SKILL.md** 的「色彩系统」和各组件代码示例中，无需读取外部文件。
 
 如工作区内存在历史幻灯片 HTML 文件（如 `会议材料/` 下的 `.html`），可读取其 `<style>` 块作为补充参考，但不强制依赖。生成新演示时，以本文件的组件速查为准重新构建 CSS。
+
+## 姊妹 Skill：`frontend-design`
+
+| 本 Skill（html-slide-deck） | `frontend-design` |
+|------------------------------|-------------------|
+| 页序叙事、信息密度、打印分页、本文件内嵌的幻灯组件与色板 | Web/落地页的 SAFE/RISK、字体三级、广义的 Anti-Slop、**非幻灯**的 HTML 物料 |
+
+幻灯里使用的**左侧色条、卡片栅格**是「会议叙事」的信息手段；若把同一视觉**机械套到产品官网**，易落入套路化——那种场景请走 `frontend-design` 的反模式清单。
+
+## 与 Claude Design 对齐的幻灯工程习惯（可选）
+
+以下不依赖任何专有宿主，在仓库内手写 HTML 即可采纳。
+
+1. **刷新不断档**：实现翻页时，可将当前页索引写入 `localStorage`（自定义键名），`DOMContentLoaded` 时读回并定位。
+2. **批注协作**：若使用带 DOM 引用的评审环境，可在每页根节点加 `data-screen-label`，取值与页码条一致，**人类从第 1 页算起**（如 `05 关键结论`）。
+3. **固定画幅外置控件**：缩放适配视口时，上一页/下一页等控件放在**不参与 scale 的外层**，避免小屏不可点。
 
 ## 幻灯片基本结构
 
@@ -171,3 +190,9 @@ CSS 样式系统已**完整内嵌在本 SKILL.md** 的「色彩系统」和各�
 - 颜色保真（`print-color-adjust: exact`）
 
 用户只需：浏览器打开 → Ctrl+P → 目标选"另存为 PDF" → 边距选"无" → 打印
+
+## 变更记录
+
+| 日期 | 版本 | 变更 | 来源会话 |
+|------|------|------|----------|
+| 2026-04-19 | v1.1 | description 与姊妹 Skill 交叉引用；补充 Claude Design 式幻灯工程可选习惯；变更记录表 | AgentDesn |
