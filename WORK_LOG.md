@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-19] - 根仓：Multica spec 拆单原则 + Hermes 与 Multica/钉钉/Cursor 协作规划
+
+**状态**: 已提交并推送
+
+**内容**:
+- `docs/superpowers/specs/2026-04-18-multica-integration-design.md`：新增 §7.1 Issue 拆单原则（粒度、Owner/执行者责任、派单拆与执行拆、与 Hermes 建议边界）；§4 增加可选 Hermes 文档交叉引用。
+- `docs/superpowers/specs/2026-04-19-hermes-agent-multica-collaboration.md`：Hermes 定位表、拆单衔接、日常/定时双泳道 Mermaid、技能与安全注意事项、外部链接。
+
+---
+
 ## [2026-04-18] - 根仓：Skill 迭代 - structured-communication 新增管理沟通公式
 
 **状态**: 验收通过
