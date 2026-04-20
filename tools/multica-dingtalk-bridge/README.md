@@ -18,6 +18,8 @@
 
 **可选**：`MULTICA_BIN` — 若机器人提示找不到 `multica`，多半是派单桥进程 **PATH 里没有安装目录**；可写绝对路径到 `multica.exe`，或始终用 **`run_bridge.ps1`** 启动（脚本会合并系统与用户 PATH）。
 
+**可选**：`MULTICA_WORKSPACE_WEB_PATH` — 浏览器里工单 URL 中 workspace 段，例如 `https://multica.ai/uu-myagents/issues/UUM-12` 中的 **`uu-myagents`**。建单成功回复里的「点击查看」会拼成 `{MULTICA_APP_URL 或 https://multica.ai}/{该段}/issues/{identifier}`。若 CLI 返回的 JSON 里已含 `html_url` / `url` 等字段，则优先用接口 URL。
+
 ## Multica 试点配置（Task 2，填好后勿提交密钥）
 
 在 Multica Web（Cloud：`https://multica.ai/app`）完成 **pm-system 试点** 项目与 Agent 后，把下面占位符换成你环境里的值，便于 CLI 与派单一致。
@@ -87,7 +89,9 @@ python dispatch_bot.py
 以 **`派单`** 或 **`#派单`** 开头，紧跟标题；从第二行起为描述（可选）。  
 其它消息**不会**收到机器人回复（避免刷屏）。
 
-**取消工单**：以 **`删除派单`** 或 **`#删除派单`**（或 **`取消派单` / `#取消派单`**）开头，同一行写 **`UUM-10`** 这类标识，或写 **短号 `10`**（桥会在当前 Workspace 下最多 **500** 条 `issue list` 结果里按 `number` 匹配，再调用 CLI）。也可写 **Issue UUID**。
+**取消工单**：以 **`删除派单`** 或 **`#删除派单`**（或 **`取消派单` / `#取消派单`**）开头，写 **`UUM-10`**、**短号 `10`**（在最多 **500** 条 `issue list` 里按 `number` 匹配）或 **Issue UUID**。**多个引用**可用 **顿号 `、`**、中英文逗号/分号或空白分隔，例如 `删除派单 1、2、6` 或 `删除派单1、2、6`（最多 **50** 条）；会按解析结果逐条调用 `issue status … cancelled`，并在一条回复里汇总成功 / 解析失败 / 接口失败。
+
+**查工单**：仅发 **`查工单`** 或 **`#查工单`**（勿跟其它文字），机器人回复 **状态分布**（与各 `issue list --status` 的 `total` 一致）+ **按优先级前 10 条**（`urgent` > `high` > `medium` > `low`，未知优先级殿后；同档按 **`created_at` 由早到晚**）。列表数据来自一次 **`issue list --limit 500`**；若 `has_more` 为真，文末会有说明。
 
 示例：
 
@@ -109,9 +113,13 @@ python dispatch_bot.py
 删除派单 10
 ```
 
-## 建单成功回复里的统计
+```text
+删除派单 1、2、6、7、8、9、10
+```
 
-机器人会拉取 **当前 Workspace 工单总数**（`issue list` 的 `total`）以及 **各状态条数**（对每个状态各执行一次 `issue list --status <状态> --limit 1` 读 `total`）。若配置了 `MULTICA_PROJECT_ID`，统计限定在该项目。
+## 建单成功回复版式
+
+机器人按固定版式回复：**编号**置顶 → 分隔线 → **工单已写入** / **标题** / **描述**（与钉钉正文一致）→ **点击查看**（工单直链，见上节 `MULTICA_WORKSPACE_WEB_PATH`）→ 分隔线 → **工单总览** 仅一行 **`待办：N`**（`todo` 状态条数，与 `issue list --status todo` 的 `total` 一致）。若配置了 `MULTICA_PROJECT_ID`，该待办数限定在该项目。
 
 ## 可选出站
 

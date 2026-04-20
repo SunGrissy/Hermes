@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - Multica 钉钉派单桥：查工单、多 ID 取消、建单版式与 env 示例
+
+**状态**: 已提交并推送
+
+**内容**:
+- `tools/multica-dingtalk-bridge/dispatch_bot.py`：`查工单` / `#查工单`（状态分布 + 优先级前 10）；`删除派单` 支持顿号/逗号等**多引用**（预拉 list、批量 `cancelled`）；建单成功回复版式与工单直链（`MULTICA_WORKSPACE_WEB_PATH` / API url）；`_multica_issue_set_cancelled` 等整理。
+- `README.md`、`.env.example`：口令与配置说明同步。
+
+---
+
 ## [2026-04-20] - pm-system：quick_start 重启 Multica 派单桥时结束旧终端
 
 **状态**: 已提交并推送
