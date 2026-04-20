@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - pm-system：FastAPI 依赖下限与 Pydantic 2.12 兼容
+
+**状态**: 已提交并推送（子模块 `pm-system` + 根指针）
+
+**内容**:
+- `pm-system/backend/requirements.txt`：`fastapi>=0.115.0`，避免旧版 FastAPI 与 Pydantic 2.12 组合导致 `FieldInfo.in_` / OAuth2 表单相关启动失败。
+
+---
+
 ## [2026-04-20] - cci_system：投放导出列名兼容、v2 补全死代码修复、局域网可访问说明相关版本 v1.2
 
 **状态**: 已提交并推送（子模块 + 根指针）
