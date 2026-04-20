@@ -1,6 +1,6 @@
 ---
 description: 验收流程唯一入口 — 用户说"验收"时按此文件从头到尾执行，不可跳步
-alwaysApply: true
+alwaysApply: false
 ---
 
 # 验收流程（Acceptance Checklist）

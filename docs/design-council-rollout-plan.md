@@ -1,6 +1,6 @@
 # Design Council 共建推进清单
 
-> 目标：让战斗策划在 Cursor 里用上 boss-design-council 和 game-design-council，形成"设计过程中自检"的习惯。
+> 目标：让战斗策划在 Cursor 里用上 **design-council**（Boss/通用双模式，已合并原 boss-design-council 与 game-design-council），形成"设计过程中自检"的习惯。
 > 原则：不是制作人推一套工具下去让他们用，是**一起用、一起改、让他们觉得这是自己的东西**。
 
 ---
@@ -10,7 +10,7 @@
 **目标**：验证智囊团模式在真实场景中有没有用，同时发现第一批改进点。
 
 - [ ] **选种子用户**：选一个对 AI 工具不排斥、手上刚好有在做方案的战斗策划
-- [ ] **帮他装好**：把 `boss-design-council/` 和 `game-design-council/` 复制到他的 `.cursor/skills/` 下
+- [ ] **帮他装好**：把仓库内 `.cursor/skills/design-council/` 同步到他的 `%USERPROFILE%\.cursor\skills\design-council\`（与 README 双目录约定一致）
 - [ ] **一起跑一次**：制作人坐旁边，策划提供自己正在做的真实方案，一起看智囊团讨论
   - 观察：策划的表情和反应——哪个智囊的提问让他"愣了一下"？
   - 观察：哪些提问他觉得"问得好"，哪些觉得"这不是问题"？

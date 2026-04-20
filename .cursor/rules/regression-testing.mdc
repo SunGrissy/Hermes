@@ -1,7 +1,7 @@
 ---
-description: 通用回归测试规则 - 验收/收工口令触发的自动回归流程（适用于所有项目）
+description: 通用回归测试规则 - 验收/收工口令触发的自动回归流程（适用于所有项目）。用户说"验收""收工"时激活。
 globs:
-alwaysApply: true
+alwaysApply: false
 ---
 
 # 回归测试规则

@@ -277,6 +277,7 @@ def _load_change_template() -> dict:
         'progress_fmt_assigned': '已指派+{count}',
         'progress_fmt_manual_checked': '节点勾选+{count}',
         'progress_fmt_in_progress': '开发中+{count}',
+        'progress_fmt_acceptance': '验收中+{count}',
         'progress_fmt_testing': '测试中+{count}',
         'progress_fmt_draft_drop': '草稿减少{count}',
         'progress_fmt_delivery_groups': '交付检查完成+{count}（{names}）',
@@ -1073,6 +1074,7 @@ def _build_metrics_map(
             'unassigned': max(unassigned, 0),
             'blocked': max(blocked, 0),
             'testing': int((status_bd if isinstance(status_bd, dict) else {}).get('testing') or 0),
+            'acceptance': int((status_bd if isinstance(status_bd, dict) else {}).get('acceptance') or 0),
             'in_progress': int((status_bd if isinstance(status_bd, dict) else {}).get('in_progress') or 0),
             'draft': int((status_bd if isinstance(status_bd, dict) else {}).get('draft') or 0),
             'manual_total': manual_total,
@@ -1162,6 +1164,7 @@ def _build_change_facts(
             d_unassigned = int(b.get('unassigned') or 0) - c['unassigned']
             d_manual = int(c.get('manual_checked') or 0) - int(b.get('manual_checked') or 0)
             d_in_progress = int(c.get('in_progress') or 0) - int(b.get('in_progress') or 0)
+            d_acceptance = int(c.get('acceptance') or 0) - int(b.get('acceptance') or 0)
             d_testing = int(c.get('testing') or 0) - int(b.get('testing') or 0)
             d_draft_drop = int(b.get('draft') or 0) - int(c.get('draft') or 0)
             delivery_lines = _delivery_diff_lines_safe(tpl, b, c)
@@ -1174,6 +1177,7 @@ def _build_change_facts(
                 or d_unassigned > 0
                 or d_manual > 0
                 or d_in_progress > 0
+                or d_acceptance > 0
                 or d_testing > 0
                 or d_draft_drop > 0
                 or len(d_delivery_groups) > 0
@@ -1191,6 +1195,8 @@ def _build_change_facts(
                     parts.append(_fmt_change_tpl(tpl, 'progress_fmt_manual_checked', '节点勾选+{count}', count=d_manual))
                 if d_in_progress > 0:
                     parts.append(_fmt_change_tpl(tpl, 'progress_fmt_in_progress', '开发中+{count}', count=d_in_progress))
+                if d_acceptance > 0:
+                    parts.append(_fmt_change_tpl(tpl, 'progress_fmt_acceptance', '验收中+{count}', count=d_acceptance))
                 if d_testing > 0:
                     parts.append(_fmt_change_tpl(tpl, 'progress_fmt_testing', '测试中+{count}', count=d_testing))
                 if d_draft_drop > 0:
@@ -3002,7 +3008,10 @@ def _fallback_from_json(pm_url):
         blocked = sum(1 for f in vf if f.get('isBlocked') or f.get('stage') == 'blocked')
         in_prog = sum(
             1 for f in vf
-            if (not _json_feat_done(f)) and f.get('stage') in ('dev', 'qa', 'testing', 'in_progress')
+            if (not _json_feat_done(f)) and (
+                f.get('stage') in ('dev', 'qa', 'testing', 'in_progress', 'acceptance')
+                or (f.get('status') or '').strip() in ('in_progress', 'acceptance', 'testing')
+            )
         )
         not_started = len(vf) - done - blocked - in_prog
         total_cap = v.get('capacity') or 0

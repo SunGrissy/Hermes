@@ -25,7 +25,7 @@
 ## 2. 约束（必读）
 
 - **中文**：对用户可见文案、本仓库新增注释以简体中文为主（与 workspace 规则一致）。
-- **Skill 权威路径**：审核判据以 `/workspace/.cursor/skills/game-review/` 下文件为准；读取路径可配置，默认指向仓库内 skills。
+- **Skill 权威路径**：审核判据以 `/workspace/.cursor/skills/design-review/` 下文件为准（原 game-review 已合并至此）；读取路径可配置，默认指向仓库内 skills。
 - **首轮 Prompt**：与 `game_review_ollama.py` **默认单轮（C 档 v2）**一致，即 `_build_system_prompt` + 正文；**不要**默认使用 `--multi-pass`（D 档）作为首轮，除非产品另行指定。
 - **Ollama 调用**：OpenAI 兼容 Chat Completions；环境变量：`GAME_REVIEW_LLM_API_BASE`、`GAME_REVIEW_LLM_MODEL`（默认 `http://127.0.0.1:11434/v1`、`gemma4:latest`）。
 - **身份**：MVP **必须**接入**玄石登录**；`user_id` 来自玄石，写入会话、埋点与审计相关记录。
@@ -41,8 +41,8 @@
 |------|------|
 | `palace/game_review/game_review_ollama.py` | 正文提取、`_build_system_prompt`（C 档）、`_run_multi_pass`（D 档，非 MVP 默认）、`_call_openai_compatible` |
 | `palace/game_review/docs/DESIGN-策划审查网页服务-人类版.md` | 产品权威 **v0.6** |
-| `.cursor/skills/game-review/` | Skill 正本 |
-| `.cursor/skills/game-review/references/virtual-player-integration.md` | 虚拟用户与审查引擎集成规范（可选增强） |
+| `.cursor/skills/design-review/` | Skill 正本 |
+| `.cursor/skills/design-review/references/virtual-player-integration.md` | 虚拟用户与审查引擎集成规范（可选增强） |
 | `docs/superpowers/specs/virtual-player-creation-guide.md` | 虚拟用户档案创建指南（独立流程） |
 
 **重构边界**：将「读文件 → 文本」「构建 system/user（C 档首轮 / 追问 / 终稿变体）」「单次 chat 调用」抽成模块；网页服务增加 **玄石鉴权、会话状态、埋点、反馈、上传生命周期、Git 归档任务**。禁止复制大段 prompt 到多处不引用。

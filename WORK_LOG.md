@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - 根仓：Skills 目录重构与合并、规则与文档批量入库；子模块指针同步
+
+**状态**: 已提交
+
+**内容**:
+- `.cursor/skills`：README 冲突合并；旧 skill 下线/删除与 `cognitive-design`、`design-council`、`design-review`、`dingtalk-meeting-room`、`git-ops`、`skill-guide`、`thinking-tools` 等新目录入库；`producer-mind` / `interview-checklist` / `resume-screening` 等更新。
+- `.cursor/rules`：`acceptance-checklist`、`partner-router`、`regression-testing`、`resume-screening`、`skill-evolution`、`version-management` 等调整。
+- `dingtalk-desktop`：版本 digest / webhook 脚本小改；`docs/design-council-rollout-plan.md`、`palace/game_review/docs` 策划审查设计文档、`PLAN_双Git工作流迁移.md`、`面试/已面试索引.md`。
+- 新增文档：`docs/JD-游戏直播运营.md`，快手游戏直播相关摸底/对齐/蹲守手册；`recruitment-toolkit` 数据分析师初筛清单；多份 `面试/interviews/**` 材料。
+- **子模块**：`pm-system` 提交验收中状态专项进度摘要与制作人塔样式；根指针同步 `pm-system`、`task_reminder`、`cci_system`、`performeval`。
+
+---
+
 ## [2026-04-19] - 根仓：Multica spec 拆单原则 + Hermes 与 Multica/钉钉/Cursor 协作规划
 
 **状态**: 已提交并推送

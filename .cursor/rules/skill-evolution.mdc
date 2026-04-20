@@ -1,6 +1,6 @@
 ---
-description: Skill 自进化规范——Agent 使用 Skill 后应主动检视迭代机会，涵盖工具 Skill 和数字思考伙伴
-alwaysApply: true
+description: Skill 自进化规范——Agent 使用 Skill 后应主动检视迭代机会，涵盖工具 Skill 和数字思考伙伴。任务完成报告中检查时激活。
+alwaysApply: false
 ---
 
 # Skill 自进化规范
@@ -26,7 +26,7 @@ Agent 在完成任务后，如果发现以下信号，**应主动向用户提议
 用户同意后，按以下流程创建：
 
 ```
-Step 1: 草稿 — 按 skill-authoring-guide 模板起草 SKILL.md
+Step 1: 草稿 — 按 skill-guide 模板起草 SKILL.md
 Step 2: 自检 — 运行 Skill 质量门禁（skill-quality-gate.mdc）
 Step 3: 试跑 — 在当前任务上下文中模拟使用一次，验证有效性
 Step 4: 用户审阅 — 输出草稿供用户确认
@@ -66,7 +66,7 @@ Agent 在使用 Skill 过程中，如果发现以下情况，**应在任务完�
 | **回答和已知决策矛盾** | 用芒格视角分析出的结论与芒格的已知立场相反 | 检查心智模型是否遗漏某个维度，提议补充 |
 | **新素材出现** | 用户提供了新的书/访谈/演讲/内部文档 | 提议启动炼化炉的**迭代精炼流程**（见 4b） |
 | **跨伙伴冲突无法解释** | 两个伙伴对同一问题给出矛盾结论但无法说清为什么 | 检查是否有心智模型重叠或边界不清，提议修订诚实边界 |
-| **认知科学研究更新** | 新论文推翻或修正了已蒸馏的机制 | 提议 patch `cognitive-science-foundations` 或 `cognitive-design-engine` |
+| **认知科学研究更新** | 新论文推翻或修正了已蒸馏的机制 | 提议 patch `cognitive-design`（含 `reference/foundations.md`） |
 
 ### 4b. 迭代精炼流程（炼化炉的增量模式）
 
@@ -82,12 +82,12 @@ Step 5: 落地 — StrReplace 修改 SKILL.md + 更新变更记录表
 
 ### 4c. 认知科学 Skill 的迭代
 
-`cognitive-design-engine` 和 `cognitive-science-foundations` 的迭代触发额外包含：
+`cognitive-design`（实战正文 + `reference/foundations.md`）的迭代触发额外包含：
 
 | 信号 | 处理 |
 |------|------|
-| 用户提供新研究报告/论文 | 按现有模块结构，判断是补充已有模块还是新增模块 |
-| 设计实践发现新的"为什么有效" | 补充到 `cognitive-design-engine` 的对应模块 |
+| 用户提供新研究报告/论文 | 优先补充 `reference/foundations.md`，必要时同步正文模块 |
+| 设计实践发现新的"为什么有效" | 补充到 `cognitive-design/SKILL.md` 的对应模块 |
 | 与现有 Skill 的对照表发现新连接 | 补充对照表行 |
 
 ## 5. Skill 版本追踪

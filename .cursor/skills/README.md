@@ -4,9 +4,12 @@
 
 **与 Cursor 用户目录同步**：全局技能在 `%USERPROFILE%\.cursor\skills\`。以本仓库 `.cursor/skills` 为权威副本；新增或改版 skill 后，将同名目录复制到用户目录，避免全局旧版与项目不一致。详见 `digital-twin-voice` Skill 末节。
 
-## 清单
+---
 
-### 沟通 & 身份
+## Pack 总览（6 组，40+ 个 Skill）
+
+### Core Pack（基础能力，每次都可能用）
+
 | Skill | 用途 |
 |-------|------|
 | structured-communication | **结构化表达教练**——表达纪律（先结论后展开、说人话、密度控制）+ **管理沟通有效信息公式**（谁/时间/事/程度 + 受众优先）+ 三种协作模式 + 高效反馈指南，Agent 自己的输出也遵守 |
@@ -14,15 +17,32 @@
 | leadership-report-craft | 向上汇报结构化方法（思考作业 vs 成果汇报、受众校准、敏感信息处理） |
 | ai-content-collaboration | ⚠️ **已废弃**，合并至 `structured-communication`（文案与反馈节奏；**不**承担 HTML/视觉交付——幻灯见 `html-slide-deck`，界面见 `frontend-design`） |
 | producer-dialogue | ⚠️ **已废弃**，表达纪律迁入 `structured-communication`，同步规则见 `digital-twin-voice` |
+| preflight-checks | 门禁失败修复指南（敏感信息、引用一致性；**Windows .bat CRLF / .gitattributes**；详见 Skill 正文） |
 
-### Agent 体系自治
+### Thinkers Pack（思考伙伴，按需加载单个）
+
+| Skill | 一句话定位 |
+|-------|-----------|
+| munger-perspective | 多元模型格栅 + 反向思考 + 误判心理 |
+| bezos-perspective | 飞轮 + 逆向工作法 + Day One |
+| naval-perspective | 杠杆 + 特定知识 + 判断力资本化 |
+| inamori-perspective | 阿米巴 + 利他心 + 以心为本 |
+| taleb-perspective | 反脆弱 + 非对称 + 肥尾风险 |
+| zhangxiaolong-perspective | 用完即走 + 简约克制 + 人性驱动 |
+| jobs-perspective | 红队挑战者——品味 + 直觉 + 极致标准 |
+| gelman-perspective | 贝叶斯工作流 + Type S/M + 花园分叉路径 |
+
+### Game Design Pack（游戏设计 + 认知科学）
+
 | Skill | 用途 |
 |-------|------|
-| skill-authoring-guide | **元 Skill**——指导 Agent 创建高质量 Skill，含 Agentic Protocol 模板、质量检查清单 |
-| skill-crafting-guide | **面向人类的 SKILL 写作指南**——扫盲/入门/进阶、验证方法、与 Superpowers 协作说明 |
-| cognitive-furnace | **认知炼化炉**——从人物素材蒸馏思维操作系统，产出可对话的数字思考伙伴（六阶段流水线 + 三重验证） |
+| cognitive-design | 认知设计引擎——6 模块 20+ 机制（含 reference/foundations.md 学术底座） |
+| design-council | 设计智囊团——Boss 模式 / Game 模式双切换 |
+| design-review | 设计审核——通用方案(6引擎) / Boss预审(三道门) / Feature WHAT(四条件) |
+| survey-analysis | 问卷 CSV 分析、跨版本对比、HTML 报告 |
 
-### 数据探究 & 统计思维
+### Dev Pack（开发工具）
+
 | Skill | 用途 |
 |-------|------|
 | data-investigation-playbook | 指标异常协作式探查（五步、查询卡片、统计陷阱与 Gelman 检查） |
@@ -60,44 +80,48 @@
 | webapp-testing | Playwright 本地 Web 应用测试 |
 | html-slide-deck | HTML 演示文稿（深色主题、打印 PDF、叙事密度与内嵌组件库）；审美与落地页反套路见 `frontend-design` |
 | pm-data-sync | PmSystem 数据同步与冲突合并 |
+| multi-service-orchestration | 端口、启动命令、健康检查 |
+| token-usage-analysis | Cursor token 用量分析 |
 
-### Git & 部署
+### Ops Pack（运维 & 自动化）
+
 | Skill | 用途 |
 |-------|------|
-| dual-git-sync | tygit 主仓 + GitHub 可选镜像、子模块 |
-| github-ops | GitHub 仓库、分支保护、PR、gh CLI |
-| preflight-checks | 门禁失败修复（敏感信息、引用一致性、**Windows .bat CRLF / .gitattributes**） |
-| multi-service-orchestration | 端口、启动命令、依赖、健康检查 |
+| git-ops | 双 remote 工作流 + gh CLI + GitHub PR |
+| dingtalk-actions | 发钉钉（Webhook 摘要 + 涛哥更新私聊） |
+| dingtalk-meeting-room | 钉钉 MCP 预约会议室 / 创建日程（需本机配置 Streamable HTTP MCP） |
+| work-report-assistant | 日志助手定时汇总（早报/周报/体验/AI周报） |
+| pm-work-calendar | 工作日与 PM 假日/调休一致 |
 
-### 钉钉 & 自动化
+### Recruitment Pack（招聘工具链 ①→②→③）
+
 | Skill | 用途 |
 |-------|------|
-| cursor-to-dingtalk | 会话结束把结果发钉钉（Webhook 机器人，footer 小秘书提醒） |
-| notify-tao-update | **在 Cursor 里说「请涛哥更新」**：直接调本机 daemon 私聊杨玉涛；与助理群内「锚点 + 口令」链路分流 |
-| work-report-assistant | 日志助手 Chat API 定时汇总（早报/周报素材/体验提炼/AI 与体验） |
-| pm-work-calendar | 「工作日」与 PM 假日/调休一致；早报上一工作日、定时规则口径 |
+| resume-screening | ① 简历初筛 |
+| interview-checklist | ② 从简历生成面试清单 |
+| interview-checklist-dingtalk | ②附 清单发钉钉助理群 |
+| interview-evaluation | ③ 面试评价报告 |
 
-### 游戏业务
+### Thinking Pack（深度思维 + 写作）
+
 | Skill | 用途 |
 |-------|------|
-| cognitive-design-engine | **认知设计引擎**（实战版）——认知科学翻译为设计操作语言，6 模块 20+ 机制，回答"怎么用" |
-| cognitive-science-foundations | **认知科学基础文献库**（学术版）——《思考快与慢》《助推》《体验引擎》完整蒸馏 + 7 篇前沿论文，回答"原理是什么" |
-| boss-design-council | **Boss 设计智囊团**——6 位认知科学视角的智囊围绕 Boss 加分表演方案讨论，引导策划自检 |
-| game-design-council | **游戏设计智囊团**——6 位认知科学视角的智囊围绕通用玩法/系统/经济/社交方案讨论，引导策划自检 |
-| game-review | **策划方案审核** 6引擎检查（目的/节奏/红线/价值/分层/经济）+ 制作人决策问题 |
-| boss-precheck-review | Boss 表演预审三道门（概念门/结构门/制作门）自检与预审意见 |
-| feature-what-review | Feature WHAT 层设计质量审查（想没想清楚，而非文档写没写） |
-| survey-analysis | 问卷调研 CSV 分析、跨版本对比、HTML 报告 |
-| token-usage-analysis | Cursor 用量 CSV 分析、优化建议 |
+| thinking-tools | 概念解剖 / 追本之箭 / 降秩引擎（三合一） |
+| writing-engine | 散文式写作（找核→攻核→展开→磨） |
+| plain-speak | 白话引擎（12 岁能懂） |
+| roundtable-debate | 圆桌多人物辩证 |
 
-### 招聘工具链（①→②→③）
+### Meta Pack（Agent 体系自治）
+
 | Skill | 用途 |
 |-------|------|
-| resume-screening | **①** 简历初筛（规则正本：本 SKILL；`.cursor/rules/resume-screening.mdc` 仅保留触发词） |
-| interview-checklist | **②** 从简历生成标准化面试清单（初面执行清单） |
-| interview-checklist-dingtalk | **②附** 面试清单生成后发 md-reader 局域网链接到钉钉助理群 |
-| interview-evaluation | **③** 从面试记录生成结构化面试评价报告 |
+| skill-guide | Skill 写作指南（面向 Agent + 人类） |
+| cognitive-furnace | 认知炼化炉——从素材蒸馏思维 OS |
 
-每个 skill 目录含 `SKILL.md`（必选），部分带 `scripts/` 或 `reference/`。
+---
 
-**招聘工具链**：①→②→③ 三个 SKILL 构成完整链路（简历初筛→面试清单→面试评价），详见 [`_recruitment-toolkit-README.md`](_recruitment-toolkit-README.md)。
+每个 skill 目录含 `SKILL.md`（必选），部分带 `scripts/`、`reference/` 或 `references/`。
+
+**招聘工具链**：①→②→③ 详见 [`_recruitment-toolkit-README.md`](_recruitment-toolkit-README.md)。
+
+**路由规则**见 `.cursor/rules/partner-router.mdc`（五域分流，域内自治）。

@@ -187,7 +187,6 @@ GitHub Web UI: Settings → Branches → Add branch ruleset → `main`
 
 | 文档 | 位置 | 用途 |
 |------|------|------|
-| 双 Git 同步 Skill | `~/.cursor/skills/dual-git-sync/SKILL.md` | Agent 同步操作指南 |
-| GitHub 操作规范 Skill | `~/.cursor/skills/github-ops/SKILL.md` | GitHub 端操作标准（gh CLI、PR 工作流、分支保护） |
+| Git 运维 Skill（含双 remote + gh） | `~/.cursor/skills/git-ops/SKILL.md` | Agent 同步与 GitHub 端操作指南（原 dual-git-sync + github-ops 已合并） |
 | Git 工作流规范 | `.cursor/rules/git-workflow.mdc` | 提交、验收流程 |
 | 分支安全协议 | `.cursor/rules/git-branch-guard.mdc` | 多会话分支保护 |

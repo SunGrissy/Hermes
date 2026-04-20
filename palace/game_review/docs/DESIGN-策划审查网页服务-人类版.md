@@ -16,9 +16,9 @@
 
 | 约定 | 说明 |
 |------|------|
-| **依赖位置** | 策划审核方法论（game-review **Skill**）、本规格、《Agent 版》实现说明、本地脚本 `game_review_ollama.py` 等，**全部在本仓库内**，路径见下表。 |
+| **依赖位置** | 策划审核方法论（design-review **Skill**，原 game-review 合并）、本规格、《Agent 版》实现说明、本地脚本 `game_review_ollama.py` 等，**全部在本仓库内**，路径见下表。 |
 | **实施对接** | 范围、优先级、验收口径及与内网部署（玄石、归档仓等）相关的落地细节，由 **仓库维护者（制作人）** 与实施方**直接对齐**；本规格为产品权威，工程细节以《Agent 版》及评审结论为准。 |
-| **双远程（Git）** | 内网主仓与 GitHub 镜像的配合、克隆来源与子模块，见 `.cursor/skills/dual-git-sync/SKILL.md`；实施前请先阅读，避免 `origin` 配置错误。 |
+| **双远程（Git）** | 内网主仓与 GitHub 镜像的配合、克隆来源与子模块，见 `.cursor/skills/git-ops/SKILL.md`；实施前请先阅读，避免 `origin` 配置错误。 |
 
 **本仓库关键路径（索引）**
 
@@ -26,7 +26,7 @@
 |------|------|
 | 工作空间地图（各子项目入口） | `.cursor/rules/workspace-map.mdc` |
 | Agent Skills 总说明 | `.cursor/skills/README.md` |
-| 策划方案审核（game-review） | `.cursor/skills/game-review/` |
+| 策划方案审核（design-review，含原 game-review 六引擎） | `.cursor/skills/design-review/` |
 | 本规格（人类版）与《Agent 版》 | `palace/game_review/docs/DESIGN-策划审查网页服务-人类版.md`、`…-Agent版.md` |
 | 本地 Ollama 审核脚本 | `palace/game_review/game_review_ollama.py` |
 
@@ -74,7 +74,7 @@
 
 | 术语 | 含义 |
 |------|------|
-| Skill | 仓库内 `.cursor/skills/` 下的审核判据与输出结构（以 game-review 为主线）。 |
+| Skill | 仓库内 `.cursor/skills/` 下的审核判据与输出结构（以 design-review 为主线，与脚本中「game-review」称谓同指一套方法论）。 |
 | 会话 | 一次从上传到终稿的完整交互，由服务端生成唯一会话 ID。 |
 | 首轮审查 | 上传后第一次模型调用，产出初审结论与待追问项。 |
 | 终稿报告 | 多轮交互结束后，用户可下载的单一 Markdown 文件。 |
@@ -274,7 +274,7 @@ flowchart LR
 
 - **逻辑复用**：`palace/game_review/game_review_ollama.py` 中的 Skill 嵌入与调用方式应由工程侧抽取复用，避免网页与脚本两套判据。
 - **Skill 权威**：以仓库 `.cursor/skills/` 为权威；发布升级需冒烟（样例文档跑通）。
-- **虚拟用户行为模拟**：审查引擎已支持可选的虚拟用户行为测试层（详见 `.cursor/skills/game-review/references/virtual-player-integration.md`）。当 `virtual-players/` 目录下存在数据炼化的用户档案时，审查报告会自动包含虚拟用户行为测试章节；无档案时自动降级，不影响 6 大引擎正常执行。网页服务需确保终稿渲染兼容该章节。
+- **虚拟用户行为模拟**：审查引擎已支持可选的虚拟用户行为测试层（详见 `.cursor/skills/design-review/references/virtual-player-integration.md`）。当 `virtual-players/` 目录下存在数据炼化的用户档案时，审查报告会自动包含虚拟用户行为测试章节；无档案时自动降级，不影响 6 大引擎正常执行。网页服务需确保终稿渲染兼容该章节。
 
 ### 5.5 风险与开放问题（摘要）
 

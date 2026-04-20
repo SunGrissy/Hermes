@@ -1,7 +1,7 @@
 ---
 description: 应用版本管理规范 — 后端版本API + 健康检查 + 缓存控制 + 前端版本展示（适用于所有 Web 项目）
 globs:
-alwaysApply: true
+alwaysApply: false
 ---
 
 # 应用版本管理规范

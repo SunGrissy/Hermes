@@ -334,7 +334,7 @@ def _enrich_feature_summary(entry: dict, raw_features: list) -> None:
                 miss_tech += 1
             if ma:
                 miss_art += 1
-        status_keys = ("draft", "ready", "in_progress", "testing", "done")
+        status_keys = ("draft", "ready", "in_progress", "acceptance", "testing", "done")
         status_breakdown = {k: 0 for k in status_keys}
         for f in feats:
             st = f.get("status")

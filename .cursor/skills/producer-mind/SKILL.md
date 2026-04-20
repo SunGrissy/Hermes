@@ -259,9 +259,21 @@ description: |
 |-------|-------------------|
 | `producer-context.mdc` | 提供背景知识（团队、战略、绩效公式），本 Skill 提供思维能力 |
 | `digital-twin-voice` | 规范措辞（"我们"不说"你们"），本 Skill 规范思考方式 |
-| `game-review` | 用制作人方法论审核策划方案，本 Skill 用制作人思维分析任何问题 |
-| `feature-what-review` | 审查 Feature WHAT 层，本 Skill 的心智模型#4（玩家视角）是其底层依据 |
+| `design-review` | 用制作人方法论审核策划方案，本 Skill 用制作人思维分析任何问题 |
 | `leadership-report-craft` | 汇报材料的结构方法，本 Skill 提供"制作人会怎么审视这份材料" |
+
+## 协作伙伴（域内按需加载指引）
+
+作为"决策/方案/风险"域的入口 Skill，分析过程中遇到以下信号时建议加载对应伙伴：
+
+| 信号 | 建议加载 | 补充什么 |
+|------|---------|---------|
+| 分析涉及风险、尾部事件、不确定性 | `taleb-perspective` | 反脆弱审视、非对称风险 |
+| 涉及激励结构、多方博弈、认知陷阱 | `munger-perspective` | 反向排除、误判心理学 |
+| 涉及产品克制、该不该做 | `zhangxiaolong-perspective` | 做减法、用完即走 |
+| 涉及长期战略、存量增量 | `bezos-perspective` | 飞轮、逆向工作法 |
+| 涉及个人效能、时间分配 | `naval-perspective` | 四种杠杆、判断力资本化 |
+| 涉及团队人心、自驱力 | `inamori-perspective` | 利他心、阿米巴 |
 
 ---
 

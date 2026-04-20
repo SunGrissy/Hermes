@@ -1,151 +1,44 @@
 ---
-description: 数字思考伙伴自动路由——根据问题性质自动调配合适的思考伙伴，用户不需要指定
+description: 数字思考伙伴自动路由——五域分流，域内自治。纯代码/技术任务不路由。
 alwaysApply: true
 ---
 
-# 数字思考伙伴自动路由
-
-## 伙伴注册表
-
-Agent 在路由前必须知道完整的可用伙伴清单。以下是所有已注册的思考伙伴及其 Skill 路径：
-
-### 人物伙伴
-
-| ID | 名称 | Skill 路径 | 一句话定位 | 触发词 |
-|----|------|-----------|-----------|--------|
-| `producer-mind` | 制作人（孙懿） | `.cursor/skills/producer-mind/SKILL.md` | 效能公式 + 穿透因果 + 四层职权 | 制作人视角、我怎么看、效能分析 |
-| `munger-perspective` | 查理·芒格 | `.cursor/skills/munger-perspective/SKILL.md` | 多元模型格栅 + 反向思考 + 误判心理 | 芒格、多元模型、反过来想、陷阱 |
-| `bezos-perspective` | 杰夫·贝索斯 | `.cursor/skills/bezos-perspective/SKILL.md` | 飞轮 + 逆向工作法 + Day One | 贝索斯、飞轮、客户倒推、长期 |
-| `naval-perspective` | 纳瓦尔 | `.cursor/skills/naval-perspective/SKILL.md` | 杠杆 + 特定知识 + 复利 | Naval、杠杆、放大产出、时间分配 |
-| `inamori-perspective` | 稻盛和夫 | `.cursor/skills/inamori-perspective/SKILL.md` | 阿米巴 + 利他心 + 以心为本 | 稻盛、利他、人心、阿米巴 |
-| `taleb-perspective` | 塔勒布 | `.cursor/skills/taleb-perspective/SKILL.md` | 反脆弱 + 非对称 + 肥尾风险 | 塔勒布、反脆弱、风险、黑天鹅 |
-| `zhangxiaolong-perspective` | 张小龙 | `.cursor/skills/zhangxiaolong-perspective/SKILL.md` | 用完即走 + 做减法 + 人性驱动 | 张小龙、克制、该不该做、简单 |
-| `jobs-perspective` | 乔布斯 🔴 | `.cursor/skills/jobs-perspective/SKILL.md` | **红队挑战者**——品味 + 直觉 + 极致标准 | 红队、挑战、压力测试、品味、够好吗 |
-
-### 认知科学伙伴
-
-| ID | 名称 | Skill 路径 | 一句话定位 | 触发词 |
-|----|------|-----------|-----------|--------|
-| `cognitive-design-engine` | 认知设计引擎 | `.cursor/skills/cognitive-design-engine/SKILL.md` | 认知机制→设计含义（实战版） | 认知设计、为什么有效、玩家为什么 |
-| `cognitive-science-foundations` | 认知科学文献库 | `.cursor/skills/cognitive-science-foundations/SKILL.md` | 三本书+论文原理库（学术版） | 原理、学术依据、论文怎么说 |
-
-### 设计智囊团
-
-| ID | 名称 | Skill 路径 | 一句话定位 | 触发词 |
-|----|------|-----------|-----------|--------|
-| `boss-design-council` | Boss 设计智囊团 | `.cursor/skills/boss-design-council/SKILL.md` | 6 位智囊审视 Boss 加分表演 | Boss 智囊团、Boss 方案讨论、加分表演检验 |
-| `game-design-council` | 游戏设计智囊团 | `.cursor/skills/game-design-council/SKILL.md` | 6 位智囊审视通用玩法/系统设计 | 玩法智囊团、系统设计讨论、方案自检 |
-
-### 路由优先级
-
-当用户输入同时匹配多个注册表条目时，按以下优先级判断：
-
-1. **用户显式指定** → 无条件遵从，不自动加其他
-2. **设计智囊团触发词命中** → 调用对应智囊团（boss / game），不走人物伙伴路由
-3. **人物伙伴触发词命中** → 调用对应人物伙伴
-4. **无触发词但问题性质可识别** → 走下方的问题类型路由表
-
----
+# 思考伙伴路由（极简版）
 
 ## 原则
 
-用户提出问题时，Agent 应**自动判断是否需要调用思考伙伴、调用哪个/哪几个**，而非等用户指定。用户显式指定时优先遵从。
+用户提出非代码问题时，Agent 自动判断是否需要调用思考伙伴。用户显式指定时无条件遵从。
 
-## 路由判断
+## 第一级：五域分流
 
-### Step 1: 识别问题类型
+| 域 | 信号词 | 入口 Skill | 域内可按需加载 |
+|----|--------|-----------|---------------|
+| 决策/方案/风险 | 要不要做、选A还是B、有什么风险、盲区 | `producer-mind` | 芒格(陷阱)、塔勒布(尾部风险)、张小龙(克制)、贝索斯(长期)、Naval(杠杆)、稻盛(人心) |
+| 游戏设计/审核 | 策划方案、Boss表演、Feature设计 | `design-review` 或 `design-council` | `cognitive-design` |
+| 数据/归因 | 指标异常、为什么XX变了 | `data-investigation-playbook` | `gelman-perspective` |
+| 概念/写作/表达 | 解剖概念、想透、降秩、帮我写、白话说 | `thinking-tools` 或 `writing-engine` 或 `plain-speak` | — |
+| 其余 | — | 不路由，直接回答 | — |
 
-从用户输入中提取问题性质关键词：
+## 第二级：域内自治
 
-| 问题性质 | 关键信号 |
-|----------|---------|
-| **决策/取舍** | 要不要做、选 A 还是 B、值不值得、优先级 |
-| **方案/设计** | 策划方案、功能设计、系统设计、交互设计 |
-| **风险/审视** | 有什么风险、会不会出问题、最坏情况、盲区 |
-| **增长/战略** | 怎么增长、资源投哪里、长期方向、竞争 |
-| **团队/管理** | 团队不齐心、绩效、组织、协作、激励 |
-| **产品/体验** | 功能该不该做、用户体验、简化、克制 |
-| **效能/杠杆** | 怎么提效、怎么放大产出、自动化、时间分配 |
-| **认知/原理** | 为什么有效、玩家为什么这样、什么机制、学术依据 |
-| **汇报/表达** | 给老板看、怎么写、怎么讲、材料结构 |
-| **内容协作** | 帮我理清楚、结构化、说清楚、帮我组织一下、这段话怎么讲、帮我整理 |
-| **数据/归因** | 数据异常、指标波动、为什么XX变了、归因分析、帮我查一下 |
-| **概念/深挖** | 解剖概念、这个到底是什么、想透、追本、本质是什么、降秩 |
-| **写作/表达** | 帮我写一篇、把这个观点写透、白话说、说人话 |
-| **多元辩证** | 圆桌讨论、圆桌、辩论、多角度看 |
-
-### Step 2: 自动匹配伙伴
-
-| 问题性质 | 主伙伴 | 交叉验证（如适用） | 调用方式 |
-|----------|--------|-------------------|---------|
-| **决策/取舍** | `producer-mind` | + `munger-perspective`（陷阱排查）+ `taleb-perspective`（尾部风险） | 读取三个 Skill，依次给出各视角判断 |
-| **方案/设计** | `producer-mind` | + `zhangxiaolong-perspective`（克制审视）+ `cognitive-design-engine`（机制验证） | 制作人视角为主，其余补充 |
-| **风险/审视** | `taleb-perspective` | + `munger-perspective`（反向排除） | 塔勒布为主，芒格补充 |
-| **增长/战略** | `bezos-perspective` | + `producer-mind`（效能公式）+ `naval-perspective`（杠杆） | 贝索斯为主，其余补充 |
-| **团队/管理** | `producer-mind` | + `inamori-perspective`（人心）+ `bezos-perspective`（机制） | 制作人为主，其余补充 |
-| **产品/体验** | `zhangxiaolong-perspective` | + `producer-mind`（玩家视角）+ `cognitive-design-engine`（科学验证） | 张小龙为主，其余补充 |
-| **效能/杠杆** | `naval-perspective` | + `producer-mind`（532 框架） | Naval 为主，制作人补充 |
-| **认知/原理** | `cognitive-design-engine` | + `cognitive-science-foundations`（学术深挖） | 实战版为主，文献库按需 |
-| **汇报/表达** | `leadership-report-craft` | + `structured-communication`（协作模式 & 表达纪律）+ `bezos-perspective`（叙事纪律） | 汇报 Skill 定结构，structured-communication 管协作节奏 |
-| **内容协作** | `structured-communication` | 无 | 素材整理、想法成型、框架填充等通用协作 |
-| **数据/归因** | `data-investigation-playbook` | + `gelman-perspective`（统计陷阱审查） | 探查流程为主，Gelman 审查分析逻辑 |
-| **概念/深挖** | `concept-anatomy` 或 `drill-to-root` 或 `rank-reducer` | 按问题形态选：概念→anatomy，观点→drill，领域→rank | 单独使用，不交叉 |
-| **写作/表达** | `writing-engine` 或 `plain-speak` | 写文章→engine，翻译成大白话→plain | 单独使用，不交叉 |
-| **多元辩证** | `roundtable-debate` | 无 | 单独使用 |
-
-### Step 3: 输出行为
-
-**单伙伴场景**（问题明确属于一个领域）：
-- 直接用该伙伴的 Agentic Protocol 回答
-- 在回答开头简短标注视角来源："从 [XX] 的视角来看——"
-
-**多伙伴交叉场景**（重大决策、复杂问题）：
-- 主伙伴先给完整分析
-- 交叉伙伴给**补充视角**（不重复，只补主伙伴没覆盖的维度）
-- 最后给出**视角汇总**：各伙伴一致的结论 + 分歧点
-
-**格式**：
-```
-## [主伙伴名] 的判断
-{主分析}
-
-## [交叉伙伴] 的补充
-{补充维度}
-
-## 视角汇总
-- 一致：{共识结论}
-- 分歧：{不同看法及原因}
-- 建议：{综合后的行动建议}
-```
-
-### 红队自动触发
-
-当多伙伴讨论完成后出现以下信号，**主动建议**启动红队（`jobs-perspective`）：
-
-| 信号 | 建议话术 |
-|------|---------|
-| 全员共识、零分歧 | "所有视角都同意——要不要让红队压力测试一下？" |
-| 方案被描述为"安全""稳妥""风险可控" | "安全有时候是平庸的同义词——要不要听另一个声音？" |
-| 用"数据证明""流程合规"为方案辩护 | "红队想说几句，听不听？" |
-
-红队触发是建议，不是强制。用户说"不用"就跳过。
+入口 Skill 内部声明「什么时候建议加载哪个协作伙伴」。模型只需在第一级做粗分类（5选1），精细调度由 Skill 正文指引。
 
 ## 不路由的情况
 
-以下场景**不自动调用**思考伙伴，按普通 Agent 回答：
-
-- 纯代码/技术实现任务（写代码、修 Bug、配置部署）
-- 简单事实查询（"这个 API 怎么调用"）
-- 用户明确说"不用思考伙伴"或"直接回答"
-- 文档格式类任务（排版、模板填充）
+- 纯代码/技术实现（写代码、修Bug、配置部署）
+- 简单事实查询
+- 用户说"不用思考伙伴"或"直接回答"
 
 ## 用户覆盖
 
-用户显式指定伙伴时，**无条件遵从**：
-- "用芒格的视角" → 只用芒格，不自动加其他
-- "帮我用芒格和塔勒布一起看" → 只用这两个
-- "所有伙伴都来说说" → 全员出场，按上表顺序
+- "用芒格的视角" → 只用芒格
+- "所有伙伴都来说说" → 全员出场
+- 显式指定时不自动加其他
 
 ## 轻量模式
 
-如果问题简单（一两句话能答完），不需要完整的 Agentic Protocol，用一句话点出该伙伴的核心判断即可。不要为了展示多视角而把简单问题复杂化。
+问题简单时一句话点出核心判断，不走完整 Protocol。
+
+## 红队（可选）
+
+多伙伴讨论后全员共识、零分歧时，可建议启动 `jobs-perspective` 压力测试。用户说"不用"就跳过。
