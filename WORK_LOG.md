@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - Multica 钉钉派单桥：删除派单/短号取消、README 与运行样例
+
+**状态**: 已提交并推送
+
+**内容**:
+- `tools/multica-dingtalk-bridge/dispatch_bot.py`：`删除派单` / `#删除派单` / `取消派单` → `multica issue status … cancelled`；纯数字引用经 `issue list`（最多 500 条）匹配 `number` 解析 `identifier`；`issue list` 封装支持可调 `limit`。
+- `README.md`：建单与取消口令、短号说明；`requirements.txt` 补充 `python-dotenv`；新增 `.env.example`、`run_bridge.ps1` 便于本机配置与 PATH 合并启动。
+
+---
+
 ## [2026-04-20] - pm-system：FastAPI 依赖下限与 Pydantic 2.12 兼容
 
 **状态**: 已提交并推送（子模块 `pm-system` + 根指针）
