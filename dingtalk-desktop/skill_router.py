@@ -3,7 +3,7 @@
 技能路由器 — 后台轮询线程
 
 当前支持：
-  - 监听招聘群内 ct=502（PDF / Word .docx 文件消息）→ 触发简历 AI 初筛
+  - 监听招聘群内文件类消息（contentType 501/502/503/2001 等，见 _RESUME_FILE_CONTENT_TYPES）→ 触发简历 AI 初筛
   - 监听助理群 + memo_tracker.colleague_skill_cids 白名单群（及可选 topic_skill_group_cid 选题群）→ 备忘 / 许愿 / 完成 等（他人仅白名单群入队）
   - 助理通知主群 memo_tracker.group_cid：仅 memo_tracker.assistant_group_skill_uids 中的钉钉 UID 可触发技能（缺省该字段时用 DINGTALK_MY_UID / DEFAULT_MY_UID）；设为 [] 则群内所有人可触发。白名单群不受此限。
   - 手机发指令依赖桌面 /fetch：备忘轮询 JSAPI 超时默认约 95s（SKILL_MEMO_FETCH_TIMEOUT_S），须盖住 daemon _fetch_lock 排队 + beacon；POST body 带 timeout 与 fetch_history 对齐。发送者身份用 uid / is_self / sender 综合解析。
@@ -26,7 +26,7 @@
 架构：
   - 启动时由 daemon.py 调用 SkillRouter.start()
   - 每 POLL_INTERVAL 秒向 daemon /fetch 查询各群的新消息
-  - ct=502 且未处理过 → 交给 skills/resume_screen；消息 ts 早于 resume_monitor_max_age_hours（默认 72h）的不监测；时间窗见 _resume_time_gate_blocks（48h 本机 mtime）
+  - 文件类 contentType 且未处理过 → 交给 skills/resume_screen；消息 ts 早于 resume_monitor_max_age_hours（默认 72h）的不监测；时间窗见 _resume_time_gate_blocks（48h 本机 mtime）
   - 文本含"备忘"/"TR"/"完成"/「许愿」/「愿望」/wish/「愿望单」/「N、M推到明天」类延期 → 交给 skills/memo_tracker；触发词后可跟标点空格，解析时会剥离
   - 通过 DB + 内存 seen_ids 实现幂等
   - 备忘/wish/预审轮询与推送：仅处理 skill_router.start() 之后的消息（ts），重启不追溯历史
@@ -59,6 +59,7 @@ sys.path.insert(0, _THIS_DIR)
 from db.store import (
     init_db,
     is_resume_processed,
+    clear_resume_infra_read_fail,
     save_resume_result,
     is_memo_processed,
     is_doc_review_processed,
@@ -457,8 +458,10 @@ def _fetch_recent_messages(cid: str, count: int = 20, timeout: int = 75) -> list
 _HYDRATE_FETCH_MAX_DELTA_MS = 120_000
 # daemon 侧 _fetch_lock 串行 + JSAPI 重扫/等待 beacon 可达数十秒，客户端过短会先断开并触发 ConnectionAbortedError
 _HYDRATE_FETCH_TIMEOUT_S = 75
-# 招聘群热聊时仅拉 20 条会把 ct=502 挤出窗口；daemon listMessage 上限 50
+# 招聘群热聊时仅拉 20 条会把文件消息挤出窗口；daemon listMessage 上限 50
 _RESUME_FETCH_COUNT = 50
+# listMessage 的 contentType：502 常规文件、501 大文件、503 文件夹；部分桌面端为 2001（见 lib/utils CT_NAMES）
+_RESUME_FILE_CONTENT_TYPES = frozenset({501, 502, 503, 2001})
 
 
 def _try_hydrate_push_message_from_fetch(msg: dict) -> None:
@@ -583,7 +586,7 @@ def _fetch_memo_messages(cid: str, max_age_ms: int) -> list:
 def _extract_file_info(msg: dict) -> tuple:
     """
     从 fetch 返回的消息中提取 (msg_id, file_name, file_path)。
-    ct=502 的 raw 字段包含 content JSON，attachment.extension 有 f_name 和 path。
+    文件类消息的 raw 字段包含 content JSON，attachment.extension 有 f_name 和 path。
     """
     raw_str = msg.get('raw', '')
     if not raw_str:
@@ -704,7 +707,7 @@ def _resume_message_is_from_me(msg: dict) -> bool:
 
 
 _RESUME_WINDOW_MS = 48 * 3600 * 1000   # 与本机 PDF mtime（下载/落盘时间）比较的滑动窗长度
-# 简历初筛：仅处理消息发送时间在此窗口内的 ct=502（默认 72h）；更早的静默跳过，不配监测
+# 简历初筛：仅处理消息发送时间在此窗口内的文件消息（默认 72h）；更早的静默跳过，不配监测
 DEFAULT_RESUME_MSG_MAX_AGE_MS = 72 * 3600 * 1000
 
 
@@ -766,7 +769,7 @@ def _resume_time_gate_blocks(
 
 
 def _fetch_resume_messages(cid: str, timeout: int, log_max_age_ms: int) -> list:
-    """招聘群简历：优先 daemon /fetch（条数见 _RESUME_FETCH_COUNT）；超时或空列表时读 _msg_log.jsonl（依赖 Monitor 为 ct=502 写入 raw）。
+    """招聘群简历：优先 daemon /fetch（条数见 _RESUME_FETCH_COUNT）；超时或空列表时读 _msg_log.jsonl（依赖 Monitor 为文件类消息写入 raw）。
 
     log_max_age_ms：与简历监测回溯一致，避免日志里捞过久历史。
     """
@@ -787,7 +790,7 @@ def _poll_once(
     resume_msg_max_age_ms: int | None = None,
     resume_bypass_filename_gate_cids: frozenset | None = None,
 ):
-    """轮询一个招聘群/私信，处理所有新的 ct=502 消息。
+    """轮询一个招聘群/私信，处理所有新的文件类（501/502/503/2001）简历消息。
     初筛结论经 resume_notify Webhook 推送（见 resume_screen）；本函数只负责在源会话上拉消息与触发下载。
     source_name: 来源的显示名（用于推送消息中告知来源）
     resume_msg_max_age_ms: 仅监测消息 ts 早于此窗口之前的简历（默认 72h）；None 用 DEFAULT_RESUME_MSG_MAX_AGE_MS。
@@ -807,7 +810,7 @@ def _poll_once(
     now_ms = int(time.time() * 1000)
 
     for msg in messages:
-        if msg.get('content_type') != 502:
+        if int(msg.get('content_type') or 0) not in _RESUME_FILE_CONTENT_TYPES:
             continue
 
         msg_id, file_name, file_path = _extract_file_info(msg)
@@ -825,6 +828,9 @@ def _poll_once(
         if _resume_time_gate_blocks(file_name, file_path or '', now_ms, msg_ts_ms=_msg_ts):
             # 历史简历超过 48h 窗口：静默跳过，不打日志（避免热聊群刷屏）
             continue
+
+        if clear_resume_infra_read_fail(msg_id):
+            _log(f'初筛将重试：已清除本条因读文件失败入库的记录 {file_name} ({msg_id})')
 
         if msg_id in seen_ids or is_resume_processed(msg_id):
             continue
@@ -2356,12 +2362,25 @@ def _extract_mobile_tail(file_name: str, text: str) -> str:
 
 
 def _read_pdf_text(path: str) -> str:
+    """面试纪要等 PDF：优先 pdfplumber，缺省时 pypdf。"""
     try:
         import pdfplumber
         with pdfplumber.open(path) as pdf:
             return '\n'.join((p.extract_text() or '') for p in pdf.pages).strip()
+    except ImportError:
+        pass
     except Exception as e:
-        _log(f'interview pdf read failed: {e}')
+        _log(f'interview pdf read failed (pdfplumber): {e}')
+        return ''
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(path)
+        return '\n'.join((p.extract_text() or '') for p in reader.pages).strip()
+    except ImportError as e:
+        _log(f'interview pdf read failed: no pdfplumber/pypdf ({e})')
+        return ''
+    except Exception as e:
+        _log(f'interview pdf read failed (pypdf): {e}')
         return ''
 
 
@@ -2496,7 +2515,7 @@ def _notify_interview_result(candidate: str, ok: bool, detail: str, output_path:
 
 def _handle_interview_file_message(msg: dict, group_cid: str, seen_ids: set, router_start_ms: int = 0) -> bool:
     """返回 True 表示该消息已处理（会入 seen_ids），False 表示继续走普通流程。"""
-    if int(msg.get('content_type') or 0) != 502:
+    if int(msg.get('content_type') or 0) not in _RESUME_FILE_CONTENT_TYPES:
         return False
     if _skip_msg_before_router_start(msg, router_start_ms):
         return True

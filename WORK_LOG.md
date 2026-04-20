@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - dingtalk-desktop：简历初筛 contentType 兼容、PDF 依赖与读失败重试
+
+**状态**: 待推送
+
+**内容**:
+- 招聘群文件消息识别 501/502/503/2001；监控日志 raw 与 `CT_NAMES` 对齐。
+- `requirements.txt` 声明 `pdfplumber`/`pypdf`；简历 PDF 双解析；面试纪要 PDF 同步后备。
+- `clear_resume_infra_read_fail`：因读文件失败写入「跳过」的记录在下一轮自动清除并重跑初筛。
+
+---
+
 ## [2026-04-20] - Multica 钉钉派单桥：删除派单/短号取消、README 与运行样例
 
 **状态**: 已提交并推送

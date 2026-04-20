@@ -2,9 +2,9 @@
 """
 简历 AI 初筛技能
 
-触发条件：招聘群内收到 ct=502 的 PDF 或 Word（.docx）文件消息
+触发条件：招聘群内收到文件类消息（contentType 501/502/503/2001）的 PDF 或 Word（.docx）
 流程：
-  1. 从本地路径读取正文（PDF：pdfplumber；docx：python-docx）
+  1. 从本地路径读取正文（PDF：优先 pdfplumber，缺省时用 pypdf；docx：python-docx）
   2. 按文件名/内容猜测岗位，加载对应初筛清单
   3. 调 LLM 做初筛，输出结论 + 要点
   4. 发文字消息到原群
@@ -735,15 +735,35 @@ def _read_docx_text(path: str) -> str:
     return '\n'.join(parts).strip()
 
 
+def _read_pdf_text(file_path: str) -> str:
+    """抽取 PDF 纯文本：优先 pdfplumber（版式略好），不可用时用 pypdf。"""
+    try:
+        import pdfplumber
+        with pdfplumber.open(file_path) as pdf:
+            return '\n'.join(
+                (page.extract_text() or '') for page in pdf.pages
+            ).strip()
+    except ImportError:
+        pass
+    try:
+        from pypdf import PdfReader
+    except ImportError as e:
+        raise ImportError(
+            '缺少 PDF 解析库：请安装 pdfplumber 或 pypdf（例如 '
+            'py -m pip install -r dingtalk-desktop/requirements.txt）'
+        ) from e
+    reader = PdfReader(file_path)
+    parts: list[str] = []
+    for page in reader.pages:
+        parts.append(page.extract_text() or '')
+    return '\n'.join(parts).strip()
+
+
 def _extract_resume_text(file_path: str, file_name: str) -> str:
     lower = (file_name or file_path or '').lower()
     if lower.endswith('.docx'):
         return _read_docx_text(file_path)
-    import pdfplumber
-    with pdfplumber.open(file_path) as pdf:
-        return '\n'.join(
-            (page.extract_text() or '') for page in pdf.pages
-        ).strip()
+    return _read_pdf_text(file_path)
 
 
 # ── 主入口 ────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ from .utils import (
     ContactsDB,
 )
 
-# [AgentRsum Task] 2026-03-25 RESUME-002 ct=502 推送写入 raw，供简历轮询在 /fetch 超时时从 _msg_log 解析附件
+# [AgentRsum Task] 2026-03-25 RESUME-002 文件类推送写入 raw，供简历轮询在 /fetch 超时时从 _msg_log 解析附件
 
 # --------------- Frida Hook 脚本 ---------------
 
@@ -274,7 +274,7 @@ def _process_push(data, source, dedup, my_uid, log_path, enable_toast, memo_call
                             card_ext[ck] = str(cv)[:2000]
 
                 raw_for_log = None
-                if (ct == 502 and raw_content and isinstance(raw_content, str)
+                if (ct in (501, 502, 503, 2001) and raw_content and isinstance(raw_content, str)
                         and '||' not in raw_content):
                     raw_for_log = raw_content
 

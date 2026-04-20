@@ -211,6 +211,24 @@ def is_resume_processed(msg_id):
         return row is not None
 
 
+def clear_resume_infra_read_fail(msg_id):
+    """若本条曾因「读简历文件」异常入库为跳过，删除记录以便环境修复后自动重试。
+
+    仅匹配 resume_screen 写入的 summary 前缀「简历文件读取失败:」，不误删业务类跳过。
+    """
+    with _lock:
+        c = _conn()
+        cur = c.execute(
+            "DELETE FROM resume_screen_log WHERE msg_id=? AND verdict=? "
+            "AND summary LIKE ?",
+            (str(msg_id), '跳过', '简历文件读取失败%'),
+        )
+        n = cur.rowcount
+        c.commit()
+        c.close()
+        return n > 0
+
+
 def try_claim_resume_llm_slot(msg_id, group_cid, sender_uid, file_name, file_path):
     """在调用 LLM 前原子占位（INSERT OR IGNORE）。
 

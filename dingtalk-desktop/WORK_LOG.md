@@ -1,5 +1,20 @@
 # dingtalk-desktop WORK_LOG
 
+## [2026-04-20] 简历初筛：多 contentType、PDF 双解析、读失败自动重试
+
+### 状态：已提交待推送
+
+### 本次工作内容
+
+- `skill_router.py`：`_RESUME_FILE_CONTENT_TYPES`（501/502/503/2001）；`_read_pdf_text` 缺 pdfplumber 时用 pypdf；轮询前 `clear_resume_infra_read_fail` 清除「简历文件读取失败」类跳过记录以便重试
+- `skills/resume_screen.py`：PDF 优先 pdfplumber、后备 pypdf
+- `db/store.py`：`clear_resume_infra_read_fail`
+- `lib/monitor.py`：`_msg_log` 写入 raw 扩展至 501/502/503/2001
+- `lib/utils.py`：`CT_NAMES` 补 501/502/503
+- `requirements.txt`：`pdfplumber`、`pypdf`
+
+---
+
 ## [2026-04-15] check_tracker：引用回复 TR 标注转跟进任务
 
 ### 状态：已验收，待推送
