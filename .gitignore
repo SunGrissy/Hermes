@@ -93,3 +93,6 @@ novel/
 
 # 本地数据与钉钉消息日志（含敏感会话，勿入库）
 data/
+
+# ROI 测算：独立 Git 仓（tygit `ue4_pm_group/roi-forecast.git`），**不是** management-hub 子模块；父仓勿用 160000 索引
+roi-forecast/

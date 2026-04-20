@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - 根仓：修正 roi-forecast 误登记为 gitlink（非子模块）
+
+**状态**: 已提交并推送
+
+**内容**:
+- 从父仓库索引移除 `roi-forecast` 的 `160000` 记录（与 `.gitmodules` 不一致导致 `git submodule` 报错）。
+- `.gitignore` 增加 `roi-forecast/`，约定其为**并列独立仓库**，由本机 `roi-forecast/.git` 自行 `pull/push`。
+- `workspace-map.mdc` 补充 ROI 项目一行说明。
+
+---
+
 ## [2026-04-20] - 根仓：Skills 目录重构与合并、规则与文档批量入库；子模块指针同步
 
 **状态**: 已提交
