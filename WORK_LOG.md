@@ -1,5 +1,14 @@
 # Work Log - MyAgents Root
 
+## [2026-04-20] - pm-system：quick_start 重启 Multica 派单桥时结束旧终端
+
+**状态**: 已提交并推送
+
+**内容**:
+- 子模块 `pm-system/quick_start.bat`：`:KillMulticaBridge` 增加管理员标题前缀与按命令行结束 `multica-dingtalk-bridge` 下 `dispatch_bot.py`；`:KillAll` 调用 `:KillMulticaBridge`；`:KillAider` 移除对派单桥的误杀。
+
+---
+
 ## [2026-04-20] - 面试：李冠霖（数据分析应届）复试清单与制作人复试评价
 
 **状态**: 已提交并推送
