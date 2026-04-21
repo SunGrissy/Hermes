@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-21] - pm-system：quick_start 经 Windows Terminal 启动与 wt 命令行修复
+
+**状态**: 已提交并推送（子模块 pm-system + 根仓指针）
+
+**内容**:
+- `quick_start.bat`：检测到 `wt.exe` 时后端/前端/MD Reader/Palace/钉钉/Hermes 用 `new-tab` + `-d`；Hermes 避免 `wt` 将 `;`、`&` 拆条；`-d "%PM_ROOT%"` 改为 `"%PM_ROOT%."` 避免路径尾 `\"` 弄断引号；`%ComSpec% /k` 调用小脚本。
+- 新增 `run_*_tab.cmd`（各服务在 `-d` 目录下执行原命令）。
+
+---
+
 ## [2026-04-21] - pm-system：运营矩阵维度「本周」标签同步到周计划
 
 **状态**: 进行中（未提交）
