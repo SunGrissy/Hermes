@@ -13,7 +13,7 @@
 
 ## [2026-04-21] - Hermes 入站命令路由器（Multica）落地 + 文档 / quick_start
 
-**状态**: 验收通过（Hermes 已提交推送；根仓本条目随 WORK_LOG 记录）
+**状态**: 验收通过（Hermes 本地仓库已 commit `4ec37e92`，`origin` 指向上游 GitHub 无写权限未推送；根仓 WORK_LOG 已推送 tygit）
 
 **内容**:
 - **Hermes**：`gateway/inbound_command_router/`（路由器 + `MulticaInboundAdapter`）、`multica_cli_bridge.py`（自 `dispatch_bot` vendored，`multica_inbound_try_markdown` 捕获 Markdown）；`gateway/run.py` 在 `_handle_message_with_agent` 前短路发送；环境变量 `HERMES_INBOUND_ROUTER_ENABLED`、`HERMES_ROUTER_MULTICA_ENABLED`。
