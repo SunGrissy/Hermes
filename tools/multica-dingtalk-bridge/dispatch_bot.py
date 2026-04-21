@@ -24,10 +24,6 @@ except ImportError:
     def load_dotenv(*_a, **_k):
         return False
 
-
-# [AgentMltc Task] 开始时间: 2026-04-18
-# [AgentMltc Task] 任务目标: multica-dingtalk-bridge Task3-4 Stream 派单桥
-
 LOG = logging.getLogger("multica-bridge")
 
 _DELETE_DISPATCH_HELP = (
@@ -51,7 +47,7 @@ _EMPTY_DISPATCH_HELP = (
     "```\n\n"
     "也支持：`#派单 标题`（第二行起同上，为描述）。\n\n"
     "取消工单：`删除派单 UUM-9` 或 `删除派单 9`（详见「删除派单」仅一行时的提示）。\n\n"
-    "查询：`查工单` 或 `#查工单` — 状态分布 + 按优先级前 10（同档按创建时间由远及近）。"
+    "查询：`查工单` 或 `#查工单` — 状态分布 + 按优先级前 10（不含已取消；同档按创建时间由远及近）。"
 )
 
 _UUID_RE = re.compile(
@@ -337,7 +333,14 @@ def _format_query_issues_reply_body(
     total: Optional[int],
 ) -> str:
     sep = _dispatch_reply_separator()
-    lines_out: List[str] = [stats_md, "", sep, "", "📌 **按优先级前 10**（同档按**创建时间**由远及近）", ""]
+    lines_out: List[str] = [
+        stats_md,
+        "",
+        sep,
+        "",
+        "📌 **按优先级前 10**（**不含已取消**；同档按**创建时间**由远及近）",
+        "",
+    ]
     if not top_issues:
         lines_out.append("（当前无工单）")
     else:
@@ -608,7 +611,7 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
         incoming: dingtalk_stream.ChatbotMessage,
         multica_bin: str,
     ) -> Tuple[int, str]:
-        """查工单：状态分布 + 按优先级前 10（同档 created_at 由远及近）。"""
+        """查工单：状态分布 + 按优先级前 10（不含已取消；同档 created_at 由远及近）。"""
         env = os.environ.copy()
         proj = _issue_list_project_args()
         total, counts = await _fetch_workspace_issue_stats(multica_bin, env)
@@ -622,9 +625,15 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
                 "请检查：`multica auth status`、网络；若需限定项目请配置 `MULTICA_PROJECT_ID`。",
             )
             return AckMessage.STATUS_OK, "OK"
-        issues = d.get("issues")
-        if not isinstance(issues, list):
-            issues = []
+        raw = d.get("issues")
+        if not isinstance(raw, list):
+            raw = []
+        issues = [
+            x
+            for x in raw
+            if isinstance(x, dict)
+            and str(x.get("status") or "").strip().lower() != "cancelled"
+        ]
         ranked = _sort_issues_priority_then_created(issues)
         top10 = ranked[:10]
         has_more = bool(d.get("has_more"))

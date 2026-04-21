@@ -1,5 +1,29 @@
 # Work Log - MyAgents Root
 
+## [2026-04-21] - Multica 钉钉派单桥：查工单「前 10」排除已取消工单
+
+**状态**: 已提交并推送
+
+**内容**:
+- `tools/multica-dingtalk-bridge/dispatch_bot.py`：`查工单` 回复中「按优先级前 10」列表过滤 `cancelled`；帮助文案与回复标题同步说明；移除历史 Agent 任务注释。
+- `tools/multica-dingtalk-bridge/README.md`：`查工单` 说明与行为一致（状态分布仍含已取消；前 10 不含已取消）。
+
+---
+
+## [2026-04-20] - pm-system：策划周计划工作台（后端 + 前端 MVP）
+
+**状态**: 待验收（未提交）
+
+**内容**:
+- 新增表 `planner_work_items`（`WorkItem` ORM）、`/api/planner/*`（CRUD、`week-labels`、`weekly-summary`、from-feature / from-pool、校验与只读 Feature 阶段展示）。
+- 前端：`#planner` / 顶栏「策划周计划」、`planner-workbench.js` 三列看板 + 弹窗（无拖拽）；`DataService` 封装 planner API；`ui-renderer` / `app.js` 接入。
+- 测试：`pytest` + `tests/conftest.py` 修复 User 表元数据；`tests/test_planner_api.py` 等。
+- 文档：`使用手册.md` / `使用手册.html` 日期；`使用手册.md` 增加模块说明与 v15 版本信息（HTML 正文大块未与 MD 逐段同步，仅日期已改）。
+
+**备注**: 明天早上验收；合并前建议 `py -m pytest pm-system/backend/tests/` 与手动打开 `#planner` 走一遍。
+
+---
+
 ## [2026-04-20] - Multica 钉钉派单桥：查工单、多 ID 取消、建单版式与 env 示例
 
 **状态**: 已提交并推送
