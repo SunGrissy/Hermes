@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-21] - 锦标赛赛季玩法：设计文档 v0.3 + Kickoff 议程
+
+**状态**: 已提交并推送
+
+**内容**:
+- `docs/锦标赛赛季玩法-设计文档.md`：附录赛季重置/未领奖/弹窗序列；BUILD（B1~B8）与 MAKE 拆解；数值 N12；体验差异化专项等。
+- `docs/锦标赛赛季玩法-Kickoff议程.md`：Kickoff 评审会目标与议程（含定位宣讲、风险全员识别、HOW 专项会后排期）。
+
+---
+
 ## [2026-04-21] - pm-system：quick_start 经 Windows Terminal 启动与 wt 命令行修复
 
 **状态**: 已提交并推送（子模块 pm-system + 根仓指针）
