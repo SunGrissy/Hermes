@@ -1,5 +1,30 @@
 # Work Log - MyAgents Root
 
+## [2026-04-21] - pm-system：运营矩阵维度「本周」标签同步到周计划
+
+**状态**: 进行中（未提交）
+
+**内容**:
+- 后端：`POST /api/planner/items/import-ops-dimension-week`（`dimensionId`、`targetWeek` ISO、`operationMatrix` 可选）；从 `OperationMatrix.global` 或请求体读矩阵，按周列 `startDate`/`endDate` 与 ISO 周重叠选取列，将该列 `dimensionValues[dim]` 中 id 批量建为 `ops_maintenance` 条目，`note` 固定前缀去重。
+- 前端：策划周计划工具栏「运营维度」下拉 +「同步本周矩阵标签」；`DataService.plannerImportOpsDimensionWeek`。
+- 测试：`test_planner_api.py` 新增用例。
+
+---
+
+## [2026-04-21] - Hermes 入站命令路由器（Multica）落地 + 文档 / quick_start
+
+**状态**: 验收通过（Hermes 已提交推送；根仓本条目随 WORK_LOG 记录）
+
+**内容**:
+- **Hermes**：`gateway/inbound_command_router/`（路由器 + `MulticaInboundAdapter`）、`multica_cli_bridge.py`（自 `dispatch_bot` vendored，`multica_inbound_try_markdown` 捕获 Markdown）；`gateway/run.py` 在 `_handle_message_with_agent` 前短路发送；环境变量 `HERMES_INBOUND_ROUTER_ENABLED`、`HERMES_ROUTER_MULTICA_ENABLED`。
+- **修复（2026-04-21 晚）**：`gateway/run.py` 抽出 `_route_inbound_commands_if_any`，在 **`_quick_key in self._running_agents` 分支开头**（interrupt 之前）同样调用，避免会话 Thinking 时「派单」永远走不到入站路由。
+- **MyAgents**：`docs/hermes-dingtalk-gateway.md` §6b；`tools/multica-dingtalk-bridge/README.md` 顶部互斥说明；`pm-system/quick_start.bat` 启动派单桥前警告行。
+- **Spec/Plan**：`docs/superpowers/specs/2026-04-21-hermes-inbound-command-router-design.md`、`docs/superpowers/plans/2026-04-21-hermes-inbound-command-router.md`（实施记录已填挂载点）。
+
+**备注**: 默认两开关为 **关**，不改变现网；割接按 spec §9.2。Hermes 单测：`test_inbound_router_core`、`test_multica_parsers` 通过。
+
+---
+
 ## [2026-04-21] - Multica 钉钉派单桥：查工单「前 10」排除已取消工单
 
 **状态**: 已提交并推送
