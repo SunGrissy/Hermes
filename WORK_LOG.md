@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-22] - pm-system：策划周计划运营矩阵同步未登录 401 修复
+
+**状态**: 已提交并推送（子模块 pm-system + 根仓指针）
+
+**内容**:
+- `POST /api/planner/items/import-ops-lead-window` 改为可选鉴权：未登录返回 200 并跳过写入（与 `GET /items` 行为一致），避免内网打开页控制台 401。
+- 前端 `_autoSyncOpsTags`：无 `auth_token` / ApiClient token 时不发同步请求。
+
+---
+
 ## [2026-04-22] - pm-system：策划周计划工作台（运营矩阵同步、弹窗、Esc）
 
 **状态**: 已提交并推送（子模块 pm-system + 根仓指针）
