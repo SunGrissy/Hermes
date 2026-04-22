@@ -1,5 +1,16 @@
 # Work Log - MyAgents Root
 
+## [2026-04-22] - pm-system：策划周计划五列看板与轨道（Phase 1 数据层）
+
+**状态**: 已提交并推送（子模块 pm-system + 根仓指针）
+
+**内容**:
+- 数据层：`planner_work_items.track_source` 迁移与序列化；`GET /api/planner/week-labels` 扩展「2 周后 / 3 周后」自然日区间；`track`/`trackSource` 推导与测试。
+- 版本管线：`pipelineWeight`（未决/快/慢）在 Feature 弹窗与保存时同步版本；运营矩阵维度 `suggestedTrack` 与单元格编辑、继承逻辑。
+- 前端：策划周计划五列分桶与筛选/批量操作对齐；设计文档 `docs/planner-track-ai-design.md` 入库。
+
+---
+
 ## [2026-04-22] - pm-system：策划周计划运营矩阵同步未登录 401 修复
 
 **状态**: 已提交并推送（子模块 pm-system + 根仓指针）
