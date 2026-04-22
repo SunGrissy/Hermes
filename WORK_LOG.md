@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-22] - pm-system：子模块指针同步（周计划路由与运营视图）
+
+**状态**: 已提交并推送（子模块 pm-system + 根仓指针）
+
+**内容**:
+- 子模块 `4c9ab49`：`feat(planner)` 周计划路由扩展、运营矩阵导入、`operations-view` / `ui-renderer` 联调；`test_planner_api` 通过。
+- 根仓更新 `pm-system` gitlink，消除 `-dirty` 与 `m pm-system` 状态。
+
+---
+
 ## [2026-04-22] - superpowers：Multica 巡查认领与钉钉验收通知工作流 spec
 
 **状态**: 已提交并推送
