@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-22] - pm-system：策划周计划 Chrome 默认超宽与主栏 class
+
+**状态**: 已提交并推送（子模块 pm-system + 根仓指针）
+
+**内容**:
+- `switchToPhase(planner_workbench)`：先 `render`/`updatePhaseUI` 再应用超宽 class，避免子区域仍为 `display:none` 时依赖 `:has()` 在 Chrome 上不稳定。
+- `applyPlannerWorkbenchPhaseFullWidth`：为 `.main-content` 增加/移除 `main-content-planner-fullwidth`，与 `styles.css` 显式放宽 `max-width` 配套。
+
+---
+
 ## [2026-04-22] - pm-system：子模块指针同步（周计划路由与运营视图）
 
 **状态**: 已提交并推送（子模块 pm-system + 根仓指针）
