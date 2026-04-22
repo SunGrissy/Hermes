@@ -1,5 +1,23 @@
 # Work Log - MyAgents Root
 
+## [2026-04-22] - superpowers：Multica 巡查认领与钉钉验收通知工作流 spec
+
+**状态**: 已提交并推送
+
+**内容**:
+- 新增 `docs/superpowers/specs/2026-04-22-multica-agent-patrol-acceptance-workflow-design.md`：C（Webhook 或 poll 降级）+ 每日 B 对账；公网 Multica 先当真源；认领 = `issue assign` 至具名 Agent + 状态机；待验收外呼钉钉群为硬门禁；与 Hermes 入站路由器 spec 交叉引用及 Stream 单活风险提示。
+
+---
+
+## [2026-04-22] - pm-system：策划周计划工作台卡片拖周与列头分配人筛选
+
+**状态**: 验收通过
+
+**内容**:
+- `ui/components/planner-workbench.js`：卡片右下角 `⋮` 把手拖到周列灰区更新 `targetWeek`（「其他」清空周）；`[[ops-matrix-sync]]` 条目同步改写 note 中 `w=`/`mw=`；列头新增按分配人筛选（全部分配人 / 未分配 / 本列出现过的负责人）；说明文案与布局（复选框右上、正文留白）。
+
+---
+
 ## [2026-04-22] - pm-system：策划周计划五列看板与轨道（Phase 1 数据层）
 
 **状态**: 已提交并推送（子模块 pm-system + 根仓指针）
