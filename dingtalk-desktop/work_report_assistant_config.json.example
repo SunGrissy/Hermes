@@ -2,6 +2,8 @@
   "_comment": "复制为 work_report_assistant_config.json 并填写 api_key；该文件已加入 .gitignore，勿提交。也可用环境变量 WORK_REPORT_API_KEY 覆盖 api_key。",
   "base_url": "https://zxty.tuyoo.com/work-report",
   "api_key": "",
+  "_comment_model": "可选 model（如 claude-opus-4.6）。多轮 agent 若后续轮仍固定 Sonnet，Sonnet 日限额用尽会失败，需网关支持或换 key。可用环境变量 WORK_REPORT_MODEL、命令行 --model 覆盖。",
+  "_comment_chat_request_extra": "可选 chat_request_extra：对象合并进 POST /api/v1/chat JSON；环境变量 WORK_REPORT_CHAT_EXTRA_JSON（JSON 对象）后合并、可覆盖 model。",
   "default_timeout_sec": 300,
   "webhook_key": "hr",
   "_comment_pm": "假日/调休：优先 GET pm_calendar_base_url + /api/pm-calendar（PmSystem 后端，如内网 8112），失败再读本地 pm_data_json_path。完整 URL 可用 WORK_REPORT_PM_CALENDAR_URL。",

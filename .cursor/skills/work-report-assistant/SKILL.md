@@ -16,7 +16,7 @@ Windows 计划任务（schtasks）
   → run_work_report_assistant.ps1 -Scenario <id>
     → py work_report_assistant_run.py --scenario <id>
       1. 读 roster.json（人员名单）+ config.json（API 密钥）
-      2. （早报）读 PM 主数据 `holidays`/`workdays`，与「假日与调休」一致后算「上一工作日」
+      2. （早报）读 PM 日历算「上一工作日」；**周一**改口径：不拉上一工作日**日报**，改拉「上一工作日 18:00 后至今日早间」的**周报/月报**
       3. 构造提示词（含硬约束 + 格式铁律 + 日期窗口）
       4. POST /api/v1/chat → 日志助手 Chat API
       5. 回复 Markdown → send_result_webhook.py → 钉钉群
@@ -28,7 +28,7 @@ Windows 计划任务（schtasks）
 
 | ID | 触发 | 用途 | 输出结构 |
 |----|------|------|----------|
-| `morning_digest` | **每日** 09:00（脚本内按 PM 工作日过滤，非工作日不推） | 前一工作日日报提交情况 + 信息不对称风险 | 提交率、未交名单、分人风险点 |
+| `morning_digest` | **每日** 09:00（脚本内按 PM 工作日过滤，非工作日不推） | 非周一：前一工作日**日报**；**周一**：上一工作日 18:00 后至今日早间 **周报/月报**（不含日报） | V2 四段战情结构 |
 | `weekly_material` | 周日 16:00 | 按 UE/运营/数据/技术 四组合并周报初稿 | 分组产出 → 管线进展 → 卡点 → AI 应用 |
 | `weekly_px_insight` | 周一 10:30 | 上一自然周产品体验洞察聚类 + 人均条数 | 体验时长 → 洞察聚类 → 贡献统计 |
 | `weekly_ai_px_report` | 周五 17:00 | 当周 AI 使用场景聚类 + 人均条数 | AI 聚类（按主题） → 各组统计 |
@@ -88,6 +88,7 @@ py work_report_assistant_run.py --scenario weekly_material --date 2026-04-06
 - **触发时间**：改 `register_*.ps1` 中的 `-At` 参数，重跑注册
 - **推送群**：改 `webhook_config.json` 中对应键的 URL
 - **提示词口径**：改 `work_report_assistant_run.py` 的 `build_message` 函数
+- **早报管线拆条**：正文「管线摩擦与卡点」下须为 `### 研发管线-PM侧` / `### 资产管线-APM侧`（与 `_PIPELINE_MODULES` 标题一致），分别 @ 张梦君 / @ 屈丽茹 推送
 - **汇总模板**：改 `roster.json` 的 `pmo_template_ref`
 
 ## 展示与迁移文档

@@ -23,12 +23,11 @@ _ROOT = os.path.abspath(os.path.join(_THIS_DIR, ".."))
 # 与 PM 后端 data/gamedev_pm_data.json 默认相对路径（含 holidays / workdays）
 _DEFAULT_PM_DATA_REL = "pm-system/backend/data/gamedev_pm_data.json"
 
-# 管线卡点4模块：(模块名, 负责人手机号, webhook_key)
-# 手机号来自 PmSystem /api/data users[].externalIds.dingtalk_mobile
+# 早报「管线摩擦与卡点」拆条：(三级标题名, 负责人手机号, webhook_key)
+# 标题须与 build_message morning_digest 中 ### 行一致；手机号来自 PmSystem users[].externalIds.dingtalk_mobile
 _PIPELINE_MODULES = [
-    ("PM 关注",  "17610735216", "version_digest_pmo"),  # 张梦君
-    ("APM 关注", "13269668329", "version_digest_pmo"),  # 屈丽茹
-    ("QA 关注",  "15850506062", "version_digest_pmo"),  # 任鹏锐
+    ("研发管线-PM侧", "17610735216", "version_digest_pmo"),  # 张梦君
+    ("资产管线-APM侧", "17710255342", "version_digest_pmo"),  # 屈丽茹
 ]
 _CONFIG_NAME = "work_report_assistant_config.json"
 _ROSTER_NAME = "work_report_assistant_roster.json"
@@ -134,10 +133,13 @@ def scenario_date_context(
         else:
             p = previous_workday_weekday_only(today)
             src = "fallback_weekday"
+        # 周一：不按「上一工作日日报」口径，改拉上一工作日日终后至今日早间提交的周报/月报
+        variant = "monday_weekly_monthly" if today.weekday() == 0 else "weekday_daily"
         return {
             "prev_workday": p.isoformat(),
             "today": today.isoformat(),
             "calendar_source": src,
+            "morning_digest_variant": variant,
         }
     if scenario_id == "weekly_material":
         start = monday_of_week(today)
@@ -189,6 +191,8 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
 
     if scenario_id == "morning_digest":
         pw = ctx["prev_workday"]
+        td = ctx.get("today") or ""
+        variant = ctx.get("morning_digest_variant") or "weekday_daily"
         cal_src = ctx.get("calendar_source") or "fallback_weekday"
         if cal_src == "pm_data":
             cal_line = "【日历口径】「上一工作日」以 PM 系统「假日与调休管理」为准（与版本规划工作日历一致）。\n"
@@ -197,11 +201,33 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
                 "【日历口径】未读取到 PM 主数据文件时，「上一工作日」暂按周一至周五（不含周末）推算；"
                 "请在 work_report_assistant_config.json 中配置 pm_data_json_path，或设置环境变量 WORK_REPORT_PM_DATA_JSON。\n"
             )
+        if variant == "monday_weekly_monthly":
+            focus_line = (
+                f"【周一检索口径】运行日为周一：不汇总「上一工作日（{pw}）」的**日报**。\n"
+                f"请仅检索系统中汇报类型为 **周报** 或 **月报**、且**提交时间**在 "
+                f"「{pw} 当日 18:00（含）之后」至「{td} 当日当前时刻（早间）」之间提交的汇报全文；"
+                "该时间窗覆盖周末至周一早间。**不得**将该窗内的**日报**当作依据；若仅有日报而无周报/月报，"
+                "「📍」小节写「本窗口内无周报/月报或系统无记录」，勿虚构。\n\n"
+            )
+            tracking_title = "## 📍 周末至周一早间核心推进 (Tracking)"
+            tracking_hint = (
+                "依据上述周报/月报，按版本或核心事项聚合周末至周一早间的重要进展。格式要求：\n"
+                "- 【版本/事项名】一句话描述进展（@相关人员）\n"
+                "（如果没有核心推进，写「无」）\n\n"
+            )
+        else:
+            focus_line = f"【目标日报日期】{pw}（前一工作日，相对运行日）\n\n"
+            tracking_title = "## 📍 昨日核心推进 (Tracking)"
+            tracking_hint = (
+                "按版本或核心事项聚合昨天的重要进展。格式要求：\n"
+                "- 【版本/事项名】一句话描述进展（@相关人员）\n"
+                "（如果没有核心推进，写「无」）\n\n"
+            )
         return (
             f"{hard}\n"
             "【任务类型】工作日早报（V2 战情版）\n"
             f"{cal_line}"
-            f"【目标日报日期】{pw}（前一工作日，相对运行日）\n\n"
+            f"{focus_line}"
             "【名单外人员处理铁律】汇总范围严格限于上方人员名单。名单之外的任何人员，"
             "不得出现在回复的任何部分——包括括号注释、补充说明、漏交提示、「不在汇总范围」等说明，一律不提及。\n\n"
             "【非技术组】请对照模板「四要素」与上下游表述，识别信息不对称或可对齐而未对齐之处。\n"
@@ -213,14 +239,24 @@ def build_message(scenario_id: str, roster_data: dict[str, Any], ctx: dict[str, 
             "- 每条不超过两行\n"
             "- 禁止在回复任何位置附加「数据说明」「⚠ 数据说明」「注：」等脚注、免责声明或补充说明段落\n\n"
             "【输出结构（严格按此四个 Markdown 标题输出，不增不减）】\n\n"
-            "## 📍 昨日核心推进 (Tracking)\n"
-            "按版本或核心事项聚合昨天的重要进展。格式要求：\n"
-            "- 【版本/事项名】一句话描述进展（@相关人员）\n"
-            "（如果没有核心推进，写「无」）\n\n"
+            f"{tracking_title}\n"
+            f"{tracking_hint}"
             "## 🚨 管线摩擦与卡点 (Alerts)\n"
-            "识别跨组阻塞、依赖未决、延期风险、信息不对称。格式要求：\n"
-            "- **风险类型**：一句话描述卡点及影响（@相关人员）\n"
-            "（如果没有卡点，写「无」）\n\n"
+            "识别跨组阻塞、依赖未决、延期风险、信息不对称。**本节下必须且只能**用下列两个三级标题分层（顺序固定），"
+            "标题文字与下方完全一致，便于拆条推送；**禁止**再使用「PM 关注」「APM 关注」等旧标题。\n\n"
+            "### 研发管线-PM侧\n"
+            "归入本组：版本节奏、需求合入、技术/客户端/服务端交付、合包与合规、跨组研发协调、验收与 QA 流程等；"
+            "主责需 **@张梦君** 跟进的项必须写在本组。\n"
+            "每条格式要求：\n"
+            "- 在项目前置风险灯标记：（🔴 红灯）已阻塞、延期风险高、必须立即介入；（🟡 黄灯）有风险但可控、需持续关注、依赖待确认。\n"
+            "- 样例：- 🔴 **合包阻塞**：客户端构建失败，影响春节版提测（@李振源）\n"
+            "- 样例：- 🟡 **需求排期**：关卡策划稿交付可能迟到 T+2，需 APM 确认动效资源（@屈丽茹）\n"
+            "若本组无任何项：单独一行「- 无」。\n\n"
+            "### 资产管线-APM侧\n"
+            "归入本组：美术/音频/视频资产、动效与资源生产排期、外包与资产节点、体验资源协调等；"
+            "主责需 **@屈丽茹** 跟进的项必须写在本组。\n"
+            "每条格式要求与 PM 侧完全一致（必须带 🔴/🟡 灯标）。若本组无任何项：单独一行「- 无」。\n\n"
+            "【分层铁律】一条事项只归入一侧，不重复粘贴；归属模糊时按「主责谁跟」选一侧，必要时一条内 @ 多人但只出现一次正文。\n\n"
             "## 🎯 今日管理动作 (Actions)\n"
             "提炼出需要制作人或 PMO 今天介入决策、拍板或跟进的事项。格式要求：\n"
             "- **需跟进/决策**：一句话说明需要谁做什么\n"
@@ -341,16 +377,46 @@ def scenario_title(scenario_id: str, ctx: Optional[dict[str, str]] = None) -> st
     return titles[scenario_id]
 
 
-def post_chat(base_url: str, api_key: str, message: str, timeout: int, model: Optional[str] = None) -> str:
+def _build_chat_request_extra(cfg: dict[str, Any]) -> dict[str, Any]:
+    """合并配置与环境中的额外 chat 请求字段（供网关扩展参数）。"""
+    out: dict[str, Any] = {}
+    extra = cfg.get("chat_request_extra")
+    if isinstance(extra, dict):
+        out.update(extra)
+    raw = (os.environ.get("WORK_REPORT_CHAT_EXTRA_JSON") or "").strip()
+    if not raw:
+        return out
+    try:
+        j = json.loads(raw)
+    except json.JSONDecodeError as e:
+        _log(f"warn: WORK_REPORT_CHAT_EXTRA_JSON is not valid JSON: {e}")
+        return out
+    if isinstance(j, dict):
+        out.update(j)
+    else:
+        _log("warn: WORK_REPORT_CHAT_EXTRA_JSON must be a JSON object")
+    return out
+
+
+def post_chat(
+    base_url: str,
+    api_key: str,
+    message: str,
+    timeout: int,
+    model: Optional[str] = None,
+    request_extra: Optional[dict[str, Any]] = None,
+) -> str:
     # Support OpenAI compatible endpoint if base_url doesn't end with work-report
     if "chat/completions" in base_url or "open.bigmodel.cn" in base_url:
         url = base_url.rstrip("/")
         if not url.endswith("chat/completions"):
             url += "/chat/completions"
-        payload = {
+        payload: dict[str, Any] = {
             "model": model or "glm-4",
-            "messages": [{"role": "user", "content": message}]
+            "messages": [{"role": "user", "content": message}],
         }
+        if request_extra:
+            payload.update(request_extra)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(
             url,
@@ -374,9 +440,11 @@ def post_chat(base_url: str, api_key: str, message: str, timeout: int, model: Op
 
     # Legacy work-report endpoint
     url = base_url.rstrip("/") + _CHAT_PATH
-    payload = {"message": message}
+    payload: dict[str, Any] = {"message": message}
     if model:
         payload["model"] = model
+    if request_extra:
+        payload.update(request_extra)
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -407,8 +475,8 @@ def post_chat(base_url: str, api_key: str, message: str, timeout: int, model: Op
 
 def split_pipeline_modules(text: str, modules: list[tuple[str, str, str]]) -> list[tuple[str, str, str, str]]:
     """
-    将管线卡点正文按模块拆分，返回 [(module_name, phone, content)]。
-    content 不含 ### 标题行，只含子弹列表内容。
+    将「管线摩擦与卡点」内各 ### 三级标题块按模块名拆分，返回 [(module_name, phone, content, webhook_key)]。
+    content 不含 ### 标题行，只含子弹列表内容；module_name 须与提示词中的 ### 标题一致。
     """
     results = []
     for module_name, phone, webhook_key in modules:
@@ -435,8 +503,8 @@ def split_pipeline_modules(text: str, modules: list[tuple[str, str, str]]) -> li
 
 
 def extract_pipeline_section(text: str) -> str:
-    """从早报正文中提取「管线卡点 & 风险」一节（## 二 到下一个 ## 之间）。"""
-    m = re.search(r"(##[^\n]*管线卡点[^\n]*\n.*?)(?=\n##\s|\Z)", text, re.DOTALL)
+    """从早报正文中提取「管线…卡点」一节（## 标题到下一个 ## 之间）。"""
+    m = re.search(r"(##[^\n]*管线[^\n]*卡点[^\n]*\n.*?)(?=\n##\s|\Z)", text, re.DOTALL)
     if m:
         return m.group(1).strip()
     return ""
@@ -521,6 +589,11 @@ def main() -> int:
         action="store_true",
         help="only print message, no HTTP",
     )
+    parser.add_argument(
+        "--model",
+        default="",
+        help="override model for this run (e.g. claude-opus-4.6); also see WORK_REPORT_MODEL",
+    )
     args = parser.parse_args()
 
     if args.date:
@@ -571,12 +644,24 @@ def main() -> int:
         _log("error: base_url missing")
         return 1
 
-    model = (cfg.get("model") or "").strip()
+    cfg_model = (cfg.get("model") or "").strip()
+    env_model = (os.environ.get("WORK_REPORT_MODEL") or "").strip()
+    cli_model = (args.model or "").strip()
+    model = cli_model or env_model or cfg_model
+    request_extra = _build_chat_request_extra(cfg)
 
     _log(f"scenario={args.scenario} today={today.isoformat()} webhook_key={wk}")
+    _log(f"chat model={model or '(server default)'} extra_keys={sorted(request_extra.keys())}")
 
     try:
-        reply = post_chat(base_url, api_key, message, timeout, model=model if model else None)
+        reply = post_chat(
+            base_url,
+            api_key,
+            message,
+            timeout,
+            model=model if model else None,
+            request_extra=request_extra if request_extra else None,
+        )
     except Exception as e:
         _log(f"chat API error: {e}")
         return 1
@@ -585,8 +670,13 @@ def main() -> int:
     pw = ""
     if args.scenario == "morning_digest":
         pw = ctx.get("prev_workday", "")
+        variant = ctx.get("morning_digest_variant") or "weekday_daily"
+        td = ctx.get("today", "")
         if pw:
-            reply = f"# 日报汇总-{pw}\n\n" + reply
+            if variant == "monday_weekly_monthly":
+                reply = f"# 周报月报汇总-{pw}~{td}\n\n" + reply
+            else:
+                reply = f"# 日报汇总-{pw}\n\n" + reply
     try:
         send_dingtalk_markdown(title, reply, wk)
     except Exception as e:
@@ -594,10 +684,15 @@ def main() -> int:
         return 1
 
     if args.scenario == "morning_digest" and pw:
+        variant = ctx.get("morning_digest_variant") or "weekday_daily"
+        td = ctx.get("today", "")
         pipeline_text = extract_pipeline_section(reply)
         if pipeline_text:
             for module_name, phone, content, wk_key in split_pipeline_modules(pipeline_text, _PIPELINE_MODULES):
-                module_title = f"{module_name}-{pw}"
+                if variant == "monday_weekly_monthly":
+                    module_title = f"{module_name}-{pw}_{td}"
+                else:
+                    module_title = f"{module_name}-{pw}"
                 body = f"## {module_title}\n\n***\n\n{content}"
                 try:
                     send_dingtalk_markdown(module_title, body, wk_key, at_mobiles=[phone] if phone else None)
