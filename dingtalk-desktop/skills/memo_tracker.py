@@ -1856,40 +1856,58 @@ def process_memo(msg_id, text, context_msgs, memo_ts, group_cid, config):
 @_memo_serialized
 def process_close(msg_id, text, group_cid, config):
     """
-    处理完成/关闭消息。
+    处理完成/关闭消息；支持多编号顿号/逗号分隔。
     返回: True 已处理 / False 未匹配
     """
-    m = re.search(r'(?:完成|关闭)\s*#?(\d+)', text)
-    if not m:
+    seqs = parse_close_memo_seqs(text or '')
+    if seqs is None:
         return False
-
-    seq = int(m.group(1))
-    memo = get_memo_by_seq(seq)
-    if not memo:
-        _log(f'close: memo #{seq} not found')
-        not_found_text = _render_template('not_found', seq=seq, summary='')
-        _send_webhook(not_found_text, config, group_cid=group_cid)
+    if not seqs:
+        hint = (
+            _render_template('memo_close_need_ids')
+            or _DEFAULT_TEMPLATES.get('memo_close_need_ids', '')
+            or '请写明要完成的备忘编号，例如：完成备忘 3 或完成 memo 24、25、26'
+        )
+        _send_webhook(hint, config, group_cid=group_cid)
         return True
-
-    if memo.get('status') == 'deleted':
-        delete_memo_item(seq)
-        _log(f'close: memo #{seq} was deleted (cleaned row)')
-        txt = _render_template('memo_close_deleted', seq=seq, summary='')
-        _send_webhook(txt, config, group_cid=group_cid)
-        return True
-
-    if memo['status'] == 'done':
-        _log(f'close: memo #{seq} already done')
-        return True
-
-    close_memo_item(seq)
-    _close_task_in_reminder(seq, config)
-
-    summary = memo['text'][:30] + ('...' if len(memo['text']) > 30 else '')
-    close_text = _render_template('close', seq=seq, summary=summary)
-    _send_webhook(close_text, config, group_cid=group_cid)
-    _log(f'memo #{seq} closed: {summary}')
+    lines = []
+    for seq in seqs:
+        memo = get_memo_by_seq(seq)
+        if not memo:
+            _log(f'close: memo #{seq} not found')
+            lines.append(_render_template('not_found', seq=seq, summary='') or f'not found: memo #{seq}')
+            continue
+        if memo.get('status') == 'deleted':
+            delete_memo_item(seq)
+            _log(f'close: memo #{seq} was deleted (cleaned row)')
+            txt = _render_template('memo_close_deleted', seq=seq, summary='')
+            lines.append(txt or f'memo #{seq} 已删除，无法标记完成')
+            continue
+        if memo['status'] == 'done':
+            _log(f'close: memo #{seq} already done')
+            lines.append(_render_template('memo_close_already', seq=seq, summary='') or f'memo #{seq} 已是完成状态')
+            continue
+        close_memo_item(seq)
+        _close_task_in_reminder(seq, config)
+        summary = memo['text'][:30] + ('...' if len(memo['text']) > 30 else '')
+        close_text = _render_template('close', seq=seq, summary=summary)
+        lines.append(close_text or f'✅ done: memo #{seq} {summary}')
+        _log(f'memo #{seq} closed: {summary}')
+    if lines:
+        _send_webhook('\n\n'.join(lines), config, group_cid=group_cid)
     return True
+
+
+def parse_close_memo_seqs(text: str) -> list | None:
+    """识别「完成 memo/备忘 …」「关闭 memo/备忘 …」并解析其中全部编号；非该指令返回 None。"""
+    t = (text or '').strip()
+    if not re.search(r'(?:完成|关闭)\s*(?:memo|备忘)\s*#?', t, re.IGNORECASE):
+        return None
+    m = re.search(r'(?:完成|关闭)\s*(?:memo|备忘)\s*#?\s*(.*)$', t, re.IGNORECASE | re.DOTALL)
+    if not m:
+        return None
+    tail = re.sub(r'[。！？!?\s]+$', '', m.group(1).strip())
+    return [int(x) for x in re.findall(r'\d+', tail)]
 
 
 def parse_delete_memo_seqs(text: str) -> list | None:

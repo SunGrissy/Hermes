@@ -193,6 +193,8 @@
     "wish_close_already": "wish #{seq} 已是完成状态",
     "wish_close_deleted": "wish #{seq} 已删除，无法完成",
     "memo_close_deleted": "memo #{seq} 已删除，无法标记完成",
+    "memo_close_already": "memo #{seq} 已是完成状态",
+    "memo_close_need_ids": "请写明要完成的备忘编号，例如：完成备忘 3 或完成 memo 24、25、26",
     "defer_title": "### 到期日已调整",
     "defer_line_ok": "- **#{seq}** → {due}（本地备忘 + TR）",
     "defer_line_db_only": "- **#{seq}** → {due}（仅本地备忘，TR 未找到 memo:#{seq}）",
