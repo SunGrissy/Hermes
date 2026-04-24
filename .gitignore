@@ -94,5 +94,21 @@ novel/
 # 本地数据与钉钉消息日志（含敏感会话，勿入库）
 data/
 
+# 临时文件 / 调试产物
+_tmp_*.py
+test_gateway_fix.py
+test_pid_check.py
+nul
+null
+rg.zip
+rg/
+ripgrep-*.zip
+
+# Obsidian 工作区配置（各人本地不同，不入库）
+.obsidian/
+
+# VS Code 本地配置
+.vscode/
+
 # ROI 测算：独立 Git 仓（tygit `ue4_pm_group/roi-forecast.git`），**不是** management-hub 子模块；父仓勿用 160000 索引
 roi-forecast/
