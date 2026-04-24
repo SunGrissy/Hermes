@@ -26,6 +26,34 @@ except ImportError:
 
 LOG = logging.getLogger("multica-bridge")
 
+# [AgentMultica Task] 2026-04-22 钉钉群 @ 机器人后正文不以「派单」开头导致解析不命中
+_AT_BEFORE_MULTICA_CMD = re.compile(
+    r"^@.+?(?=(?:#删除派单|删除派单|#取消派单|取消派单|#查工单|查工单|#派单|派单))"
+)
+
+
+def _normalize_dingtalk_at_prefixes(raw: str) -> str:
+    """去掉群聊里 leading 的 @昵称，使「@机器人 派单」与「派单」走同一套前缀匹配。
+
+    Hermes 钉钉适配器会保留 @ 文本给主 Agent；派单/删单/查单只认固定前缀，故在此统一剥掉。
+    先尝试「@… 直到关键字」无空格形态（@机器人派单），再尝试「@token + 空白」分段剥离。
+    """
+    s = (raw or "").strip()
+    for _ in range(8):
+        if not s.startswith("@"):
+            break
+        m = _AT_BEFORE_MULTICA_CMD.match(s)
+        if m:
+            s = s[m.end() :].lstrip()
+            continue
+        m2 = re.match(r"^@\S+\s+", s)
+        if m2:
+            s = s[m2.end() :].lstrip()
+            continue
+        break
+    return s
+
+
 _DELETE_DISPATCH_HELP = (
     "🗑️ **请指定要取消的工单**\n\n"
     "Multica 无物理删除；本操作会把工单状态设为 **已取消**（`cancelled`）。\n\n"
@@ -772,7 +800,7 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
     async def process(self, callback: dingtalk_stream.CallbackMessage):
         incoming = dingtalk_stream.ChatbotMessage.from_dict(callback.data)
         tc = incoming.text
-        raw = ((tc.content if tc else "") or "").strip()
+        raw = _normalize_dingtalk_at_prefixes(((tc.content if tc else "") or "").strip())
 
         del_rest = _strip_delete_dispatch_prefix(raw)
         if del_rest is not None:

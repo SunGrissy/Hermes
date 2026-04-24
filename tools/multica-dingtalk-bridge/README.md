@@ -1,5 +1,7 @@
 # Multica × 钉钉 Stream 派单桥
 
+> **与 Hermes 互斥**：若钉钉机器人已由 **Hermes 网关**（`hermes gateway`）占用 Stream，且已开启 **`HERMES_INBOUND_ROUTER_ENABLED` + `HERMES_ROUTER_MULTICA_ENABLED`**，则 **不要** 用**同一 Client ID** 再启动本桥，否则抢线、双方不稳定。目标态见 `docs/superpowers/specs/2026-04-21-hermes-inbound-command-router-design.md` §0 / §9.2。
+
 本目录实现：**钉钉企业机器人（Stream 模式）** 收 `#派单` 建单 → 本机子进程执行 **`multica issue create`**；收 **`删除派单` / `#删除派单`**（及 **`取消派单`** 别名）→ **`multica issue status … cancelled`**（Multica 无物理删除，等同取消工单）。与 `docs/superpowers/specs/2026-04-18-multica-integration-design.md` §5–§6 一致。
 
 ## 前提
