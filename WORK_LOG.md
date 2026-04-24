@@ -1554,4 +1554,33 @@
 
 **内容**:
 - 补提交 `dingtalk-desktop/digest_config.json` 当前生效配置（`pm_system_url=http://192.168.20.160:8112`）
-- 与 `VersionDigest` 单任务运行口径保持一致，避免本地有效配置未入库## 2026-04-18 - [验收通过] 更新 producer-mind Skill，融入马斯克算法五步法与蠢指数等核心方法论
+- 与 `VersionDigest` 单任务运行口径保持一致，避免本地有效配置未入库
+
+---
+
+## [2026-04-24] [小橘] - 工作流机制建设 + 昨日遷留落地
+
+**状态**: 进行中
+
+**内容**:
+- 落地执行纪律 skill：长任务必报，用户随时可"进度？"追问，必须立即汇报当前 in_progress 状态
+- 创建每日 2:00 动态记忆汇聚 cronjob（保留旧的 `daily-memory-sync`，删除重复的新 job）
+- 昨日翻车复盘落盘：`hub/2026-04-23-postmortem.md`
+- 创建明确擁置清单：`shared-memory/paused-tasks.md`
+- 建立工作默契约定：前一天遷留第二天主动提醒 / 遷留优先于新任务 / 擁置清单化 / 每日进度入 worklog
+
+**昨日遷留**：
+- [ ] 唤醒小橘快捷指令验收（10:00 cronjob 提醒）
+- [ ] 开门快捷指令优化方案验收（10:00 cronjob 提醒）
+
+**明确擁置**：
+- 大虾 soul/memory/skill 体系补齐（老大说"先放一放"，见 `paused-tasks.md`）
+
+**今日待办**：
+- 09:45 找 webhook URL 修复 cronjob DingTalk delivery
+- 10:00 验收快捷指令
+- 查 0422 记忆（已完成）
+
+---
+
+## 2026-04-18 - [验收通过] 更新 producer-mind Skill，融入马斯克算法五步法与蠢指数等核心方法论
