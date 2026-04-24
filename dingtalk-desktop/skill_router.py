@@ -75,6 +75,7 @@ from skills.memo_tracker import (
     process_delete_wish,
     process_defer_memo,
     parse_defer_memo_command,
+    parse_close_memo_seqs,
     parse_delete_memo_seqs,
     parse_delete_topic_seqs,
     process_today_focus,
@@ -295,6 +296,42 @@ def _assistant_group_skill_sender_allowed(memo_cfg: dict, msg_cid: str, sender_u
             % (su,)
         )
     return ok
+
+
+def _wish_sender_allowed(memo_cfg: dict, sender_uid: str) -> bool:
+    """愿望单收录白名单：复用 assistant_group_skill_uids 配置，应用于所有群（不限于助理主群）。
+
+    - assistant_group_skill_uids 为 []：不限制。
+    - 缺省该字段：仅允许 DINGTALK_MY_UID（未设则用 DEFAULT_MY_UID）。
+    - 发送者 uid 为空时放行（兼容 Frida 推送）。
+    """
+    raw = memo_cfg.get('assistant_group_skill_uids')
+    if isinstance(raw, list) and len(raw) == 0:
+        return True
+    if raw is None:
+        uids = [os.environ.get('DINGTALK_MY_UID', DEFAULT_MY_UID)]
+    elif not isinstance(raw, list):
+        uids = [raw]
+    else:
+        uids = raw
+    allowed = {str(x).strip() for x in uids if str(x).strip()}
+    if not allowed:
+        return True
+    labels = _assistant_group_allowed_sender_labels(memo_cfg, allowed)
+    su = str(sender_uid or '').strip()
+    if not su:
+        return True
+    ok = _sender_matches_assistant_labels(su, labels)
+    if not ok:
+        _log(
+            '愿望指令已忽略：发送者标识=%r 不在白名单（数字 UID + assistant_group_skill_aliases + 通讯录姓名）'
+            % (su,)
+        )
+    return ok
+
+
+# 备忘轮询优先走 JSAPI；须 >= daemon 侧 _fetch_lock 排队 + JSAPI 等待；过短则客户端先断连 → daemon 写响应 WinError 10053
+_MEMO_FETCH_JSAPI_TIMEOUT_S = int(os.environ.get('SKILL_MEMO_FETCH_TIMEOUT_S', '95'))
 
 
 def _log(msg: str):
@@ -940,7 +977,6 @@ def _normalize_command_text(text: str) -> str:
 
 
 _RE_MEMO   = re.compile(r'[\uff3b【\[]*(?:备忘|提醒我|TR)[\uff3d】\]]*')
-_RE_CLOSE  = re.compile(r'(?:完成|关闭)\s*#?\d+')
 _RE_CLOSE_WISH = re.compile(r'(?:完成|关闭)\s*(?:wish|愿望)\s*#?\s*\d+', re.IGNORECASE)
 _RE_DELETE_WISH = re.compile(r'删除\s*(?:wish|愿望)\s*#?\s*\d+', re.IGNORECASE)
 _RE_TODAY_FOCUS = re.compile(
@@ -968,6 +1004,8 @@ _RE_PRECHECK_STOP = re.compile(
 _RE_MORNING = re.compile(r'^\s*(?:上班啦|上班)\s*[!！。.~\s]*$')
 _RE_INSPECTION = re.compile(r'^\s*查岗\s*[!！。.~\s]*$')
 _RE_REPAIR = re.compile(r'^\s*修复\s*[!！。.~\s]*$')
+_RE_WAKE = re.compile(r'^\s*(?:唤醒小橘)\s*[!！。.~\s]*$')
+_RE_OPEN_GATE = re.compile(r'^\s*(?:开门)\s*[!！。.~\s]*$')
 # 版本状态摘要（与 py version_digest.py 同源，发向 digest 里 version_digest_webhook）
 _RE_VERSION_DIGEST = re.compile(
     r'^\s*版本\s*(?:咋样|怎么样)了\s*[!！。.?？~\s]*$')
@@ -977,6 +1015,92 @@ def _text_triggers_taoge_update(text: str) -> bool:
     """助理群口令：让涛哥更新 / 请涛哥更新（子串匹配，可前后带其它字）。"""
     t = text or ''
     return ('让涛哥更新' in t) or ('请涛哥更新' in t)
+
+
+def _restart_hermes_gateway() -> dict:
+    """杀掉旧 hermes gateway 进程并重启。
+    返回 dict：{ killed: bool, started: bool, old_pid: int|None, error: str|None }
+    """
+    result = {'killed': False, 'started': False, 'old_pid': None, 'error': None}
+    hermes_pid_file = r'D:/hermes/gateway.pid'
+    hermes_exe = r'D:/hermes/hermes-agent/venv/Scripts/hermes.exe'
+    old_pid = None
+
+    # 1) 尝试读取旧 PID
+    try:
+        with open(hermes_pid_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            old_pid = data.get('pid')
+            result['old_pid'] = old_pid
+    except Exception as e:
+        _log(f'wake: 读取 gateway.pid 失败: {e}')
+
+    # 2) 杀掉旧进程
+    try:
+        if old_pid:
+            subprocess.run(['taskkill', '/F', '/PID', str(old_pid)], capture_output=True, check=False)
+            _log(f'wake: 已杀掉旧 gateway PID {old_pid}')
+        # 同时杀 hermes.exe
+        subprocess.run(['taskkill', '/F', '/IM', 'hermes.exe'], capture_output=True, check=False)
+        time.sleep(1)
+        result['killed'] = True
+    except Exception as e:
+        result['error'] = f'杀进程失败: {e}'
+        _log(f'wake: 杀进程异常: {e}')
+        return result
+
+    # 3) 启动新进程（新开控制台窗口）
+    try:
+        creationflags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0x00000010)
+        subprocess.Popen(
+            [hermes_exe, 'gateway', 'run', '--replace'],
+            cwd=r'D:/hermes',
+            stdin=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+        _log('wake: 已启动新 hermes gateway')
+        result['started'] = True
+    except Exception as e:
+        result['error'] = f'启动失败: {e}'
+        _log(f'wake: 启动异常: {e}')
+
+    return result
+
+
+def _restart_daemon(webhook_url: str = '') -> dict:
+    """杀掉旧 daemon 进程并重启。使用 detached 子进程方案避免自杀后逻辑中断。
+    返回 dict：{ killed: bool, started: bool, old_pid: int|None, error: str|None }
+    """
+    result = {'killed': False, 'started': False, 'old_pid': None, 'error': None}
+    restart_script = os.path.join(_THIS_DIR, 'restart_daemon.py')
+
+    # 1) 获取旧 PID（用于日志）
+    try:
+        with urllib.request.urlopen('http://127.0.0.1:19200/health', timeout=5) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+            result['old_pid'] = data.get('pid')
+    except Exception as e:
+        _log(f'开门: 获取旧 PID 失败: {e}')
+
+    # 2) detached 启动重启脚本（新开控制台）
+    try:
+        argv = ['py', '-u', restart_script]
+        if webhook_url:
+            argv.extend(['--webhook', webhook_url])
+        creationflags = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0x00000010)
+        subprocess.Popen(
+            argv,
+            cwd=_THIS_DIR,
+            stdin=subprocess.DEVNULL,
+            creationflags=creationflags,
+        )
+        result['started'] = True
+        _log('开门: 已启动重启脚本')
+    except Exception as e:
+        result['error'] = f'启动失败: {e}'
+        _log(f'开门: 启动失败: {e}')
+
+    return result
 
 
 def _precheck_command_flags(text: str) -> tuple:
@@ -1336,6 +1460,56 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'repair status_check error: {e}')
         return
 
+    if _RE_WAKE.match(text):
+        key = (msg_cid, 'wake')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            webhook_url = _wish_webhook_for_cid(memo_cfg, msg_cid)
+            if webhook_url:
+                from skills.memo_tracker import _send_webhook
+                _send_webhook('已收到 **唤醒小橘** 指令，正在重启 hermes gateway...', memo_cfg, group_cid=msg_cid)
+            r = _restart_hermes_gateway()
+            if webhook_url:
+                from skills.memo_tracker import _send_webhook
+                if r.get('started'):
+                    _send_webhook('**小橘已唤醒** ✅\n\n旧进程已关闭，新 gateway 已启动。', memo_cfg, group_cid=msg_cid)
+                else:
+                    err = r.get('error') or '未知错误'
+                    _send_webhook(f'**唤醒小橘失败** ❌\n\n{err}', memo_cfg, group_cid=msg_cid)
+            _log(f"push: 唤醒小橘 -> {'已启动' if r.get('started') else '失败'}")
+            memo_seen_ids.add(msg_id)
+        except Exception as e:
+            _log(f'wake error: {e}')
+        return
+
+    if _RE_OPEN_GATE.match(text):
+        key = (msg_cid, 'open_gate')
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            webhook_url = _wish_webhook_for_cid(memo_cfg, msg_cid)
+            if webhook_url:
+                from skills.memo_tracker import _send_webhook
+                _send_webhook('已收到 **开门** 指令，正在重启 daemon...', memo_cfg, group_cid=msg_cid)
+            r = _restart_daemon(webhook_url=webhook_url)
+            if webhook_url:
+                from skills.memo_tracker import _send_webhook
+                if r.get('started'):
+                    _send_webhook('**大门已打开** ✅\n\ndaemon 重启脚本已启动，新进程将在几秒后拉起。', memo_cfg, group_cid=msg_cid)
+                else:
+                    err = r.get('error') or '未知错误'
+                    _send_webhook(f'**开门失败** ❌\n\n{err}', memo_cfg, group_cid=msg_cid)
+            _log(f"push: 开门 -> {'已启动' if r.get('started') else '失败'}")
+            memo_seen_ids.add(msg_id)
+        except Exception as e:
+            _log(f'open_gate error: {e}')
+        return
+
     if _text_triggers_taoge_update(text):
         if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
             memo_seen_ids.add(msg_id)
@@ -1578,11 +1752,27 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
             _log(f'close_wish error: {e}')
         return
 
-    if _RE_CLOSE.search(text):
-        try:
-            process_close(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg)
+    pk_close = parse_close_memo_seqs(text)
+    if pk_close is not None:
+        _agent_dbg(
+            'H4', 'skill_router.push', 'close_memo_branch',
+            msg_id=msg_id, cid=msg_cid, seqs=pk_close, text_preview=(text or '')[:80],
+        )
+        seq_key = '|'.join(sorted(map(str, pk_close))) if pk_close else ''
+        close_dedup_id = f'close:{msg_cid}:{seq_key}'
+        if close_dedup_id in memo_seen_ids:
             memo_seen_ids.add(msg_id)
-            _log('push: 完成指令已处理')
+            return
+        memo_seen_ids.add(close_dedup_id)
+        key = (msg_cid, 'close', seq_key)
+        if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+            memo_seen_ids.add(msg_id)
+            return
+        _recent_cmd_ts[key] = now_ms
+        try:
+            if process_close(msg_id=msg_id, text=text, group_cid=msg_cid, config=memo_cfg):
+                memo_seen_ids.add(msg_id)
+                _log('push: 完成指令已处理')
         except Exception as e:
             _log(f'close error: {e}')
         return
@@ -1603,6 +1793,10 @@ def _dispatch_one_message(record: dict, memo_cfg: dict,
         return
 
     if _text_triggers_new_wish(text, memo_cfg):
+        if not _wish_sender_allowed(memo_cfg, _sender_uid):
+            memo_seen_ids.add(msg_id)
+            _log('push: 愿望指令已忽略：发送者不在白名单')
+            return
         ck = wish_content_key(text)
         if ck:
             wish_dedup = 'wish_c:' + ck
@@ -1852,6 +2046,64 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'repair status_check error: {e}')
             continue
 
+        if _RE_WAKE.match(text):
+            if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+                seen_ids.add(msg_id)
+                _log('poll: 唤醒小橘 -> 跳过（超出有效时间窗或时间戳无效）')
+                continue
+            key = (str(group_cid), 'wake')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                webhook_url = _wish_webhook_for_cid(memo_cfg, group_cid)
+                if webhook_url:
+                    from skills.memo_tracker import _send_webhook
+                    _send_webhook('已收到 **唤醒小橘** 指令，正在重启 hermes gateway...', memo_cfg, group_cid=group_cid)
+                r = _restart_hermes_gateway()
+                if webhook_url:
+                    from skills.memo_tracker import _send_webhook
+                    if r.get('started'):
+                        _send_webhook('**小橘已唤醒** ✅\n\n旧进程已关闭，新 gateway 已启动。', memo_cfg, group_cid=group_cid)
+                    else:
+                        err = r.get('error') or '未知错误'
+                        _send_webhook(f'**唤醒小橘失败** ❌\n\n{err}', memo_cfg, group_cid=group_cid)
+                _log(f"poll: 唤醒小橘 -> {'已启动' if r.get('started') else '失败'}")
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'wake error: {e}')
+            continue
+
+        if _RE_OPEN_GATE.match(text):
+            if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
+                seen_ids.add(msg_id)
+                _log('poll: 开门 -> 跳过（超出有效时间窗或时间戳无效）')
+                continue
+            key = (str(group_cid), 'open_gate')
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                webhook_url = _wish_webhook_for_cid(memo_cfg, group_cid)
+                if webhook_url:
+                    from skills.memo_tracker import _send_webhook
+                    _send_webhook('已收到 **开门** 指令，正在重启 daemon...', memo_cfg, group_cid=group_cid)
+                r = _restart_daemon(webhook_url=webhook_url)
+                if webhook_url:
+                    from skills.memo_tracker import _send_webhook
+                    if r.get('started'):
+                        _send_webhook('**大门已打开** ✅\n\ndaemon 重启脚本已启动，新进程将在几秒后拉起。', memo_cfg, group_cid=group_cid)
+                    else:
+                        err = r.get('error') or '未知错误'
+                        _send_webhook(f'**开门失败** ❌\n\n{err}', memo_cfg, group_cid=group_cid)
+                _log(f"poll: 开门 -> {'已启动' if r.get('started') else '失败'}")
+                seen_ids.add(msg_id)
+            except Exception as e:
+                _log(f'open_gate error: {e}')
+            continue
+
         if _text_triggers_taoge_update(text):
             if _is_stale_command_msg(msg, now_ms, _MORNING_CMD_MAX_AGE_MS):
                 seen_ids.add(msg_id)
@@ -2093,11 +2345,28 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
                 _log(f'close_wish error: {e}')
             continue
 
-        if _RE_CLOSE.search(text):
-            try:
-                process_close(msg_id=msg_id, text=text,
-                              group_cid=group_cid, config=memo_cfg)
+        pk_close = parse_close_memo_seqs(text)
+        if pk_close is not None:
+            _agent_dbg(
+                'H4', 'skill_router.poll', 'close_memo_branch',
+                msg_id=msg_id, cid=str(group_cid), seqs=pk_close, text_preview=(text or '')[:80],
+            )
+            gc = str(group_cid).strip()
+            seq_key = '|'.join(sorted(map(str, pk_close))) if pk_close else ''
+            close_dedup_id = f'close:{gc}:{seq_key}'
+            if close_dedup_id in seen_ids:
                 seen_ids.add(msg_id)
+                continue
+            seen_ids.add(close_dedup_id)
+            key = (gc, 'close', seq_key)
+            if now_ms - _recent_cmd_ts.get(key, 0) < _RECENT_CMD_MS:
+                seen_ids.add(msg_id)
+                continue
+            _recent_cmd_ts[key] = now_ms
+            try:
+                if process_close(msg_id=msg_id, text=text,
+                                  group_cid=group_cid, config=memo_cfg):
+                    seen_ids.add(msg_id)
             except Exception as e:
                 _log(f'close error: {e}')
             continue
@@ -2116,6 +2385,10 @@ def _poll_memo_once(group_cid: str, memo_cfg: dict, seen_ids: set,
             continue
 
         if _text_triggers_new_wish(text, memo_cfg):
+            if not _wish_sender_allowed(memo_cfg, _message_sender_identity(msg)):
+                seen_ids.add(msg_id)
+                _log('poll: 愿望指令已忽略：发送者不在白名单')
+                continue
             ck = wish_content_key(text)
             if ck:
                 wish_dedup = 'wish_c:' + ck
