@@ -1,4 +1,7 @@
-"""Python 进程管理工具 -- 查看运行中的服务并支持关闭指定进程"""
+"""Python 进程管理工具 -- 查看运行中的服务、按序号关闭, 以及 --kill-all 一键结束本机 Python 类进程。"""
+
+# [AgentPyKill Task] 2026-04-22
+# [AgentPyKill Task] 目标: 扩展 --kill-all / --yes 一键结束本机 Python 类进程
 
 import argparse
 import json
@@ -31,6 +34,11 @@ CMD_PATTERNS = [
     ("multiprocessing", "(worker 子进程)"),
 ]
 
+# 结束 Python 后顺带结束的「独占控制台」类父进程(仅一级父进程)
+_SHELL_HOST_NAMES = frozenset(
+    n.casefold() for n in ("cmd.exe", "powershell.exe", "pwsh.exe")
+)
+
 SESSION_SCHEMA_VERSION = 1
 SESSION_MAX_AGE_SEC = int(os.environ.get("PROC_MANAGER_SESSION_MAX_AGE", "7200"))
 
@@ -51,8 +59,12 @@ def get_listening_ports():
     return pid_ports
 
 
-def get_python_processes():
-    """WMI 查询所有 python/py 进程, 返回列表[{pid, name, cmdline, created}]"""
+def get_python_processes(require_cmdline: bool = True):
+    """WMI 查询所有 python/py 进程, 返回列表[{pid, name, cmdline, created}]。
+
+    require_cmdline: True 时跳过 CommandLine 为空的项(与历史列表行为一致);
+    False 时保留, 供 --kill-all 尽量扫全。
+    """
     ps_cmd = (
         "Get-CimInstance Win32_Process "
         "| Where-Object { $_.Name -match 'python|py\\.exe' } "
@@ -71,13 +83,14 @@ def get_python_processes():
         if len(parts) < 4:
             continue
         pid, name, created, cmdline = parts
-        if not cmdline.strip():
+        cmdline = (cmdline or "").strip()
+        if require_cmdline and not cmdline:
             continue
         procs.append({
             "pid": pid.strip(),
             "name": name.strip(),
             "created": created.strip(),
-            "cmdline": cmdline.strip(),
+            "cmdline": cmdline,
         })
     return procs
 
@@ -212,6 +225,147 @@ def write_session_file(display, path: str) -> None:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
 
+def _wmi_parent_of_pids(pids):
+    """Windows: child_pid -> (parent_pid, parent_image_name)。失败返回空 dict。"""
+    if sys.platform != "win32" or not pids:
+        return {}
+    uniq = sorted({int(p) for p in pids if int(p) > 0})
+    if not uniq:
+        return {}
+    id_list = ",".join(str(x) for x in uniq)
+    ps_cmd = (
+        "$ids=@(%s);"
+        "foreach ($id in $ids) {"
+        "  $c = Get-CimInstance Win32_Process -Filter \"ProcessId=$id\" -ErrorAction SilentlyContinue;"
+        "  if (-not $c) { continue };"
+        "  $ppid = [int]$c.ParentProcessId;"
+        "  $p = Get-CimInstance Win32_Process -Filter \"ProcessId=$ppid\" -ErrorAction SilentlyContinue;"
+        "  $pn = if ($p) { $p.Name } else { '' };"
+        "  Write-Output (\"$id|$ppid|$pn\");"
+        "}"
+    ) % id_list
+    try:
+        out = subprocess.check_output(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            text=True,
+            errors="replace",
+        )
+    except subprocess.CalledProcessError:
+        return {}
+    result = {}
+    for line in out.strip().splitlines():
+        parts = (line or "").strip().split("|", 2)
+        if len(parts) < 3:
+            continue
+        try:
+            cid = int(parts[0])
+            ppid = int(parts[1])
+        except ValueError:
+            continue
+        result[cid] = (ppid, parts[2].strip())
+    return result
+
+
+def _wmi_parent_map_closed(seed_pids, max_rounds=24, max_keys=400):
+    """从若干 PID 出发反复查父进程, 直到闭包或上限(供沿链找 powershell/cmd)。"""
+    meta = {}
+    frontier = {int(p) for p in seed_pids if int(p) > 0}
+    for _ in range(max_rounds):
+        need = [p for p in sorted(frontier) if p not in meta]
+        if not need:
+            break
+        if len(meta) + len(need) > max_keys:
+            break
+        chunk = _wmi_parent_of_pids(need)
+        for k, v in chunk.items():
+            meta[k] = v
+        frontier = set()
+        for p in need:
+            if p not in chunk:
+                continue
+            ppid = chunk[p][0]
+            if ppid > 8 and ppid not in meta:
+                frontier.add(ppid)
+    return meta
+
+
+def _nearest_shell_ancestor_pid(leaf_pid, meta):
+    """沿父链向上找最近的 cmd/powershell/pwsh(如 powershell->py->python 则跳过 py)。"""
+    try:
+        cur = int(leaf_pid)
+    except (TypeError, ValueError):
+        return None
+    for _ in range(32):
+        row = meta.get(cur)
+        if not row:
+            return None
+        ppid, pname = row[0], row[1]
+        if ppid <= 8:
+            return None
+        pname_cf = (pname or "").casefold()
+        if pname_cf in _SHELL_HOST_NAMES:
+            return ppid
+        cur = ppid
+    return None
+
+
+def _close_terminal_for_python_process(leaf_pid, meta, reserved_shell_pids):
+    """结束 leaf 对应控制台: 父链上找 shell 后 taskkill(不碰 reserved 里本终端壳)。"""
+    if sys.platform != "win32":
+        return
+    sh = _nearest_shell_ancestor_pid(leaf_pid, meta)
+    if not sh or sh <= 8:
+        return
+    if sh in reserved_shell_pids:
+        return
+    subprocess.run(
+        ["taskkill", "/F", "/PID", str(sh), "/T"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdin=subprocess.DEVNULL,
+    )
+
+
+def _defer_taskkill_self_and_shell(mypid, shell_pid):
+    """用独立 cmd 延迟结束自身; 若 shell_pid>0 再结束该壳(关当前终端窗口)。"""
+    inner = "ping 127.0.0.1 -n 2 >nul & taskkill /F /PID %d /T" % int(mypid)
+    try:
+        sp = int(shell_pid)
+    except (TypeError, ValueError):
+        sp = 0
+    if sp > 8:
+        inner += " & taskkill /F /PID %d /T" % sp
+    inner += " & exit"
+    try:
+        subprocess.Popen(
+            [
+                "cmd.exe",
+                "/c",
+                "start",
+                "",
+                "/min",
+                "cmd.exe",
+                "/c",
+                inner,
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+        )
+    except OSError:
+        subprocess.run(
+            ["taskkill", "/F", "/PID", str(mypid), "/T"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+        )
+
+
 def run_kill_from_session(state_path: str, indices: list[int]) -> tuple[int, str]:
     """按上次快照序号杀进程。返回 (exit_code, markdown正文)。"""
     try:
@@ -231,6 +385,18 @@ def run_kill_from_session(state_path: str, indices: list[int]) -> tuple[int, str
     rows = data.get("rows") or []
     by_idx = {int(r["index"]): r for r in rows if r.get("index") is not None}
 
+    pids_for_meta = []
+    for i in indices:
+        if i not in by_idx:
+            continue
+        ps = str(by_idx[i].get("pid") or "").strip()
+        if ps.isdigit():
+            pids_for_meta.append(int(ps))
+    mypid = os.getpid()
+    pre_meta = _wmi_parent_map_closed(pids_for_meta + [mypid])
+    my_shell = _nearest_shell_ancestor_pid(mypid, pre_meta)
+    reserved_shells = {my_shell} if my_shell and my_shell > 8 else set()
+
     lines = ["### **关进程结果**\n\n"]
     bad = []
     ok = []
@@ -244,8 +410,9 @@ def run_kill_from_session(state_path: str, indices: list[int]) -> tuple[int, str
             bad.append(str(i))
             continue
         try:
+            pid_int = int(pid)
             cp = subprocess.run(
-                ["taskkill", "/F", "/PID", pid],
+                ["taskkill", "/F", "/PID", pid, "/T"],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -254,6 +421,7 @@ def run_kill_from_session(state_path: str, indices: list[int]) -> tuple[int, str
             svc = r.get("service") or "-"
             if cp.returncode == 0:
                 ok.append("- **#%s** PID `%s` %s → 已终止\n" % (i, pid, _md_cell(svc)))
+                _close_terminal_for_python_process(pid_int, pre_meta, reserved_shells)
             else:
                 err = (cp.stderr or cp.stdout or "").strip() or "taskkill 非零退出"
                 ok.append(
@@ -278,6 +446,84 @@ def run_kill_from_session(state_path: str, indices: list[int]) -> tuple[int, str
             rc = 1
             break
     return rc, "".join(lines)
+
+
+def run_kill_all(*, assume_yes: bool) -> int:
+    """结束 get_python_processes(require_cmdline=False) 中的全部 PID, 最后结束当前进程。
+
+    先杀其它 PID 再杀自身, 避免子进程仍在时 taskkill 自身失败。
+    """
+    if sys.platform != "win32":
+        print("仅 Windows 支持 --kill-all", file=sys.stderr)
+        return 1
+    try:
+        procs = get_python_processes(require_cmdline=False)
+    except subprocess.CalledProcessError as e:
+        print("枚举进程失败:", e, file=sys.stderr)
+        return 1
+
+    mypid = os.getpid()
+    targets = []  # [(pid, name, cmdline_clip), ...]
+    seen = set()
+    for row in procs:
+        try:
+            pid = int(str(row.get("pid", "")).strip())
+        except ValueError:
+            continue
+        if pid <= 0 or pid == mypid:
+            continue
+        if pid in seen:
+            continue
+        seen.add(pid)
+        clip = (row.get("cmdline") or "")[:100]
+        targets.append((pid, str(row.get("name") or ""), clip))
+
+    if not assume_yes:
+        print("[kill-all] 将终止以下进程(不含当前 proc_manager PID=%s):" % mypid, flush=True)
+        for pid, name, clip in targets[:40]:
+            print("  %s %s %s" % (pid, name, clip), flush=True)
+        if len(targets) > 40:
+            print("  ... 其余 %d 个省略" % (len(targets) - 40), flush=True)
+        print(
+            "[kill-all] 共 %d 个 PID, 将结束解释器并尽量关闭对应 cmd/PowerShell 窗口"
+            % len(targets),
+            flush=True,
+        )
+        ans = input("确认请输入大写 YES: ").strip()
+        if ans != "YES":
+            print("已取消")
+            return 1
+    else:
+        print("[kill-all] --yes: 结束 %d 个 PID, 最后结束自身 %s" % (len(targets), mypid), flush=True)
+
+    seed = [mypid] + [t[0] for t in targets]
+    pre_meta = _wmi_parent_map_closed(seed)
+    my_shell = _nearest_shell_ancestor_pid(mypid, pre_meta)
+    reserved_shells = {my_shell} if my_shell and my_shell > 8 else set()
+
+    for pid, _, _ in targets:
+        subprocess.run(
+            ["taskkill", "/F", "/PID", str(pid), "/T"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+        )
+        _close_terminal_for_python_process(pid, pre_meta, reserved_shells)
+
+    if my_shell and my_shell > 8:
+        _defer_taskkill_self_and_shell(mypid, my_shell)
+    else:
+        subprocess.run(
+            ["taskkill", "/F", "/PID", str(mypid), "/T"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+        )
+    return 0
 
 
 def print_table(rows):
@@ -360,13 +606,25 @@ def main_interactive():
             print("  已取消")
             continue
 
+        meta_pids = [int(t["pid"]) for t in targets] + [os.getpid()]
+        pre_meta = _wmi_parent_map_closed(meta_pids)
+        my_shell = _nearest_shell_ancestor_pid(os.getpid(), pre_meta)
+        reserved_shells = {my_shell} if my_shell and my_shell > 8 else set()
+
         for t in targets:
             try:
-                subprocess.run(
-                    ["taskkill", "/F", "/PID", t["pid"]],
-                    capture_output=True, text=True,
+                cpid = int(t["pid"])
+                cp = subprocess.run(
+                    ["taskkill", "/F", "/PID", str(cpid), "/T"],
+                    capture_output=True,
+                    text=True,
                 )
-                print(f"  [OK] PID {t['pid']} ({t['service']}) 已终止")
+                if cp.returncode == 0:
+                    print(f"  [OK] PID {t['pid']} ({t['service']}) 已终止")
+                    _close_terminal_for_python_process(cpid, pre_meta, reserved_shells)
+                else:
+                    err = (cp.stderr or cp.stdout or "").strip() or "taskkill 非零退出"
+                    print(f"  [FAIL] PID {t['pid']}: {err[:120]}")
             except Exception as e:
                 print(f"  [FAIL] PID {t['pid']}: {e}")
 
@@ -402,7 +660,28 @@ def main():
         metavar="LIST",
         help="逗号分隔序号，配合 --state-file 关闭对应 PID",
     )
+    p.add_argument(
+        "--kill-all",
+        action="store_true",
+        help="结束本机 WMI 枚举到的全部 python/py 进程(危险), 最后结束当前进程",
+    )
+    p.add_argument(
+        "--yes",
+        action="store_true",
+        help="与 --kill-all 合用, 跳过交互确认",
+    )
     args = p.parse_args()
+
+    if args.yes and not args.kill_all:
+        print("--yes 仅可与 --kill-all 合用", file=sys.stderr)
+        sys.exit(2)
+
+    if args.kill_all:
+        if args.markdown_list or args.kill_indices:
+            print("--kill-all 不可与 --markdown-list / --kill-indices 同时使用", file=sys.stderr)
+            sys.exit(2)
+        rc = run_kill_all(assume_yes=args.yes)
+        sys.exit(rc)
 
     if args.markdown_list:
         if not args.state_file:
