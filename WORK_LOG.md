@@ -1,5 +1,17 @@
 # Work Log - MyAgents Root
 
+## [2026-04-25] - 硅基军团正式成团：总管 + 三 Advisor 全链路打通
+
+**状态**: 已上线运行
+
+**内容**:
+- **架构**: 总管满满（Director）+ 阿茶（PM Advisor）+ 小美（Design Advisor）+ 妙妙（Care Advisor）四节点全部通过独立 DingTalk Stream 机器人接入硅基军团群。
+- **emoji 反应修复**: 阿茶/小美/妙妙之前无 `🤔Thinking`/`🥳Done` 反应；根因为启动时使用系统 Python（`C:\Python311\python.exe -m hermes_cli.main`），sys.path 不包含 venv site-packages，导致 `alibabacloud_dingtalk` 导入失败、`CARD_SDK_AVAILABLE=False`、Robot SDK 未初始化。
+- **修复动作**: 杀掉旧进程（PID 34940/53416/12836），改用 `venv/Scripts/hermes.exe gateway run` 启动；重启后三个 Advisor 均正确初始化 Card SDK + Robot SDK，emoji 反应生效。
+- **备注**: `D:/MyAgents/silicon-legion/advisors/` 下的 FastAPI 服务代码（端口 8300/8302）为早期未使用架构，实际运行的是 `D:/hermes/{acha,xiaomei,miaomiao}/` 下的独立 Hermes Gateway 实例。
+
+---
+
 ## [2026-04-22] - pm-system：策划周计划 Chrome 默认超宽与主栏 class
 
 **状态**: 已提交并推送（子模块 pm-system + 根仓指针）
