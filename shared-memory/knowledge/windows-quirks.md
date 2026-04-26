@@ -12,6 +12,15 @@
 - Windows 上 select 不能等待子进程管道，排空线程需使用 `stdout.read` 而非 select
 - 若 hermes update 覆盖了此逻辑，需检查恢复
 
+## 钉钉 Connector 发图
+
+| 问题 | 解法 |
+|------|------|
+| Markdown 图片路径用反斜杠 `D:\path\img.png` | ❌ 发出空图/叉 |
+| 改用正斜杠 `D:/path/img.jpg` | ✅ 正常显示 |
+| 格式：`![描述](MEDIA:D:/path/to/image.jpg)` | connector 自动上传到钉钉 |
+| PNG 大图也能发，但压缩成 JPG 更稳 | 建议先压缩 |
+
 ## 进程管理
 
 - `dingtalk-desktop/daemon.py` 是持久服务，前台运行会阻塞并超时

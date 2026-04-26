@@ -18,7 +18,12 @@ HUB_DIR = SHARED_MEMORY_DIR / "hub"
 KNOWLEDGE_DIR = SHARED_MEMORY_DIR / "knowledge"
 PENDING_DIR = SHARED_MEMORY_DIR / "pending-upgrade"
 
-HERMES_MEMORY_DIR = Path("D:/hermes/memories")
+HERMES_AGENTS = {
+    "manman": Path("D:/hermes/memories"),
+    "acha": Path("D:/hermes/acha/memories"),
+    "xiaomei": Path("D:/hermes/xiaomei/memories"),
+    "miaomiao": Path("D:/hermes/miaomiao/memories"),
+}
 OPENCLAW_MEMORY_DB = Path("D:/OpenClaw/memory/main.sqlite")
 
 # 确保目录存在
@@ -27,19 +32,20 @@ for d in [HUB_DIR, KNOWLEDGE_DIR, PENDING_DIR]:
 
 
 def read_hermes_memories():
-    """读取 Hermes 记忆"""
+    """读取所有 Hermes Agent 记忆"""
     memories = []
-    for filename in ["MEMORY.md", "USER.md"]:
-        filepath = HERMES_MEMORY_DIR / filename
-        if filepath.exists():
-            with open(filepath, "r", encoding="utf-8") as f:
-                content = f.read().strip()
-                if content:
-                    memories.append({
-                        "source": f"hermes/{filename}",
-                        "content": content,
-                        "timestamp": datetime.now().isoformat()
-                    })
+    for agent_name, agent_dir in HERMES_AGENTS.items():
+        for filename in ["MEMORY.md", "USER.md"]:
+            filepath = agent_dir / filename
+            if filepath.exists():
+                with open(filepath, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        memories.append({
+                            "source": f"{agent_name}/{filename}",
+                            "content": content,
+                            "timestamp": datetime.now().isoformat()
+                        })
     return memories
 
 
@@ -73,6 +79,61 @@ def read_openclaw_memories():
         print(f"[警告] 读取 OpenClaw 记忆失败: {e}")
     
     return memories
+
+
+def read_shared_knowledge():
+    """读取共享知识池 knowledge/ 目录下的 .md 文件"""
+    entries = []
+    if not KNOWLEDGE_DIR.exists():
+        return entries
+    
+    for filepath in KNOWLEDGE_DIR.glob("*.md"):
+        try:
+            mtime = datetime.fromtimestamp(filepath.stat().st_mtime)
+            with open(filepath, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+            if not content:
+                continue
+            
+            # 按 § 切分条目，如果没有 § 则整体作为一条
+            if "§" in content:
+                parts = content.split("§")
+                # 第一个 part 通常是标题或空，跳过
+                for part in parts[1:]:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    # 提取第一行作为标题
+                    lines = part.splitlines()
+                    title = lines[0].strip().rstrip(":- ")
+                    scope = "通用"
+                    # 检查标题是否带有 [xxx-only] 或 [通用] 标签
+                    if "[" in title and "]" in title:
+                        import re
+                        match = re.search(r"\[([^\]]+)\]", title)
+                        if match:
+                            scope = match.group(1)
+                            title = title.replace(f"[{scope}]", "").strip()
+                    entries.append({
+                        "source": filepath.name,
+                        "title": title,
+                        "scope": scope,
+                        "content": part,
+                        "mtime": mtime.strftime("%Y-%m-%d")
+                    })
+            else:
+                # 无 § 分隔，整体作为一条
+                entries.append({
+                    "source": filepath.name,
+                    "title": filepath.stem,
+                    "scope": "通用",
+                    "content": content,
+                    "mtime": mtime.strftime("%Y-%m-%d")
+                })
+        except Exception as e:
+            print(f"[警告] 读取 knowledge 文件失败 {filepath}: {e}")
+    
+    return entries
 
 
 def load_last_hub():
@@ -120,7 +181,7 @@ def classify_memory(content):
     return "memory", "普通动态记忆"
 
 
-def generate_hub_report(date_str, all_memories, new_memories, upgrade_candidates):
+def generate_hub_report(date_str, all_memories, new_memories, upgrade_candidates, knowledge_entries):
     """生成每日汇聚报告"""
     report_lines = [
         f"# 记忆汇聚报告 - {date_str}",
@@ -130,6 +191,7 @@ def generate_hub_report(date_str, all_memories, new_memories, upgrade_candidates
         f"- OpenClaw 记忆条目: {sum(1 for m in all_memories if m['source'].startswith('openclaw/'))}",
         f"- 本次新增: {len(new_memories)}",
         f"- 升级候选: {len(upgrade_candidates)}",
+        f"- 共享知识条目: {len(knowledge_entries)}",
         "",
         "## 新增记忆详情",
         ""
@@ -158,6 +220,22 @@ def generate_hub_report(date_str, all_memories, new_memories, upgrade_candidates
         report_lines.append("审核方式: 确认后我将更新身份层配置。")
         report_lines.append("")
     
+    # 共享知识池章节
+    if knowledge_entries:
+        report_lines.append("## 共享知识池 (knowledge/)")
+        report_lines.append("")
+        report_lines.append("来源: 各 Agent 写入的关键发现/环境知识。带 `[OpenClaw-only]` 等标签的条目仅对应平台有效。")
+        report_lines.append("")
+        
+        for i, entry in enumerate(knowledge_entries, 1):
+            scope_tag = f"[{entry['scope']}]" if entry['scope'] != "通用" else ""
+            report_lines.append(f"### {i}. [{entry['source']}] {entry['title']} {scope_tag}".strip())
+            report_lines.append(f"更新: {entry['mtime']}")
+            report_lines.append("")
+            preview = entry["content"][:400] + "..." if len(entry["content"]) > 400 else entry["content"]
+            report_lines.append(preview)
+            report_lines.append("")
+    
     return "\n".join(report_lines)
 
 
@@ -174,6 +252,10 @@ def main():
     
     print(f"  Hermes 记忆: {len(hermes_memories)} 条")
     print(f"  OpenClaw 记忆: {len(openclaw_memories)} 条")
+    
+    # 1.5 读取共享知识池
+    knowledge_entries = read_shared_knowledge()
+    print(f"  共享知识: {len(knowledge_entries)} 条")
     
     # 2. 差异对比（简化版：假设每次 Hermes memories 变更都是新的）
     last_content = load_last_hub()
@@ -192,7 +274,7 @@ def main():
     print(f"  升级候选: {len(upgrade_candidates)} 条")
     
     # 3. 生成报告
-    report = generate_hub_report(today, all_memories, new_memories, upgrade_candidates)
+    report = generate_hub_report(today, all_memories, new_memories, upgrade_candidates, knowledge_entries)
     
     with open(today_file, "w", encoding="utf-8") as f:
         f.write(report)
@@ -216,6 +298,7 @@ def main():
         "total_memories": len(all_memories),
         "new_memories": len(new_memories),
         "upgrade_candidates": len(upgrade_candidates),
+        "knowledge_entries": len(knowledge_entries),
         "report_path": str(today_file),
         "has_upgrade": len(upgrade_candidates) > 0
     }
