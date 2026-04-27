@@ -1,5 +1,29 @@
 # Work Log - MyAgents Root
 
+## [2026-04-27] - pm-system：策划周计划 ops 导入周归属（周五列 vs ISO 周）
+
+**状态**: 验收通过
+
+**内容**:
+- 根因：运营矩阵周列为周五起算，`import-ops-lead-window` 用 ISO 周窗口选列后仍将循环中的 `wk_iso` 写入 `WorkItem.target_week`，边界上 5.1 起列被归到下一 ISO 周（如 5.4 起）。
+- 修复：按矩阵列 `startDate` 换算策划侧 ISO 周作为 `target_week`；`sync_note_marker` 中 `w=` 与 `mw=` 区分 canonical 与匹配窗口周；未人工拖动的错误同步行在下次自动同步时纠正。
+- 测试：`backend/tests/test_planner_api.py` 新增周五起算列与错误行修复用例；`pytest tests/test_planner_api.py` 全通过。
+
+---
+
+## [2026-04-26] - 硅基军团运营对齐与知识底座补全
+
+**状态**: 记录归档
+
+**内容**:
+- **PMO 群安全规则对齐**：阿茶与孙懿定下硅基 pmo 群 9 条消息安全规则（查询自由/操作禁止/内容红线/白名单仅孙懿/早报署名等）。
+- **策划工作流程确认**：从运营矩阵到版本 Feature 分配再到策划周计划的 6 步闭环确认，明确阿茶核心职责边界。
+- **OPS 巡检脚本就位**：`D:/hermes/acha/scripts/ops_inspector.py` 完成，支持 `--month N` 查近三个月维度标签分配状态。
+- **知识底座补入**：将上述安全规则、工具边界（browser 不可用、DingTalk docs MCP 跨组织限制、Kimi key 实为 OpenRouter）、PmSystem auth 方式等归档到 `shared-memory/knowledge/` 。
+- **自动汇聚脚本修复**：`daily-sync.py` 差异对比从"全文前200字符子串匹配"改为"按 § 段落逐条比对"，避免漏报。
+
+---
+
 ## [2026-04-25] - 硅基军团正式成团：总管 + 三 Advisor 全链路打通
 
 **状态**: 已上线运行
