@@ -1,0 +1,74 @@
+{
+  "workspace_id": "78f62a94-aca3-42fd-be39-2322af41b102",
+  "projects": {
+    "pm-system": {
+      "id": "4c102b2e-1b4f-469a-8f65-978232e03ccd",
+      "path": "pm-system",
+      "url": "../pm-system.git",
+      "aliases": [
+        "pm-system",
+        "pmsystem",
+        "planner",
+        "workitem",
+        "feature",
+        "ops",
+        "版本规划",
+        "策划工作",
+        "排期",
+        "美术资产流转"
+      ]
+    },
+    "performeval": {
+      "id": "9c14cb58-8fc3-464a-8bef-b3327a169ff2",
+      "path": "performeval",
+      "url": "../performeval.git",
+      "aliases": [
+        "performeval",
+        "绩效",
+        "组织架构",
+        "花名册",
+        "org-structure"
+      ]
+    },
+    "cci_system": {
+      "id": "52a78426-4075-4925-9f7d-faaa0fde2c30",
+      "path": "cci_system",
+      "url": "../cci_system.git",
+      "aliases": [
+        "cci",
+        "cci_system",
+        "素材竞争力"
+      ]
+    },
+    "task_reminder": {
+      "id": "cf202ae8-f740-47f6-9b36-3e8441c9d434",
+      "path": "task_reminder",
+      "url": "../task_reminder.git",
+      "aliases": [
+        "task_reminder",
+        "任务提醒"
+      ]
+    },
+    "teamscore": {
+      "id": "23244fea-d2e2-41df-a686-749bca5575d5",
+      "path": "teamscore",
+      "url": "../teamscore.git",
+      "aliases": [
+        "teamscore",
+        "团队评分",
+        "m12"
+      ]
+    },
+    "md-reader": {
+      "id": "1fa32aeb-5577-4dd6-8730-bc0e1737dfa7",
+      "path": "md-reader",
+      "url": "../md-reader.git",
+      "aliases": [
+        "md-reader",
+        "md reader",
+        "markdown reader",
+        "md阅读"
+      ]
+    }
+  }
+}

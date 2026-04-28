@@ -82,11 +82,14 @@ def _format_notification(result: "AgentRunResult", task: dict[str, Any]) -> tupl
     summary = result.summary or "（无摘要）"
     duration = f"{result.duration_seconds:.0f}s"
     branch = result.branch
+    worktree_path = getattr(result, "worktree_path", "") or ""
+    worktree_line = f"**工作区：** `{worktree_path}`" if worktree_path else "**工作区：** （未记录）"
 
     body_lines = [
         f"## {status_icon} {result.task_id} {title_text}",
         "",
         f"**分支：** `{branch}`",
+        worktree_line,
         f"**耗时：** {duration}",
         "",
         "### 修改文件",
@@ -97,9 +100,9 @@ def _format_notification(result: "AgentRunResult", task: dict[str, Any]) -> tupl
         "",
         "### 下一步",
         f"```",
-        f"git checkout {branch}",
+        f"cd \"{worktree_path or _REPO_ROOT}\"",
         f"```",
-        "确认无误后合并到 main。",
+        "在该独立工作区验收，确认无误后再合并到 main。",
     ]
 
     if not result.success and result.error:

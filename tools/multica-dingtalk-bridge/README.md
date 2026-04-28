@@ -16,7 +16,9 @@
 2. 填入 `DINGTALK_CLIENT_ID`、`DINGTALK_CLIENT_SECRET`。仓库根 `.gitignore` 已忽略 `.env`，**不要**把 Secret 贴进 Git 或群聊。
 3. `dispatch_bot.py` 启动时会自动 `load_dotenv`；已设置的环境变量优先于 `.env`。
 
-**可选**：`MULTICA_PROJECT_ID` — 若 Web 上默认落在「无项目」视图不易看到新单，可在 `.env` 中设置项目 UUID，`issue create` 会自动带 `--project`。
+**可选**：`MULTICA_PROJECT_ID` — 强制所有新单落到指定项目。若不设置，派单桥会读取同目录 `multica_project_map.json`，按标题/描述关键词自动选择 project。
+
+**可选**：`MULTICA_PROJECT_MAP_FILE` — 自定义 project 映射文件路径。默认使用 `tools/multica-dingtalk-bridge/multica_project_map.json`，当前已包含 `pm-system`、`performeval`、`cci_system`、`task_reminder`、`teamscore`、`md-reader`。
 
 **可选**：`MULTICA_BIN` — 若机器人提示找不到 `multica`，多半是派单桥进程 **PATH 里没有安装目录**；可写绝对路径到 `multica.exe`，或始终用 **`run_bridge.ps1`** 启动（脚本会合并系统与用户 PATH）。
 
@@ -138,6 +140,67 @@ python dispatch_bot.py
 ## 可选出站
 
 设置环境变量 `DINGTALK_WEBHOOK_URL` 后，建单成功会向该 Webhook 发一条 Markdown；取消工单成功时也会发送取消摘要（与仓库 `cursor-to-dingtalk` 机器人格式兼容）。
+
+## 可选：In Review 自动触发 ClaudeAgent 审查
+
+`status_watcher.py` 会监听工单状态变化。默认只发 Webhook 提醒；如果开启代码审查，则工单进入 `In Review` 时会后台启动独立 ClaudeAgent reviewer 做只读代码审查，结果通过 `dingtalk-desktop` daemon 私聊投递。
+
+自动开发 Agent 会为每个工单创建独立工作区：`.worktrees/{issue_id}`，对应分支仍为 `agent/{issue_id}`。Claude 执行、diff 收集和后续审查都优先在这个 worktree 内完成，避免多个工单在同一个仓库目录里互相切分支。
+
+### 平台 Agent 与本地桥的执行边界
+
+当前存在两条链路：
+
+1. **本地桥执行器**：`dev_agent_runner.py` 明确创建 `D:\MyAgents\.worktrees\{issue}`，这是默认安全执行路径。
+2. **Multica 平台 daemon**：会创建 `work_dir`，但只有 workspace 配置了 repo 时才会自动准备 Git worktree。若 `multica workspace get ... --output json` 里 `repos` 为空，daemon 日志会显示 `repos=0`，此时平台 workdir 只是普通目录，不能直接作为代码执行主通道。
+
+推荐启动平台 daemon 时使用仓库外的 workspace root：
+
+```powershell
+cd d:\MyAgents\tools\multica-dingtalk-bridge
+.\run_multica_daemon_isolated.ps1
+```
+
+脚本会设置：
+
+```powershell
+MULTICA_REPOS_ROOT=D:\MyAgents
+MULTICA_WORKSPACES_ROOT=%USERPROFILE%\multica_workspaces
+MULTICA_DAEMON_MAX_CONCURRENT_TASKS=2
+MULTICA_KEEP_ENV_AFTER_TASK=1
+```
+
+注意：不要把 `MULTICA_WORKSPACES_ROOT` 放在 `D:\MyAgents` 内部。普通平台 workdir 位于仓库子目录时，`git rev-parse` 会向上命中根仓 `.git`，误判为共享工作区。
+
+`克劳德` Agent 已加护栏：如果当前 `work_dir` 不是隔离 Git worktree，必须直接回复 blocked，禁止 `cd D:\MyAgents\pm-system` 后修改共享目录。平台 Agent 只有在 Multica workspace 配置 repo 且 smoke run 验证 `repos_available > 0` / `work_dir` 是 Git worktree 后，才能重新作为代码执行主通道。
+
+### 配置
+
+```env
+CODE_REVIEW_ENABLED=1
+CODE_REVIEW_COMMAND=claude
+CODE_REVIEW_MULTICA_BIN=multica
+CODE_REVIEW_ARGS=--print --output-format json
+CODE_REVIEW_REPO_ROOT=D:\MyAgents
+CODE_REVIEW_TIMEOUT=1800
+CODE_REVIEW_SEND_TIMEOUT=90
+```
+
+结果投递走本机钉钉桌面通道：
+
+```env
+CODE_REVIEW_DAEMON_CID=
+DINGTALK_DAEMON_URL=http://127.0.0.1:19200
+```
+
+### Reviewer 行为
+
+1. 只读代码审查，不修改文件、不提交、不推送、不改变 Multica 状态。
+2. 优先审查 `.worktrees/{issue_id}`；找不到时查询 `multica issue runs {issue_id}`，优先使用平台 run result 的 `work_dir`；最后才回退到 `CODE_REVIEW_REPO_ROOT` 并按 `agent/{issue_id}` 分支线索报告阻塞原因。
+3. Claude CLI 输出建议使用 JSON：`--print --output-format json`，便于脚本提取 `result`。
+4. `CODE_REVIEW_DAEMON_CID` 为空时只运行审查并记日志，不投递私聊。
+
+关闭 `CODE_REVIEW_ENABLED` 即回滚到原来的“只发状态变更 Webhook”模式。Hermes 审查 Skill 仍可作为人工入口备用，但不在默认自动链路上。
 
 ## 安全
 

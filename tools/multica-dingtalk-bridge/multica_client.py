@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+_PROJECT_MAP_FILE = Path(__file__).with_name("multica_project_map.json")
+
 
 @dataclass
 class MulticaResult:
@@ -44,6 +46,56 @@ def build_issue_create_args(
     if project_id.strip():
         args.extend(["--project", project_id.strip()])
     return args
+
+
+def _load_project_map(env: dict[str, str]) -> dict[str, Any]:
+    raw = env.get("MULTICA_PROJECT_MAP_JSON", "").strip()
+    if raw:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return data if isinstance(data, dict) else {}
+    map_file = Path(env.get("MULTICA_PROJECT_MAP_FILE", "") or _PROJECT_MAP_FILE)
+    if not map_file.is_file():
+        return {}
+    try:
+        data = json.loads(map_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def infer_project_id(
+    *,
+    title: str,
+    description: str,
+    env: dict[str, str] | None = None,
+) -> str:
+    active_env = dict(env or os.environ)
+    explicit = active_env.get("MULTICA_PROJECT_ID", "").strip()
+    if explicit:
+        return explicit
+    data = _load_project_map(active_env)
+    projects = data.get("projects")
+    if not isinstance(projects, dict):
+        return ""
+    haystack = f"{title}\n{description}".lower()
+    for name, entry in projects.items():
+        if not isinstance(entry, dict):
+            continue
+        project_id = str(entry.get("id") or "").strip()
+        if not project_id:
+            continue
+        aliases = [str(name), str(entry.get("path") or "")]
+        raw_aliases = entry.get("aliases")
+        if isinstance(raw_aliases, list):
+            aliases.extend(str(alias) for alias in raw_aliases)
+        for alias in aliases:
+            needle = alias.strip().lower()
+            if needle and needle in haystack:
+                return project_id
+    return ""
 
 
 class MulticaClient:
@@ -136,15 +188,20 @@ class MulticaClient:
         description: str,
         priority: str = "medium",
         status: str = "todo",
+        project_id: str | None = None,
     ) -> MulticaResult:
-        project_id = self._env.get("MULTICA_PROJECT_ID", "")
+        resolved_project_id = (project_id or "").strip() or infer_project_id(
+            title=title,
+            description=description,
+            env=self._env,
+        )
         return await self.run_json(
             build_issue_create_args(
                 title=title,
                 description=description,
                 priority=priority,
                 status=status,
-                project_id=project_id,
+                project_id=resolved_project_id,
             )
         )
 

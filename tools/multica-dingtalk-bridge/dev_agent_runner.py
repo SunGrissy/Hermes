@@ -3,7 +3,7 @@
 """Claude Code headless 执行封装。
 
 为每个任务：
-1. 创建 git 分支 agent/{task_id}
+1. 创建 git worktree .worktrees/{task_id} + 分支 agent/{task_id}
 2. 组装上下文包（task_context.py）
 3. 调用 claude --bare -p ... --output-format json
 4. 解析 JSON 结果，提取执行摘要和修改文件列表
@@ -32,6 +32,7 @@ _AGENT_TIMEOUT_SECONDS = int(os.environ.get("DEV_AGENT_TIMEOUT", "600"))
 _AGENT_MAX_TURNS = int(os.environ.get("DEV_AGENT_MAX_TURNS", "15"))
 _EVAL_MAX_TURNS = int(os.environ.get("DEV_EVAL_MAX_TURNS", "5"))
 _EVAL_TIMEOUT_SECONDS = int(os.environ.get("DEV_EVAL_TIMEOUT", "180"))
+_WORKTREE_ROOT = Path(os.environ.get("DEV_AGENT_WORKTREE_ROOT", _REPO_ROOT / ".worktrees"))
 
 
 @dataclass
@@ -60,6 +61,7 @@ class AgentRunResult:
     success: bool
     summary: str
     files_changed: list[str] = field(default_factory=list)
+    worktree_path: str = ""
     error: str = ""
     duration_seconds: float = 0.0
 
@@ -70,6 +72,7 @@ class AgentRunResult:
             "success": self.success,
             "summary": self.summary,
             "files_changed": self.files_changed,
+            "worktree_path": self.worktree_path,
             "error": self.error,
             "duration_seconds": round(self.duration_seconds, 1),
         }
@@ -117,12 +120,73 @@ def _git(args: list[str], *, cwd: Path | None = None, timeout: int = 15) -> subp
     )
 
 
+def _worktree_path(task_id: str) -> Path:
+    safe_task_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", str(task_id)).strip("-") or "unknown"
+    return _WORKTREE_ROOT / safe_task_id
+
+
+def _path_key(path: Path | str) -> str:
+    return str(Path(path)).replace("\\", "/").rstrip("/").lower()
+
+
+def _worktree_entries(stdout: str) -> list[dict[str, str]]:
+    entries: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for raw in stdout.splitlines():
+        line = raw.strip()
+        if not line:
+            if current:
+                entries.append(current)
+                current = {}
+            continue
+        if line.startswith("worktree "):
+            current["worktree"] = line.split(" ", 1)[1]
+        elif line.startswith("branch "):
+            current["branch"] = line.split(" ", 1)[1].replace("refs/heads/", "")
+    if current:
+        entries.append(current)
+    return entries
+
+
+def _ensure_worktree(task_id: str, branch: str) -> Path:
+    """为单个工单准备独立 worktree；不切换根仓工作目录。"""
+    worktree = _worktree_path(task_id)
+    listed = _git(["worktree", "list", "--porcelain"])
+    if listed.returncode != 0:
+        raise RuntimeError(f"git worktree list failed: {listed.stderr.strip()}")
+
+    target_key = _path_key(worktree)
+    for entry in _worktree_entries(listed.stdout):
+        if _path_key(entry.get("worktree", "")) != target_key:
+            continue
+        if entry.get("branch") == branch:
+            return worktree
+        raise RuntimeError(
+            f"worktree {worktree} already belongs to {entry.get('branch') or 'unknown'}, not {branch}"
+        )
+
+    worktree.parent.mkdir(parents=True, exist_ok=True)
+    existing_branch = _git(["branch", "--list", branch])
+    if existing_branch.returncode != 0:
+        raise RuntimeError(f"git branch --list {branch} failed: {existing_branch.stderr.strip()}")
+
+    if existing_branch.stdout.strip():
+        cmd = ["worktree", "add", str(worktree), branch]
+    else:
+        cmd = ["worktree", "add", "-b", branch, str(worktree), "main"]
+    created = _git(cmd, timeout=60)
+    if created.returncode != 0:
+        raise RuntimeError(f"git {' '.join(cmd)} failed: {created.stderr.strip()}")
+    return worktree
+
+
 def _call_claude(
     prompt: str,
     *,
     allowed_tools: str = "Read,Write,Edit,Bash",
     max_turns: int = _AGENT_MAX_TURNS,
     timeout: int = _AGENT_TIMEOUT_SECONDS,
+    cwd: Path | None = None,
 ) -> tuple[bool, str]:
     """统一 Claude CLI 调用入口，返回 (success, output_text)。"""
     claude_bin = _resolve_claude_bin()
@@ -134,7 +198,7 @@ def _call_claude(
                 "--max-turns", str(max_turns),
                 "--output-format", "json",
             ],
-            cwd=str(_REPO_ROOT),
+            cwd=str(cwd or _REPO_ROOT),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -240,8 +304,6 @@ def run_dev_agent(
         return time.time() - start
 
     def _fail(msg: str, *, checkout_back: bool = False) -> AgentRunResult:
-        if checkout_back:
-            _git(["checkout", "-"])
         if task_path:
             _update_task_file(
                 task_path,
@@ -298,20 +360,15 @@ def run_dev_agent(
     except Exception as exc:
         LOG.warning("notify_eval_split failed: %s", exc)
 
-    # ── 2. 创建 git 分支 ─────────────────────────────────────
-    _git(["checkout", "main"])
-    existing = _git(["branch", "--list", branch])
-    if existing.stdout.strip():
-        LOG.info("branch %s exists, force-deleting", branch)
-        _git(["branch", "-D", branch])
-
-    r = _git(["checkout", "-b", branch])
-    if r.returncode != 0:
-        return _fail(f"git checkout -b {branch} failed: {r.stderr.strip()}")
+    # ── 2. 创建独立 worktree + 分支 ──────────────────────────
+    try:
+        worktree = _ensure_worktree(task_id, branch)
+    except Exception as exc:
+        return _fail(f"git worktree prepare failed: {exc}")
 
     # ── 3. 标记进行中 + 通知已启动 ────────────────────────────
     if task_path:
-        _update_task_file(task_path, status="in_progress")
+        _update_task_file(task_path, status="in_progress", worktree_path=str(worktree))
 
     try:
         notify_agent_started(task)
@@ -353,6 +410,7 @@ def run_dev_agent(
                 allowed_tools="Read,Write,Edit,Bash",
                 max_turns=_AGENT_MAX_TURNS,
                 timeout=_AGENT_TIMEOUT_SECONDS,
+                cwd=worktree,
             )
 
         LOG.info("[PHASE-2 SUB DONE] sub=%d/%d  success=%s  summary_bytes=%d",
@@ -376,11 +434,8 @@ def run_dev_agent(
         })
 
     # ─── 收集全部修改文件 ──────────────────────────────────
-    diff = _git(["diff", "--name-only", "main...HEAD"])
+    diff = _git(["diff", "--name-only", "main...HEAD"], cwd=worktree)
     files_changed = [f.strip() for f in diff.stdout.splitlines() if f.strip()]
-
-    # ── 回到主分支 ────────────────────────────────────────
-    _git(["checkout", "-"])
 
     duration = _elapsed()
 
@@ -402,6 +457,7 @@ def run_dev_agent(
             status="done" if overall_success else "partial",
             summary=final_summary[:1000],
             files_changed=files_changed,
+            worktree_path=str(worktree),
             sub_tasks=[
                 {"index": c["index"], "title": c["title"], "success": c["success"]}
                 for c in completed_sub_tasks
@@ -415,6 +471,7 @@ def run_dev_agent(
         success=overall_success,
         summary=final_summary,
         files_changed=files_changed,
+        worktree_path=str(worktree),
         duration_seconds=duration,
     )
 

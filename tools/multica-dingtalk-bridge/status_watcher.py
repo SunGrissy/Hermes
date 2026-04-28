@@ -5,7 +5,7 @@
 后台守护线程，每 STATUS_WATCHER_INTERVAL 秒轮询一次 Multica 工单列表，
 检测到关键状态转换（如进入 In Review / Done）时通过钉钉 webhook 发出通知。
 
-通知末尾附带 @Hermes 触发提示，方便人工或自动化触发后续代码审查流程。
+通知末尾附带代码审查提示，方便人工或自动化触发后续审查流程。
 """
 from __future__ import annotations
 
@@ -17,6 +17,12 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+
+try:
+    from code_review_dispatcher import trigger_code_review_async
+except Exception:  # pragma: no cover - 保持状态通知不被可选审查链路阻断
+    def trigger_code_review_async(issue: dict, prev_status: str, curr_status: str) -> None:
+        return None
 
 LOG = logging.getLogger("status-watcher")
 
@@ -143,12 +149,12 @@ def _build_notification(
         else ""
     )
 
-    # Hermes 触发提示（仅 In Review 时附加）
+    # 代码审查触发提示（仅 In Review 时附加）
     hermes_hint = ""
     if _normalize_status(curr_status) == "inreview":
         hermes_hint = (
             "\n\n---\n"
-            f"**触发代码审查：** 向 Hermes 发送 `审查 {issue_id}`"
+            f"**触发代码审查：** 可发送 `审查 {issue_id}`；若已配置 `CODE_REVIEW_ENABLED=1`，会自动启动 reviewer。"
         )
 
     webhook_title = f"{label} {issue_id}"
@@ -223,6 +229,11 @@ def poll_once(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
                 "failed to notify transition %s: %s -> %s",
                 issue.get("identifier") or issue.get("id"), prev, curr,
             )
+        if norm == "inreview":
+            try:
+                trigger_code_review_async(issue, prev, curr)
+            except Exception as exc:
+                LOG.warning("failed to trigger code review: %s", exc)
 
     _save_cache(new_cache)
     return new_cache

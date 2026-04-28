@@ -171,66 +171,101 @@ class DevAgentRunnerMockTests(unittest.TestCase):
             "result": "[完成]\n修改文件：foo.py\n摘要：修好了",
         })
 
+    def test_worktree_path_is_per_task(self):
+        from dev_agent_runner import _worktree_path
+
+        self.assertEqual(_worktree_path("UUM-7").name, "UUM-7")
+        self.assertIn(".worktrees", str(_worktree_path("UUM-7")))
+
+    def test_ensure_worktree_uses_git_worktree_add(self):
+        from dev_agent_runner import _ensure_worktree
+
+        calls = []
+
+        def fake_git(args, **kwargs):
+            calls.append((args, kwargs))
+            if args[:3] == ["worktree", "list", "--porcelain"]:
+                return self._mock_proc(returncode=0, stdout="")
+            return self._mock_proc(returncode=0, stdout="")
+
+        with patch("dev_agent_runner._git", side_effect=fake_git):
+            path = _ensure_worktree("UUM-7", "agent/UUM-7")
+
+        self.assertEqual(path.name, "UUM-7")
+        self.assertIn((["worktree", "add", "-b", "agent/UUM-7", str(path), "main"], {"timeout": 60}), calls)
+
+    def test_ensure_worktree_refuses_existing_path_for_other_branch(self):
+        from dev_agent_runner import _ensure_worktree
+
+        def fake_git(args, **kwargs):
+            if args[:3] == ["worktree", "list", "--porcelain"]:
+                return self._mock_proc(
+                    returncode=0,
+                    stdout="worktree D:/MyAgents/.worktrees/UUM-7\nbranch refs/heads/agent/OTHER\n",
+                )
+            return self._mock_proc(returncode=0, stdout="")
+
+        with patch("dev_agent_runner._git", side_effect=fake_git):
+            with self.assertRaises(RuntimeError):
+                _ensure_worktree("UUM-7", "agent/UUM-7")
+
     def test_run_dev_agent_success(self):
         from dev_agent_runner import run_dev_agent
 
         good_git = self._mock_proc(returncode=0, stdout="")
-        good_claude = self._mock_proc(returncode=0, stdout=self._claude_success_output())
+        worktree = Path(r"D:\MyAgents\.worktrees\UUM-7")
 
         with tempfile.TemporaryDirectory() as tmp:
             task_path = Path(tmp) / "UUM-7.json"
             import json as _json
             task_path.write_text(_json.dumps(self._make_task()), encoding="utf-8")
 
-            call_seq = [
-                good_git,  # branch --list
-                good_git,  # checkout -b
-                good_claude,  # claude
-                good_git,  # diff --name-only
-                good_git,  # checkout -
-            ]
-
-            with patch("dev_agent_runner.subprocess.run", side_effect=call_seq):
-                with patch("task_context.build_context", return_value="test prompt"):
-                    result = run_dev_agent(self._make_task(), task_path)
+            with patch("dev_agent_runner._ensure_worktree", return_value=worktree):
+                with patch("dev_agent_runner._call_claude", side_effect=[
+                    (True, self._claude_success_output()),
+                    (True, "[完成]\n修改文件：foo.py\n摘要：修好了"),
+                ]) as call_claude:
+                    with patch("dev_agent_runner._git", return_value=good_git):
+                        with patch("task_context.build_eval_context", return_value="eval prompt"):
+                            with patch("task_context.build_sub_task_context", return_value="sub prompt"):
+                                with patch("feedback_handler.notify_agent_done"):
+                                    with patch("feedback_handler.notify_eval_split"):
+                                        with patch("feedback_handler.notify_agent_started"):
+                                            with patch("feedback_handler.notify_sub_task_done"):
+                                                result = run_dev_agent(self._make_task(), task_path)
 
         self.assertTrue(result.success)
         self.assertIn("修好了", result.summary)
         self.assertEqual(result.task_id, "UUM-7")
+        self.assertEqual(result.worktree_path, str(worktree))
+        self.assertEqual(call_claude.call_args_list[-1].kwargs["cwd"], worktree)
 
     def test_run_dev_agent_git_branch_fail(self):
         from dev_agent_runner import run_dev_agent
 
-        fail_git = self._mock_proc(returncode=0, stdout="")
-        fail_checkout = self._mock_proc(returncode=1, stderr="branch already exists")
-
-        call_seq = [fail_git, fail_checkout]
-
-        with patch("dev_agent_runner.subprocess.run", side_effect=call_seq):
-            with patch("task_context.build_context", return_value="test prompt"):
-                result = run_dev_agent(self._make_task())
+        with patch("dev_agent_runner._call_claude", return_value=(True, self._claude_success_output())):
+            with patch("dev_agent_runner._ensure_worktree", side_effect=RuntimeError("branch already exists")):
+                with patch("task_context.build_eval_context", return_value="eval prompt"):
+                    result = run_dev_agent(self._make_task())
 
         self.assertFalse(result.success)
-        self.assertIn("failed", result.error)
+        self.assertIn("worktree prepare failed", result.error)
 
     def test_run_dev_agent_timeout(self):
-        import subprocess
         from dev_agent_runner import run_dev_agent
 
-        good_git = self._mock_proc(returncode=0, stdout="")
-
-        def timeout_side_effect(*args, **kwargs):
-            cmd = args[0] if args else kwargs.get("args", [])
-            if isinstance(cmd, list) and "claude" in str(cmd):
-                raise subprocess.TimeoutExpired(cmd, 600)
-            return good_git
-
-        with patch("dev_agent_runner.subprocess.run", side_effect=timeout_side_effect):
-            with patch("task_context.build_context", return_value="test prompt"):
-                result = run_dev_agent(self._make_task())
+        with patch("dev_agent_runner._call_claude", side_effect=[
+            (True, self._claude_success_output()),
+            (False, "(timeout after 600s)"),
+        ]):
+            with patch("dev_agent_runner._ensure_worktree", return_value=Path(r"D:\MyAgents\.worktrees\UUM-7")):
+                with patch("dev_agent_runner._git", return_value=self._mock_proc(returncode=0, stdout="")):
+                    with patch("task_context.build_eval_context", return_value="eval prompt"):
+                        with patch("task_context.build_sub_task_context", return_value="sub prompt"):
+                            result = run_dev_agent(self._make_task())
 
         self.assertFalse(result.success)
-        self.assertIn("timed out", result.error)
+        self.assertIn("timeout", result.summary)
 
 
 # ─────────────────────────────────────────────────────────
@@ -246,6 +281,7 @@ class FeedbackHandlerFormatTests(unittest.TestCase):
             success=success,
             summary="[完成]\n修改文件：login.js\n摘要：添加了空值保护",
             files_changed=["pm-system/ui/login.js"],
+            worktree_path=r"D:\MyAgents\.worktrees\UUM-42",
             duration_seconds=45.2,
         )
 
@@ -262,6 +298,7 @@ class FeedbackHandlerFormatTests(unittest.TestCase):
         self.assertIn("完成", title)
         self.assertIn("UUM-42", title)
         self.assertIn("agent/UUM-42", body)
+        self.assertIn(r"D:\MyAgents\.worktrees\UUM-42", body)
         self.assertIn("login.js", body)
 
     def test_format_notification_failure(self):

@@ -1,5 +1,23 @@
 # Work Log - MyAgents Root
 
+## [2026-04-29] - Multica 平台 worktree 执行与当当调度 Skill
+
+**状态**: 验收通过
+
+**内容**:
+- `tools/multica-dingtalk-bridge/`：本地桥执行器改为每个工单独立 git worktree，补充 ClaudeReviewer 只读审查、In Review 自动触发、平台 run work_dir 识别、project 自动归类与隔离 daemon 启动脚本。
+- `Hermes/dangdang/SKILL.md`：新增当当派单与 Review 调度 Skill，覆盖 Multica 建单、指派克劳德、平台 worktree 检查、ClaudeReviewer 审查和异常恢复。
+- Multica 平台配置验证：`pm-system` repo URL 使用 `file:///D:/MyAgents/pm-system`，平台 daemon 可在 `C:\Users\TU\multica_workspaces` 下创建隔离 worktree；共享 `D:\MyAgents\pm-system` 未被污染。
+- Review 复测：`UUM-24` / `UUM-25` 已通过平台真实 worktree 调用 ClaudeReviewer；`UUM-25` 识别出 migration 缺失与 `atomic=true` 乐观锁问题。
+
+**测试**:
+- `py -m pytest tests/test_dev_agent.py tests/test_multica_client.py tests/test_code_review_dispatcher.py tests/test_status_watcher.py tests/test_hermes_review_dispatcher.py`：66 passed。
+
+**备注**:
+- 后续 reviewer 定位顺序应优先使用 Multica 平台 run 的 `work_dir\<project_path>`，避免误读历史 `D:\MyAgents\.worktrees\UUM-*`。
+
+---
+
 ## [2026-04-27] - pm-system：策划周计划 ops 导入周归属（周五列 vs ISO 周）
 
 **状态**: 验收通过

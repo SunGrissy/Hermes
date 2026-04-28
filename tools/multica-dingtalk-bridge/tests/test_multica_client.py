@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from multica_client import MulticaClient, build_issue_create_args
+from multica_client import MulticaClient, build_issue_create_args, infer_project_id
 
 
 class FakeProc:
@@ -71,6 +71,29 @@ class MulticaClientTests(unittest.TestCase):
             project_id="project-123",
         )
         self.assertEqual(args[-2:], ["--project", "project-123"])
+
+    def test_infer_project_id_prefers_explicit_env(self):
+        project_id = infer_project_id(
+            title="PmSystem 任务",
+            description="",
+            env={
+                "MULTICA_PROJECT_ID": "explicit-project",
+                "MULTICA_PROJECT_MAP_JSON": '{"projects":{"pm-system":{"id":"pm-project","aliases":["pmsystem"]}}}',
+            },
+        )
+
+        self.assertEqual(project_id, "explicit-project")
+
+    def test_infer_project_id_uses_project_map_aliases(self):
+        project_id = infer_project_id(
+            title="Feature 批量维护 API",
+            description="范围：PmSystem 后端",
+            env={
+                "MULTICA_PROJECT_MAP_JSON": '{"projects":{"pm-system":{"id":"pm-project","aliases":["pmsystem","feature"]}}}',
+            },
+        )
+
+        self.assertEqual(project_id, "pm-project")
 
     @patch.dict(os.environ, {"MULTICA_BIN": r"C:\\Tools\\multica.exe"})
     @patch("pathlib.Path.is_file", return_value=True)
