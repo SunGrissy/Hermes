@@ -1,28 +1,4 @@
 # run_version_digest.ps1
-# 版本状态定时推送脚本（每日 09:40 运行，与 register_version_digest_task.ps1 一致）
-# 从 PmSystem 拉取活跃版本状态，通过 webhook 推送到助理通知群
-
-$ErrorActionPreference = "Continue"
-$env:PYTHONIOENCODING = "utf-8"
-
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-Set-Location $ScriptDir
-
-$LogFile = Join-Path $ScriptDir "logs\version_digest_$(Get-Date -Format 'yyyyMMdd').log"
-$LogDir  = Join-Path $ScriptDir "logs"
-if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
-
-function Write-Log {
-    param([string]$Msg)
-    $line = "$(Get-Date -Format 'HH:mm:ss') $Msg"
-    Write-Host $line
-    Add-Content -Path $LogFile -Value $line -Encoding UTF8
-}
-
-Write-Log "[version] ===== 版本状态推送启动 ====="
-
-# 运行版本摘要（直接读 pm_data.json，无需 daemon 或 PmSystem 运行中）
-$output = py version_digest.py 2>&1
-$output | ForEach-Object { Write-Log $_ }
-
-Write-Log "[version] ===== 完成 ====="
+# 已临时停用（2026-04-26），原脚本备份为 run_version_digest.ps1.bak
+Write-Host "VersionDigest paused — original script backed up as .bak"
+exit 0
