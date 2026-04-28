@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     # 服务端口
     service_port: int = 8299
 
+    # Kimi LLM 配置
+    kimi_api_key: str = ""
+    kimi_base_url: str = "https://api.kimi.com/coding"
+    kimi_model: str = "kimi-k2.6"
+    kimi_api_type: str = "anthropic"  # "openai" or "anthropic"
+
 
 def _load_pm_service_key() -> str:
     """如果未配置 pm_service_key，尝试从 PmSystem 本地 .env 读取 SERVICE_API_KEY。"""
