@@ -22,6 +22,18 @@
 
 **可选**：`MULTICA_WORKSPACE_WEB_PATH` — 浏览器里工单 URL 中 workspace 段，例如 `https://multica.ai/uu-myagents/issues/UUM-12` 中的 **`uu-myagents`**。建单成功回复里的「点击查看」会拼成 `{MULTICA_APP_URL 或 https://multica.ai}/{该段}/issues/{identifier}`。若 CLI 返回的 JSON 里已含 `html_url` / `url` 等字段，则优先用接口 URL。
 
+**可选**：`MULTICA_BOT_MEMORY_DB` — Brain 记忆库路径，默认写入本目录下 `data/memory.db`。
+
+**可选**：`MULTICA_BOT_LLM_PROVIDER` — 默认 `mock`，不访问外部 LLM。设为 `openai` 时必须显式配置 `MULTICA_BOT_LLM_API_KEY`，并按需配置 `MULTICA_BOT_LLM_BASE_URL`、`MULTICA_BOT_LLM_MODEL`；脚本不会读取全局 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，也不会读取旧的 `MULTICA_BOT_OPENAI_API_KEY`，避免误把用户消息发到未确认的外部服务。用户消息与上下文会发送到配置的 LLM endpoint，请只接可信服务。
+
+## 能力与安全边界
+
+- 固定命令继续保留：`派单` / `#派单` 创建工单，`查工单` / `#查工单` 查看队列，`删除派单` / `#删除派单` / `取消派单` / `#取消派单` 取消工单。
+- 自然语言 Brain 路由只处理明确的派单/队列意图：信息不足时先做需求澄清；信息足够时输出派单建议卡；老大回复 `就按这个派`、`确认派单`、`按这个派`、`可以派` 后才创建工单。
+- 记忆规则：低风险 `knowledge` 自动写入；`preference`、`rule`、`acceptance`、`permission`、`classification` 进入 `pending` 等待人工确认；疑似密钥、token、密码等敏感信息直接 reject。
+- 只读巡查命令：`巡查`、`队列巡查`、`巡查工单`、`multica巡查`，只读取并汇总 Multica 队列，不会自动改状态、分派、评论或创建工单。
+- Phase 1 安全边界：不自动执行代码，不自动分派或改状态；确认后才创建工单；巡查始终只读。
+
 ## Multica 试点配置（Task 2，填好后勿提交密钥）
 
 在 Multica Web（Cloud：`https://multica.ai/app`）完成 **pm-system 试点** 项目与 Agent 后，把下面占位符换成你环境里的值，便于 CLI 与派单一致。
@@ -89,7 +101,7 @@ python dispatch_bot.py
 ## 群内 / 私聊发单格式
 
 以 **`派单`** 或 **`#派单`** 开头，紧跟标题；从第二行起为描述（可选）。  
-其它消息**不会**收到机器人回复（避免刷屏）。
+其它无明确派单/队列意图的消息**不会**收到机器人回复（避免刷屏）；包含需求、派单、工单、Multica、队列管家等意图的自然语言会进入 Brain 路由。
 
 **取消工单**：以 **`删除派单`** 或 **`#删除派单`**（或 **`取消派单` / `#取消派单`**）开头，写 **`UUM-10`**、**短号 `10`**（在最多 **500** 条 `issue list` 里按 `number` 匹配）或 **Issue UUID**。**多个引用**可用 **顿号 `、`**、中英文逗号/分号或空白分隔，例如 `删除派单 1、2、6` 或 `删除派单1、2、6`（最多 **50** 条）；会按解析结果逐条调用 `issue status … cancelled`，并在一条回复里汇总成功 / 解析失败 / 接口失败。
 
@@ -125,7 +137,7 @@ python dispatch_bot.py
 
 ## 可选出站
 
-设置环境变量 `DINGTALK_WEBHOOK_URL` 后，建单成功会向该 Webhook 发一条 Markdown（与仓库 `cursor-to-dingtalk` 机器人格式兼容）。
+设置环境变量 `DINGTALK_WEBHOOK_URL` 后，建单成功会向该 Webhook 发一条 Markdown；取消工单成功时也会发送取消摘要（与仓库 `cursor-to-dingtalk` 机器人格式兼容）。
 
 ## 安全
 

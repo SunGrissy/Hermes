@@ -1619,4 +1619,19 @@
 
 ---
 
+## 2026-04-28 - [验收通过] Multica 派单桥三阶段 Agent + 状态监听器
+
+**变更范围**：`tools/multica-dingtalk-bridge/`，`shared-memory/knowledge/service-ports.md`，`pm-system/quick_start.bat`
+
+**核心交付**：
+- `dev_agent_runner.py`：重构为评估→拆分→逐子任务执行三阶段流程，每阶段发 webhook 汇报
+- `task_context.py`：新增 `build_eval_context`（只读评估 prompt）和 `build_sub_task_context`（子任务执行 prompt）
+- `feedback_handler.py`：新增 `notify_eval_split`（规划结果通知）和 `notify_sub_task_done`（子任务进度通知）
+- `status_watcher.py`：后台线程每 5 分钟轮询 Multica，检测 In Review / Done 状态转换后推送 webhook 通知（含 Hermes 审查触发提示）
+- `dispatch_bot.py`：main() 挂载 StatusWatcher 后台线程
+- `pm-system/quick_start.bat`：加入 Multica Daemon 管理选项（服务 8）
+- `service-ports.md`：补充 Multica Daemon 条目
+
+---
+
 ## 2026-04-18 - [验收通过] 更新 producer-mind Skill，融入马斯克算法五步法与蠢指数等核心方法论

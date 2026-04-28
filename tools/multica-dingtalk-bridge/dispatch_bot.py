@@ -12,7 +12,7 @@ import shutil
 import sys
 import urllib.request
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from dingtalk_stream import AckMessage
 import dingtalk_stream
@@ -28,7 +28,7 @@ LOG = logging.getLogger("multica-bridge")
 
 # [AgentMultica Task] 2026-04-22 钉钉群 @ 机器人后正文不以「派单」开头导致解析不命中
 _AT_BEFORE_MULTICA_CMD = re.compile(
-    r"^@.+?(?=(?:#删除派单|删除派单|#取消派单|取消派单|#查工单|查工单|#派单|派单))"
+    r"^@.+?(?=(?:#删除派单|删除派单|#取消派单|取消派单|#查工单|查工单|#派单|派单|#队列巡查|队列巡查|#巡查工单|巡查工单|#multica巡查|multica巡查|#巡查|巡查|就按这个派|确认派单|按这个派|可以派|#派给Agent|派给Agent))"
 )
 
 
@@ -224,7 +224,9 @@ async def _multica_issue_list_json(
             "multica issue list rc=%s args=%s stderr=%s",
             proc.returncode,
             extra_args,
-            (err_b or b"").decode("utf-8", errors="replace")[:400],
+            _redact_sensitive_text(
+                (err_b or b"").decode("utf-8", errors="replace")[:400]
+            ),
         )
         return None
     text = (out_b or b"").decode("utf-8", errors="replace").strip()
@@ -235,6 +237,51 @@ async def _multica_issue_list_json(
     except json.JSONDecodeError:
         return None
     return obj if isinstance(obj, dict) else None
+
+
+async def _multica_issue_search_json(
+    multica_bin: str,
+    env: dict,
+    query: str,
+    *,
+    limit: int = 50,
+    include_closed: bool = False,
+) -> Optional[list]:
+    """执行 `multica issue search <query>`，返回 issues 列表。"""
+    cmd = [
+        multica_bin, "issue", "search", query,
+        "--output", "json",
+        "--limit", str(max(1, min(100, limit))),
+    ]
+    if include_closed:
+        cmd.append("--include-closed")
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    out_b, err_b = await proc.communicate()
+    if proc.returncode != 0:
+        LOG.warning(
+            "multica issue search rc=%s query=%r stderr=%s",
+            proc.returncode,
+            query[:80],
+            _redact_sensitive_text((err_b or b"").decode("utf-8", errors="replace")[:300]),
+        )
+        return None
+    text = (out_b or b"").decode("utf-8", errors="replace").strip()
+    if not text:
+        return []
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(obj, list):
+        return obj
+    if isinstance(obj, dict):
+        return obj.get("issues") or obj.get("results") or []
+    return None
 
 
 async def _fetch_workspace_issue_stats(
@@ -320,6 +367,60 @@ def _is_query_issues_command(raw: str) -> bool:
     return s in ("查工单", "#查工单")
 
 
+_DISPATCH_AGENT_RE = re.compile(
+    r"^(?:#派给Agent|派给Agent)\s+([A-Za-z0-9_/-]+)"       # 「派给Agent UUM-24」
+    r"|^([A-Z]+-\d+)\s*[，,]?\s*(?:#派给Agent|派给Agent)\s*$",  # 「UUM-24，派给Agent」
+    re.IGNORECASE,
+)
+
+# @bot<id>派给Agent 场景：@昵称紧跟 issue-id，issue-id 后接命令关键字
+_AT_ISSUE_DISPATCH_RE = re.compile(
+    r"^@\S*?([A-Z]+-\d+)\s*[，,]?\s*(?:#派给Agent|派给Agent)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _strip_dispatch_to_agent_prefix(raw: str) -> Optional[str]:
+    """若匹配派给Agent命令则返回 issue-id，支持三种写法：
+    1. `派给Agent UUM-24`   2. `UUM-24 派给Agent`   3. `@bot<id>派给Agent`
+    """
+    s = (raw or "").strip()
+    # 优先处理 @botUUM-24派给Agent（@剥离前就先提取 ID）
+    m_at = _AT_ISSUE_DISPATCH_RE.match(s)
+    if m_at:
+        return m_at.group(1).strip()
+    m = _DISPATCH_AGENT_RE.match(s)
+    if m:
+        return (m.group(1) or m.group(2) or "").strip()
+    return None
+
+
+def _is_patrol_command(raw: str) -> bool:
+    s = (raw or "").strip()
+    return s in {
+        "巡查",
+        "#巡查",
+        "队列巡查",
+        "#队列巡查",
+        "巡查工单",
+        "#巡查工单",
+        "multica巡查",
+        "#multica巡查",
+        "Multica巡查",
+        "#Multica巡查",
+    }
+
+
+def _is_free_query(raw: str) -> bool:
+    """检测自然语言查询意图（排除已被精确路由处理的"查工单"）。"""
+    t = (raw or "").strip()
+    if not t or _is_query_issues_command(t):
+        return False
+    has_object = any(kw in t for kw in ("工单", "issue", "Issue"))
+    has_trigger = any(kw in t for kw in ("查", "看看", "显示", "列出", "搜", "找"))
+    return has_object and has_trigger
+
+
 def _priority_weight_value(p: object) -> int:
     if not isinstance(p, str):
         return 0
@@ -399,6 +500,60 @@ def _format_query_issues_reply_body(
                 f"> 注：接口 `has_more=true`，本次仅拉取 **{fetched_len}** 条参与排序。"
             )
     return "\n".join(lines_out)
+
+
+def _sort_issues_by_spec(issues: List[dict], sort_by: str) -> List[dict]:
+    """按 IssueQuerySpec.sort_by 对工单列表排序。"""
+    items = [x for x in issues if isinstance(x, dict)]
+    if sort_by == "created_asc":
+        return sorted(items, key=lambda x: x.get("created_at") or "")
+    if sort_by == "updated_desc":
+        return sorted(items, key=lambda x: x.get("updated_at") or "", reverse=True)
+    if sort_by == "priority_desc":
+        return sorted(
+            items,
+            key=lambda x: (
+                -_priority_weight_value(x.get("priority")),
+                x.get("created_at") or "",
+            ),
+        )
+    # created_desc (default)
+    return sorted(items, key=lambda x: x.get("created_at") or "", reverse=True)
+
+
+def _format_free_query_reply(
+    spec_desc: str,
+    issues: List[dict],
+    total_fetched: int,
+) -> str:
+    """格式化自由查询结果。"""
+    lines: List[str] = [f"**{spec_desc}**", ""]
+    if not issues:
+        lines.append("（未找到符合条件的工单）")
+        return "\n".join(lines)
+    for i, it in enumerate(issues, 1):
+        ident = it.get("identifier") or it.get("id") or "?"
+        if not isinstance(ident, str):
+            ident = str(ident)
+        pr = _priority_label_zh(it.get("priority"))
+        st = it.get("status")
+        st_label = _ISSUE_STATUS_LABEL.get(st, st) if isinstance(st, str) else "?"
+        assignee = it.get("assignee") or ""
+        if isinstance(assignee, dict):
+            assignee = assignee.get("name") or assignee.get("username") or "未分配"
+        elif not isinstance(assignee, str) or not assignee.strip():
+            assignee = "未分配"
+        ca = it.get("created_at")
+        date_s = ca[:10] if isinstance(ca, str) and len(ca) >= 10 else "—"
+        title = it.get("title") if isinstance(it.get("title"), str) else ""
+        title = title.strip() or "（无标题）"
+        if len(title) > 44:
+            title = title[:41] + "..."
+        lines.append(f"{i}. `{ident}` · {pr} · {st_label} · {assignee} · {date_s} · {title}")
+    if total_fetched > len(issues):
+        lines.append("")
+        lines.append(f"> 共拉取 **{total_fetched}** 条参与筛选，展示前 **{len(issues)}** 条。")
+    return "\n".join(lines)
 
 
 def _strip_delete_dispatch_prefix(raw: str) -> Optional[str]:
@@ -560,6 +715,154 @@ def _strip_dispatch_prefix(raw: str) -> Optional[str]:
     return None
 
 
+_BRAIN_ROUTE_KEYWORDS = (
+    "需求",
+    "怎么派",
+    "派单",
+    "派单建议",
+    "工单",
+    "验收",
+    "完成标准",
+    "DoD",
+    "dod",
+    "Multica",
+    "multica",
+    "队列管家",
+    "分给",
+    "派给",
+    "指派给",
+)
+
+# 自然语言指派：「UUM-24，分给克劳德」「把UUM-24派给张三」「UUM-24 指派给 李明」
+_ASSIGN_ISSUE_RE = re.compile(
+    r"(?:把\s*)?([A-Z]+-\d+)\s*[，,]?\s*(?:分给|派给|指派给|assign\s+to)\s*(.+)$",
+    re.IGNORECASE,
+)
+
+
+def _parse_assign_issue_command(raw: str) -> Optional[tuple[str, str]]:
+    """返回 (issue_id, assignee_name)，未匹配返回 None。"""
+    s = (raw or "").strip()
+    m = _ASSIGN_ISSUE_RE.search(s)
+    if not m:
+        return None
+    issue_id = m.group(1).strip()
+    assignee = m.group(2).strip().rstrip("。，！!.，")
+    if not issue_id or not assignee:
+        return None
+    return issue_id, assignee
+
+
+def _default_memory_db_path() -> Path:
+    configured = (os.environ.get("MULTICA_BOT_MEMORY_DB") or "").strip()
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parent / "data" / "memory.db"
+
+
+def _is_confirm_dispatch_phrase(text: str) -> bool:
+    from brain import is_confirm_dispatch_phrase
+
+    return is_confirm_dispatch_phrase(text)
+
+
+def _chat_id_for_incoming(incoming: dingtalk_stream.ChatbotMessage) -> str:
+    conversation_id = str(getattr(incoming, "conversation_id", "") or "").strip()
+    if conversation_id:
+        return conversation_id
+    sender_staff_id = str(getattr(incoming, "sender_staff_id", "") or "").strip()
+    if sender_staff_id:
+        return sender_staff_id
+    return "default"
+
+
+def _serialize_brain_decision(decision: Any) -> str:
+    return json.dumps(
+        {
+            "intent": getattr(decision, "intent", ""),
+            "category": getattr(decision, "category", ""),
+            "confidence": getattr(decision, "confidence", 0.0),
+            "missing_info": list(getattr(decision, "missing_info", []) or []),
+            "suggested_title": getattr(decision, "suggested_title", ""),
+            "suggested_description": getattr(decision, "suggested_description", ""),
+            "definition_of_done": list(getattr(decision, "definition_of_done", []) or []),
+            "priority": getattr(decision, "priority", "medium"),
+            "split_suggestion": getattr(decision, "split_suggestion", ""),
+            "recommended_action": getattr(decision, "recommended_action", "reply"),
+            "memory_candidates": list(getattr(decision, "memory_candidates", []) or []),
+        },
+        ensure_ascii=False,
+    )
+
+
+def _is_acceptance_followup(text: str) -> bool:
+    lower = (text or "").lower()
+    return any(token in lower for token in ("验收", "完成标准", "dod", "definition of done"))
+
+
+def _merge_clarification_context(raw: str, previous_decision: Any) -> str:
+    title = str(getattr(previous_decision, "suggested_title", "") or "").strip()
+    description = str(getattr(previous_decision, "suggested_description", "") or "").strip()
+    parts = [part for part in (title, description, raw.strip()) if part]
+    return "\n".join(parts) if parts else raw
+
+
+def _redact_sensitive_text(text: str) -> str:
+    value = str(text or "")
+    value = re.sub(
+        r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+",
+        "Bearer [REDACTED]",
+        value,
+    )
+    value = re.sub(r"(?i)\bsk-[A-Za-z0-9_-]{6,}\b", "sk-[REDACTED]", value)
+    return re.sub(
+        r"(?i)([\"']?(?:\b[\w.-]*(?:access[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|access[_-]?key|refresh[_-]?key|auth[_-]?key|api[_-]?key|password|secret|token)[\w.-]*\b|private\s+key|(?:密码|密钥|令牌))[\"']?)\s*[:=：]\s*[\"']?([^\s,;\"'`)}\]]+)",
+        lambda m: f"{m.group(1)}=[REDACTED]",
+        value,
+    )
+
+
+def _normalize_for_routing(raw: str) -> str:
+    """仅在疑似带 @ 前缀时剥离，避免已归一化文本重复处理。"""
+    text = (raw or "").strip()
+    if text.startswith("@"):
+        return _normalize_dingtalk_at_prefixes(text)
+    return text
+
+
+def classify_incoming_text(raw: str, *, raw_original: str = "") -> str:
+    """固定命令优先；非固定命令进入 Brain。
+    raw_original: 未经 @剥离的原始文本，用于检测 @botUUM-24派给Agent 格式。
+    """
+    # @bot<id>派给Agent：@剥离会把 ID 吞掉，必须在剥离前先检测
+    if _AT_ISSUE_DISPATCH_RE.match((raw_original or raw or "").strip()):
+        return "dispatch_agent"
+    text = _normalize_for_routing(raw)
+    if _strip_delete_dispatch_prefix(text) is not None:
+        return "cancel_issue"
+    if _is_query_issues_command(text):
+        return "query_issues"
+    if _strip_dispatch_to_agent_prefix(text) is not None:
+        return "dispatch_agent"
+    if _strip_dispatch_prefix(text) is not None:
+        return "create_issue"
+    if _is_patrol_command(text):
+        return "patrol"
+    if _parse_assign_issue_command(text) is not None:
+        return "assign_issue"
+    if _is_free_query(text):
+        return "free_query"
+    return "brain"
+
+
+def should_route_to_brain(raw: str) -> bool:
+    """仅显式涉及队列/派单意图的非固定命令才交给 Brain。"""
+    text = _normalize_for_routing(raw)
+    if not text:
+        return False
+    return any(keyword in text for keyword in _BRAIN_ROUTE_KEYWORDS)
+
+
 def _notify_webhook(title: str, text: str) -> None:
     url = (os.environ.get("DINGTALK_WEBHOOK_URL") or "").strip()
     if not url:
@@ -578,17 +881,96 @@ def _notify_webhook(title: str, text: str) -> None:
         with urllib.request.urlopen(req, timeout=15) as resp:
             resp.read()
     except OSError as e:
-        LOG.warning("webhook notify failed: %s", e)
+        LOG.warning("webhook notify failed: %s", _redact_sensitive_text(str(e)))
 
 
 class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
     """钉钉 Stream 回调：派单 / 删除派单 / 查工单 -> multica CLI；回复优先 Markdown 互动卡片。"""
 
-    def __init__(self, logger: Optional[logging.Logger] = None):
+    def __init__(
+        self,
+        logger: Optional[logging.Logger] = None,
+        memory_store: Optional[Any] = None,
+        multica_client: Optional[Any] = None,
+    ):
         super().__init__()
         self._log = logger or LOG
         # 本进程内一旦确认互动卡片不可用，后续不再调 OpenAPI，避免每条派单都打 403。
         self._interactive_card_broken: bool = False
+        self._brain: Optional[Any] = None
+        if memory_store is None:
+            from memory import MemoryStore
+
+            memory_store = MemoryStore(_default_memory_db_path())
+        if multica_client is None:
+            from multica_client import MulticaClient
+
+            multica_client = MulticaClient()
+        self._memory = memory_store
+        self._multica = multica_client
+        self._project_context: str = self._load_project_context()
+
+    def _load_project_context(self) -> str:
+        """从 knowledge_memory 加载仓库结构知识，供 Brain 参考。"""
+        try:
+            return self._memory.get_knowledge_by_key("project_map", "myagents_root") or ""
+        except Exception as exc:
+            self._log.debug("project_context not available: %s", exc)
+            return ""
+
+    def _get_brain(self) -> Any:
+        if self._brain is None:
+            from brain import Brain
+
+            self._brain = Brain()
+        return self._brain
+
+    async def _confirm_pending_dispatch_suggestion(
+        self,
+        incoming: dingtalk_stream.ChatbotMessage,
+    ) -> str:
+        from brain import parse_brain_decision
+
+        chat_id = _chat_id_for_incoming(incoming)
+        suggestion = self._memory.get_session_suggestion(chat_id)
+        if not suggestion:
+            return "没有待确认的派单建议"
+
+        try:
+            decision = parse_brain_decision(suggestion)
+        except ValueError as exc:
+            self._log.warning(
+                "pending dispatch suggestion parse failed: %s",
+                _redact_sensitive_text(str(exc)),
+            )
+            return f"待确认的派单建议格式有误：{exc}"
+
+        try:
+            result = await self._multica.create_issue(
+                title=decision.suggested_title,
+                description=decision.suggested_description,
+                priority=decision.priority,
+                status="todo",
+            )
+        except Exception as exc:
+            self._log.warning(
+                "multica create issue raised: %s",
+                _redact_sensitive_text(str(exc)),
+            )
+            return "建单失败：Multica CLI 调用异常，请查看桥进程日志。"
+        if not result.ok:
+            self._log.warning(
+                "multica create issue failed rc=%s stderr=%s stdout=%s",
+                getattr(result, "returncode", "?"),
+                _redact_sensitive_text((getattr(result, "stderr", "") or "")[:600]),
+                _redact_sensitive_text((getattr(result, "stdout", "") or "")[:600]),
+            )
+            return "建单失败：Multica CLI 返回错误，请查看桥进程日志。"
+
+        data = result.data or {}
+        identifier = data.get("identifier") or data.get("id") or "（未返回编号）"
+        self._memory.clear_session_suggestion(chat_id)
+        return f"已按建议写入 Multica：`{identifier}`"
 
     def _reply_dispatch_message(
         self,
@@ -625,13 +1007,19 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
                 )
             except Exception as exc:
                 self._interactive_card_broken = True
-                self._log.warning("reply_markdown_card 异常，降级 session Markdown: %s", exc)
+                self._log.warning(
+                    "reply_markdown_card 异常，降级 session Markdown: %s",
+                    _redact_sensitive_text(str(exc)),
+                )
         elif self._interactive_card_broken and not skip_card:
             self._log.debug("skip interactive card (cached unavailable)")
         try:
             self.reply_markdown(card_header_title, markdown_body, incoming)
         except Exception as exc2:
-            self._log.warning("reply_markdown failed, fallback text: %s", exc2)
+            self._log.warning(
+                "reply_markdown failed, fallback text: %s",
+                _redact_sensitive_text(str(exc2)),
+            )
             self.reply_text(f"{card_header_title}\n{markdown_body}", incoming)
 
     async def _handle_query_issues(
@@ -674,6 +1062,293 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
         )
         self._reply_dispatch_message(incoming, "Multica 查工单", reply)
         return AckMessage.STATUS_OK, "OK"
+
+    async def _handle_assign_issue(
+        self,
+        incoming: dingtalk_stream.ChatbotMessage,
+        raw: str,
+        multica_bin: str,
+    ) -> Tuple[int, str]:
+        """自然语言指派：「UUM-24，分给克劳德」→ multica issue assign <id> --to <name>"""
+        parsed = _parse_assign_issue_command(raw)
+        if not parsed:
+            self._reply_dispatch_message(
+                incoming, "Multica 工单指派",
+                "请用格式：`UUM-24，分给<人名或Agent名>`",
+            )
+            return AckMessage.STATUS_OK, "OK"
+        issue_id, assignee = parsed
+        env = os.environ.copy()
+        cmd = [multica_bin, "issue", "assign", issue_id, "--to", assignee]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+            )
+            out_b, err_b = await proc.communicate()
+        except Exception as exc:
+            self._log.warning("multica issue assign failed: %s", exc)
+            self._reply_dispatch_message(
+                incoming, "Multica 工单指派",
+                f"❌ 指派失败（内部错误）：{_redact_sensitive_text(str(exc))[:200]}",
+            )
+            return AckMessage.STATUS_OK, "OK"
+        if proc.returncode != 0:
+            err_text = (err_b or b"").decode("utf-8", errors="replace").strip()[:300]
+            self._reply_dispatch_message(
+                incoming, "Multica 工单指派",
+                f"❌ 指派失败\n\n`{issue_id}` → `{assignee}`\n\n```\n{err_text}\n```",
+            )
+            return AckMessage.STATUS_OK, "OK"
+        self._reply_dispatch_message(
+            incoming, "Multica 工单指派",
+            f"✅ `{issue_id}` 已指派给 **{assignee}**",
+        )
+        return AckMessage.STATUS_OK, "OK"
+
+    async def _handle_free_query(
+        self,
+        incoming: dingtalk_stream.ChatbotMessage,
+        raw: str,
+        multica_bin: str,
+    ) -> Tuple[int, str]:
+        """自然语言工单查询：LLM 解析意图 → multica CLI → 排序过滤 → 格式化回复。"""
+        from brain import parse_issue_query, IssueQuerySpec
+
+        try:
+            spec = await parse_issue_query(raw, self._get_brain().provider)
+        except Exception as exc:
+            self._log.warning("parse_issue_query failed: %s", exc)
+            spec = IssueQuerySpec()
+
+        env = os.environ.copy()
+        proj = _issue_list_project_args()
+        issues_raw: Optional[list] = None
+        fetch_limit = min(200, max(spec.limit * 4, 50))
+
+        if spec.search:
+            issues_raw = await _multica_issue_search_json(
+                multica_bin, env, spec.search,
+                limit=fetch_limit,
+                include_closed=spec.include_closed,
+            )
+        else:
+            extra = list(proj)
+            if spec.status:
+                extra += ["--status", spec.status]
+            if spec.assignee:
+                extra += ["--assignee", spec.assignee]
+            d = await _multica_issue_list_json(
+                multica_bin, env, tuple(extra), limit=fetch_limit
+            )
+            if d is not None:
+                raw_list = d.get("issues")
+                issues_raw = raw_list if isinstance(raw_list, list) else []
+
+        if issues_raw is None:
+            self._reply_dispatch_message(
+                incoming,
+                "Multica 工单查询",
+                "❌ 无法拉取工单，请检查 `multica auth status` 和网络。",
+            )
+            return AckMessage.STATUS_OK, "OK"
+
+        # 过滤
+        filtered: List[dict] = []
+        for it in issues_raw:
+            if not isinstance(it, dict):
+                continue
+            st = str(it.get("status") or "").strip().lower()
+            # 未指定 include_closed 时排除 done/cancelled
+            if not spec.include_closed and not spec.status and st in ("done", "cancelled"):
+                continue
+            # assignee 过滤（search 模式下 CLI 不支持 --assignee，Python 侧补充）
+            if spec.assignee and spec.search:
+                assignee_val = it.get("assignee") or ""
+                if isinstance(assignee_val, dict):
+                    assignee_val = assignee_val.get("name") or assignee_val.get("username") or ""
+                if spec.assignee.lower() not in str(assignee_val).lower():
+                    continue
+            filtered.append(it)
+
+        # 排序 + 截断
+        sorted_issues = _sort_issues_by_spec(filtered, spec.sort_by)
+        result = sorted_issues[: spec.limit]
+
+        # 构造描述行
+        sort_label = {
+            "created_desc": "最近创建",
+            "created_asc": "最早创建",
+            "priority_desc": "按优先级",
+            "updated_desc": "最近更新",
+        }.get(spec.sort_by, spec.sort_by)
+        status_label = (
+            _ISSUE_STATUS_LABEL.get(spec.status, spec.status) if spec.status else "全部未完结"
+        )
+        parts = [f"查询 {spec.limit} 条", status_label, sort_label]
+        if spec.assignee:
+            parts.append(f"经办人={spec.assignee}")
+        if spec.search:
+            parts.append(f"关键词={spec.search!r}")
+        spec_desc = " · ".join(parts)
+
+        reply = _format_free_query_reply(spec_desc, result, len(filtered))
+        self._reply_dispatch_message(incoming, "Multica 工单查询", reply)
+        return AckMessage.STATUS_OK, "OK"
+
+    async def _handle_patrol(self, incoming: dingtalk_stream.ChatbotMessage) -> Tuple[int, str]:
+        """只读巡查：仅拉取列表并渲染摘要，不修改 Multica 工单。"""
+        from brain import render_patrol_summary
+
+        try:
+            result = await self._multica.list_issues(limit=500)
+        except Exception as exc:
+            self._log.warning(
+                "multica patrol list raised: %s",
+                _redact_sensitive_text(str(exc)),
+            )
+            self._reply_dispatch_message(
+                incoming,
+                "Multica 队列巡查",
+                "巡查失败：Multica CLI 返回错误，请查看桥进程日志。",
+            )
+            return AckMessage.STATUS_OK, "OK"
+
+        if not result.ok:
+            self._log.warning(
+                "multica patrol list failed rc=%s stderr=%s stdout=%s",
+                getattr(result, "returncode", "?"),
+                _redact_sensitive_text((getattr(result, "stderr", "") or "")[:1200]),
+                _redact_sensitive_text((getattr(result, "stdout", "") or "")[:1200]),
+            )
+            self._reply_dispatch_message(
+                incoming,
+                "Multica 队列巡查",
+                "巡查失败：Multica CLI 返回错误，请查看桥进程日志。",
+            )
+            return AckMessage.STATUS_OK, "OK"
+
+        data = result.data or {}
+        if isinstance(data, list):
+            raw_issues = data
+        elif isinstance(data, dict):
+            raw_issues = data.get("issues")
+        else:
+            raw_issues = []
+        issues = [item for item in raw_issues if isinstance(item, dict)] if isinstance(raw_issues, list) else []
+        self._reply_dispatch_message(
+            incoming,
+            "Multica 队列巡查",
+            render_patrol_summary(issues),
+        )
+        return AckMessage.STATUS_OK, "OK"
+
+    async def _handle_dispatch_to_agent(
+        self,
+        incoming: dingtalk_stream.ChatbotMessage,
+        issue_id: str,
+    ) -> Tuple[int, str]:
+        """把 Multica 工单派给 Claude Code 开发 Agent 异步处理。"""
+        # 先回复用户"已派出"，再后台跑
+        self._reply_dispatch_message(
+            incoming,
+            "开发 Agent 派单",
+            f"已把 **{issue_id}** 排进队列，Agent 启动后会再发一条「开始执行」通知。\n\n"
+            f"完成后通过钉钉推送（分支名 + 摘要）。\n\n"
+            f"进度文件：`shared-memory/agent-tasks/{issue_id}.json`",
+        )
+
+        # 拉取工单信息构建任务
+        try:
+            list_result = await self._multica.list_issues(limit=500)
+            issue_data: Dict[str, Any] = {}
+            if list_result.ok:
+                raw = list_result.data or {}
+                issues = (
+                    raw if isinstance(raw, list)
+                    else raw.get("issues", []) if isinstance(raw, dict)
+                    else []
+                )
+                for iss in issues:
+                    if isinstance(iss, dict):
+                        iss_id = str(iss.get("identifier") or iss.get("id") or "")
+                        if iss_id == issue_id or iss_id.endswith(f"-{issue_id.split('-')[-1]}"):
+                            issue_data = iss
+                            break
+        except Exception as exc:
+            self._log.warning("failed to fetch issue %s: %s", issue_id, exc)
+            issue_data = {}
+
+        # 构建任务字典
+        title = str(issue_data.get("title") or issue_id)
+        description = str(issue_data.get("description") or "")
+        dod_raw = issue_data.get("definition_of_done") or []
+        dod: List[str] = dod_raw if isinstance(dod_raw, list) else []
+
+        # 尝试从 description 解析 DoD（兼容纯文字格式）
+        if not dod and description:
+            for line in description.splitlines():
+                s = line.strip()
+                if s.startswith(("验收：", "验收:", "DoD:", "DoD：")):
+                    dod.append(s.split(":", 1)[-1].strip() or s.split("：", 1)[-1].strip())
+
+        task: Dict[str, Any] = {
+            "id": issue_id,
+            "title": title,
+            "description": description,
+            "definition_of_done": dod,
+            "category": str(issue_data.get("category") or "task"),
+            "priority": str(issue_data.get("priority") or "medium"),
+            "project_hint": str(issue_data.get("project") or ""),
+            "multica_labels": issue_data.get("labels") or [],
+        }
+
+        # 异步触发 Agent（不阻塞钉钉 Stream 回调）
+        asyncio.create_task(self._run_agent_task(incoming, task))
+        return AckMessage.STATUS_OK, "OK"
+
+    async def _run_agent_task(
+        self,
+        incoming: dingtalk_stream.ChatbotMessage,
+        task: Dict[str, Any],
+    ) -> None:
+        """后台运行开发 Agent；状态通知走当当 Webhook，不走 Stream 回复。"""
+        from dev_agent_runner import AgentRunResult, enqueue_task, run_dev_agent
+        from feedback_handler import comment_on_multica_issue, notify_agent_done, notify_agent_started
+
+        task_path = enqueue_task(task)
+        issue_id = task.get("id", "?")
+        self._log.info("agent task enqueued: %s -> %s", issue_id, task_path)
+
+        # 状态 1：Agent 开始执行（webhook）
+        try:
+            notify_agent_started(task)
+        except Exception as exc:
+            self._log.debug("notify_agent_started skipped: %s", exc)
+
+        try:
+            result: AgentRunResult = await asyncio.to_thread(run_dev_agent, task, task_path)
+        except Exception as exc:
+            self._log.error("agent run raised: %s", _redact_sensitive_text(str(exc)))
+            return
+
+        self._log.info(
+            "agent task done: %s success=%s duration=%.1fs",
+            result.task_id, result.success, result.duration_seconds,
+        )
+
+        # 状态 2：完成或失败（webhook）
+        try:
+            notify_agent_done(result, task)
+        except Exception as exc:
+            self._log.warning("notify_agent_done failed: %s", _redact_sensitive_text(str(exc)))
+
+        try:
+            comment_on_multica_issue(result, task)
+        except Exception as exc:
+            self._log.debug("multica comment skipped: %s", exc)
 
     async def _handle_delete_dispatch(
         self,
@@ -738,17 +1413,18 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
                     rc,
                     issue_ref,
                     token,
-                    err[:400] if err else "",
+                    _redact_sensitive_text(err[:400] if err else ""),
                 )
+                redacted_err = _redact_sensitive_text((err or "(空)")[:400])
                 api_fail.append(
-                    f"- `{issue_ref}`（输入 `{token}`）\n```\n{(err or '(空)')[:400]}\n```"
+                    f"- `{issue_ref}`（输入 `{token}`）\n```\n{redacted_err}\n```"
                 )
                 continue
             if not data:
                 self._log.warning(
                     "multica issue status parse fail ref=%s stdout=%s",
                     issue_ref,
-                    (out or "")[:500],
+                    _redact_sensitive_text((out or "")[:500]),
                 )
                 json_fail.append(f"- `{issue_ref}`（输入 `{token}`）")
                 continue
@@ -800,7 +1476,107 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
     async def process(self, callback: dingtalk_stream.CallbackMessage):
         incoming = dingtalk_stream.ChatbotMessage.from_dict(callback.data)
         tc = incoming.text
-        raw = _normalize_dingtalk_at_prefixes(((tc.content if tc else "") or "").strip())
+        raw_original = ((tc.content if tc else "") or "").strip()
+        raw = _normalize_dingtalk_at_prefixes(raw_original)
+        route = classify_incoming_text(raw, raw_original=raw_original)
+
+        if route == "brain":
+            if _is_confirm_dispatch_phrase(raw):
+                reply = await self._confirm_pending_dispatch_suggestion(incoming)
+                self._reply_dispatch_message(incoming, "Multica 队列管家", reply)
+                return AckMessage.STATUS_OK, "OK"
+            if not should_route_to_brain(raw):
+                return AckMessage.STATUS_OK, "OK"
+            try:
+                chat_id = _chat_id_for_incoming(incoming)
+                brain = self._get_brain()
+                brain_input = raw
+                if _is_acceptance_followup(raw):
+                    try:
+                        from brain import parse_brain_decision
+
+                        stored = self._memory.get_session_clarification(chat_id)
+                        if stored:
+                            previous_decision = parse_brain_decision(stored)
+                            if previous_decision.recommended_action == "ask_clarification":
+                                brain_input = _merge_clarification_context(raw, previous_decision)
+                    except Exception as exc:
+                        self._log.warning(
+                            "pending clarification context ignored: %s",
+                            _redact_sensitive_text(str(exc)),
+                        )
+                decision = await brain.decide(
+                    brain_input,
+                    project_context=self._project_context,
+                )
+                if decision.recommended_action == "ask_confirm":
+                    self._memory.set_session_suggestion(
+                        chat_id,
+                        _serialize_brain_decision(decision),
+                    )
+                    self._memory.clear_session_clarification(chat_id)
+                elif decision.recommended_action == "ask_clarification":
+                    self._memory.set_session_clarification(
+                        chat_id,
+                        _serialize_brain_decision(decision),
+                    )
+                reply = brain.render_reply(decision)
+                try:
+                    memory_counts = self._memory.process_memory_candidates(
+                        decision.memory_candidates,
+                        source=chat_id,
+                    )
+                except Exception as exc:
+                    self._log.warning(
+                        "memory candidate processing failed: %s",
+                        _redact_sensitive_text(str(exc)),
+                    )
+                else:
+                    pending_count = int(memory_counts.get("pending", 0))
+                    if pending_count > 0:
+                        reply += (
+                            f"\n\n我还提取到 {pending_count} 条长期记忆候选，"
+                            "后续可汇总给老大确认。"
+                        )
+            except Exception as exc:
+                self._log.warning("brain route failed: %s", _redact_sensitive_text(str(exc)))
+                reply = "我暂时没能把这条需求整理清楚。老大可以换成固定格式：`派单 标题`，第二行写验收说明。"
+            self._reply_dispatch_message(incoming, "Multica 队列管家", reply)
+            return AckMessage.STATUS_OK, "OK"
+
+        if route == "assign_issue":
+            multica_bin = _resolve_multica_binary()
+            if not multica_bin:
+                self._reply_dispatch_message(
+                    incoming, "Multica 工单指派",
+                    "⚠️ 本机找不到 multica，请用 `quick_start.bat 7` 重启派单桥。",
+                )
+                return AckMessage.STATUS_OK, "OK"
+            return await self._handle_assign_issue(incoming, raw, multica_bin)
+
+        if route == "free_query":
+            multica_bin = _resolve_multica_binary()
+            if not multica_bin:
+                self._reply_dispatch_message(
+                    incoming, "Multica 工单查询",
+                    "⚠️ 本机找不到 multica，请用 `quick_start.bat 7` 重启派单桥。",
+                )
+                return AckMessage.STATUS_OK, "OK"
+            return await self._handle_free_query(incoming, raw, multica_bin)
+
+        if route == "patrol":
+            return await self._handle_patrol(incoming)
+
+        if route == "dispatch_agent":
+            issue_id = _strip_dispatch_to_agent_prefix(raw)
+            if issue_id:
+                return await self._handle_dispatch_to_agent(incoming, issue_id)
+            self._reply_dispatch_message(
+                incoming,
+                "开发 Agent 派单",
+                "请指定工单 ID，例：`#派给Agent UUM-42`",
+            )
+            return AckMessage.STATUS_OK, "OK"
 
         del_rest = _strip_delete_dispatch_prefix(raw)
         if del_rest is not None:
@@ -886,30 +1662,43 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
         err = (err_b or b"").decode("utf-8", errors="replace")
 
         if proc.returncode != 0:
-            self._log.warning("multica exit=%s stderr=%s stdout=%s", proc.returncode, err, out)
+            redacted_err = _redact_sensitive_text(err)
+            redacted_out = _redact_sensitive_text(out)
+            self._log.warning(
+                "multica exit=%s stderr=%s stdout=%s",
+                proc.returncode,
+                redacted_err,
+                redacted_out,
+            )
             self._reply_dispatch_message(
                 incoming,
                 "Multica 派单",
                 "❌ **建单失败**（CLI 非零退出）\n\n"
                 "请检查：`multica auth status`、workspace，必要时配置 `MULTICA_PROJECT_ID`。\n\n"
                 "**stderr**\n```\n"
-                + (err or "(空)")[:600]
+                + (redacted_err or "(空)")[:600]
                 + "\n```\n**stdout**\n```\n"
-                + (out or "(空)")[:600]
+                + (redacted_out or "(空)")[:600]
                 + "\n```",
             )
             return AckMessage.STATUS_OK, "OK"
 
         data = _parse_create_stdout(out)
         if not data:
-            self._log.warning("multica exit=0 but JSON parse failed or missing id stdout=%s stderr=%s", out, err)
+            redacted_out = _redact_sensitive_text(out)
+            redacted_err = _redact_sensitive_text(err)
+            self._log.warning(
+                "multica exit=0 but JSON parse failed or missing id stdout=%s stderr=%s",
+                redacted_out,
+                redacted_err,
+            )
             self._reply_dispatch_message(
                 incoming,
                 "Multica 派单",
                 "⚠️ **未确认是否写入 Multica**\n\n"
                 "CLI 退出码为 0，但未能解析建单 JSON，**请勿当作已成功**。\n\n"
                 "原始输出：\n```\n"
-                + (out or "(空)")[:1000]
+                + (redacted_out or "(空)")[:1000]
                 + "\n```",
             )
             return AckMessage.STATUS_OK, "OK"
@@ -921,7 +1710,7 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
             identifier,
             issue_id,
             multica_bin,
-            json.dumps(data, ensure_ascii=False)[:4000],
+            _redact_sensitive_text(json.dumps(data, ensure_ascii=False)[:4000]),
         )
 
         title_short = title if len(title) <= 80 else title[:77] + "..."
@@ -980,6 +1769,11 @@ def main() -> None:
         dingtalk_stream.chatbot.ChatbotMessage.TOPIC,
         MulticaDispatchHandler(logger),
     )
+    # ── 启动工单状态变更监听器（后台线程） ─────────────────────────
+    from status_watcher import StatusWatcher
+    _status_watcher = StatusWatcher()
+    _status_watcher.start()
+
     logger.info("DingTalk stream started; ensure `multica` is on PATH and logged in.")
     client.start_forever()
 
