@@ -1,0 +1,16 @@
+{
+  "id": "UUM-24",
+  "title": "PmSystem 后端任务 #1：Planner WorkItems 批量管理 API",
+  "description": "背景：当前策划工作安排诊断（人员交接、分工会结果落库）只能直连 SQLite UPDATE planner_work_items，老大要求全走 API。\n需实现：\n1. POST /api/planner/items/batch — upsert 批量创建/更新 WorkItem\n2. PATCH /api/planner/items/batch — 批量部分更新（只传要改的字段）\n3. DELETE /api/planner/items/batch — 批量删除，删除时清理 linked_feature_id 的孤儿引用，但⚠️不级联删除 Feature\n约束：\n- 单事务包裹 items 数组，全部成功或全部失败\n- 返回 200 + {created:[], updated:[], errors:[]} 或 422 + 详细错误列表\n- 校验规则见文档，包括 targetWeek 格式、linkedFeatureId 存在性、assignee 存在性\n- linkedFeatureId 变更不反向联动 Feature（只更新 WorkItem 侧）\n沿用现有 PmSystem 认证体系（Bearer JWT），fastapi 风格，原子性必须保证。\n文档详情https://alidocs.dingtalk.com/i/nodes/P7QG4Yx2Jp7GexxXfga5bELQV9dEq3XD?utm_scene=person_space",
+  "definition_of_done": [],
+  "category": "task",
+  "priority": "medium",
+  "project_hint": "",
+  "multica_labels": [],
+  "status": "failed",
+  "created_at": "2026-04-28T21:48:28",
+  "claimed_at": "2026-04-28T21:48:29",
+  "branch": "agent/UUM-24",
+  "error": "git checkout -b agent/UUM-24 failed: fatal: a branch named 'agent/UUM-24' already exists",
+  "completed_at": "2026-04-28T21:48:29"
+}

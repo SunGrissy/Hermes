@@ -87,7 +87,9 @@
 
 ## 3. 路径 B：后台调度（后续迭代）
 
-### 3.1 触发条件
+> **状态**：已废弃。路径 B 原设计基于 FastAPI HTTP 调用（端口 8301/8302/8303），但该架构未实际使用。当前所有 Advisor 均通过独立 Hermes Gateway Stream 模式运行，后台调度改为通过 `send_message` 或其他群消息机制实现。本节保留供历史参考，不再按原方案执行。
+
+### 3.1 原设计（废弃）
 
 老大发消息，内容边界清晰、归属单一：
 
@@ -95,41 +97,21 @@
 2. **查阻塞**："有没有 Block 住的东西？"
 3. **查文档**："设计文档写完了吗？"
 
-### 3.2 完整流程
+### 3.2 原流程（废弃）
 
-```
-[老大] 群里发消息（不 @ 任何人）
-    ↓
-[满满] 接收群消息
-    ↓
-[满满] 意图识别：归属明确 → 路径 B
-    ↓
-[满满] 后台 HTTP 调用对应 Advisor 的 /task API（不公开 @）
-    POST http://localhost:8301/task
-    { "task_type": "version_progress", "query": "本周版本进度" }
-    ↓
-[阿茶] 后台处理，返回结构化结果
-    { "status": "ok", "progress": "80%", "risks": ["AI 关卡联调延期 1 天"] }
-    ↓
-[满满] 后台审查结果
-    ├─ 完整 → 主动发群消息汇报（不 @ 老大）
-    └─ 有异常 → 追问阿茶，必要时 @ 老大决策
-    ↓
-[满满] 在群里发汇报（简洁，不打扰）
-    > 老大，本周版本进度：80%，AI 关卡联调延期 1 天，建议后天做风险评估。
-```
+原方案计划通过 HTTP 调用 Advisor FastAPI 服务的 `/task` 端点实现后台调度。该方案因架构调整未实施。
 
-### 3.3 开发计划
+### 3.3 原开发计划（废弃）
 
-| 阶段 | 内容 | 预估时间 |
-|------|------|----------|
-| 1 | 给阿茶 FastAPI 加 `/task` 端点 | 半天 |
-| 2 | 启动阿茶 FastAPI 服务（与 Hermes Gateway 并存或替代） | 半天 |
-| 3 | 满满实现后台 HTTP 调用 + 审查逻辑 | 半天 |
-| 4 | 阿茶实现主动 `send_group_message` 汇报 | 半天 |
-| 5 | 小美、妙妙复用阿茶模式 | 各半天 |
+| 阶段 | 内容 | 状态 |
+|------|------|------|
+| 1 | 给阿茶 FastAPI 加 `/task` 端点 | **废弃** |
+| 2 | 启动阿茶 FastAPI 服务 | **废弃** |
+| 3 | 满满实现后台 HTTP 调用 + 审查逻辑 | **废弃** |
+| 4 | 阿茶实现主动 `send_group_message` 汇报 | **废弃** |
+| 5 | 小美、妙妙复用阿茶模式 | **废弃** |
 
-> **硅基原则**：阿茶搞定后，小美和妙妙用同一套代码模板复制，不重复造轮子。
+> **当前实际架构**：所有 Advisor 均运行在 `D:/hermes/{acha,xiaomei,miaomiao}/` 下的独立 Hermes Gateway 实例，通过 Stream 模式响应被@的消息。后台调度如需实现，应基于群消息或 `send_message` 机制，而非 FastAPI HTTP。
 
 ---
 
@@ -221,21 +203,21 @@ platforms:
 
 ### 7.1 已完成的
 
-- [x] 阿茶/小美/妙妙 Hermes Gateway 全部在线（PID 确认）
+- [x] 阿茶/小美/妙妙 Hermes Gateway 全部在线（独立 Stream 机器人）
 - [x] emoji 反应（Thinking/Done）全部生效
 - [x] 满满 `free_response_chats` 已配置群 ID
+- [x] 满满 system prompt 已更新为 Director 角色定义（SOUL.md）
 
 ### 7.2 正在做的
 
-- [ ] 满满 system prompt 加入总管角色定义
-- [ ] 满满 Gateway 重启确认全监听生效
-- [ ] 路径 A 端到端测试
+- [x] 路径 A 端到端测试已跑通
+- [ ] 满满实现意图识别的精准度调优
+- [ ] 实际跑一周，收集反馈迭代
 
 ### 7.3 待做的
 
-- [ ] 路径 B 开发（阿茶先，小美妙妙复用）
-- [ ] 满满实现意图识别的精准度调优
-- [ ] 实际跑一周，收集反馈迭代
+- [ ] 路径 B 重新设计（原 FastAPI 方案已废弃，后续如需实现应基于群消息/会话机制）
+- [ ] 满满 Gateway 重启后全监听生效确认
 
 ---
 
@@ -250,19 +232,19 @@ platforms:
 | 服务 | 端口 | 状态 |
 |------|------|------|
 | 满满 Gateway | Stream（无端口） | 运行中 |
-| 阿茶 Gateway | Stream（无端口） | PID 52004 |
-| 小美 Gateway | Stream（无端口） | PID 62324 |
-| 妙妙 Gateway | Stream（无端口） | PID 30612 |
-| 阿茶 FastAPI | 8301 | 未启动（路径 B 用） |
-| 小美 FastAPI | 8302 | 未启动（路径 B 用） |
-| 妙妙 FastAPI | 8303 | 未启动（路径 B 用） |
+| 阿茶 Gateway | Stream（无端口） | 运行中 |
+| 小美 Gateway | Stream（无端口） | 运行中 |
+| 妙妙 Gateway | Stream（无端口） | 运行中 |
+
+> 注：早期方案曾规划 FastAPI 服务（端口 8301/8302/8303），该架构已废弃。当前所有实例均通过 Hermes Gateway Stream 模式运行。
 
 ### 8.3 文件位置
 
 - 满满配置：`D:/hermes/config.yaml`
-- 满满 system prompt：`D:/hermes/system.md`（如有）或 config 中的 `prefill`
+- 满满 system prompt：`D:/hermes/SOUL.md`
 - 阿茶配置：`D:/hermes/acha/config.yaml`
-- 阿茶 FastAPI：`D:/MyAgents/silicon-legion/advisors/pm/main.py`
+- 小美配置：`D:/hermes/xiaomei/config.yaml`
+- 妙妙配置：`D:/hermes/miaomiao/config.yaml`
 - 本规范：`D:/MyAgents/docs/silicon-legion-orchestration.md`
 
 ---

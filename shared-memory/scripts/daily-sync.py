@@ -263,8 +263,22 @@ def main():
     upgrade_candidates = []
     
     for mem in all_memories:
-        # 简化判断：如果内容不在上次报告中，则视为新增
-        if mem["content"] and mem["content"][:200] not in last_content:
+        if not mem["content"]:
+            continue
+        # 按 § 切分条目，检查是否有段落不在上次报告中
+        parts = [p.strip() for p in mem["content"].split("§") if p.strip()]
+        has_new = False
+        for part in parts:
+            # 每个段落取前300字符做指纹，避免微小格式差异导致误判
+            fingerprint = part[:300].replace(" ", "").replace("\n", "")
+            last_normalized = last_content.replace(" ", "").replace("\n", "")
+            if fingerprint not in last_normalized:
+                has_new = True
+                break
+        # 如果没有 § 分隔符，退化为全文匹配
+        if not parts and mem["content"][:300] not in last_content:
+            has_new = True
+        if has_new:
             new_memories.append(mem)
             category, reason = classify_memory(mem["content"])
             if category == "upgrade_candidate":
