@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import threading
 import urllib.request
@@ -104,6 +105,37 @@ def extract_final_response(stdout: str) -> str:
     return tail.strip(" \n-")
 
 
+def _post_review_comment(issue_id: str, report: str) -> bool:
+    """将审查结果写回 Multica 工单评论。"""
+    multica = shutil.which("multica") or "multica"
+    try:
+        result = subprocess.run(
+            [multica, "issue", "comment", "add", issue_id,
+             "--content", report, "--output", "json"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        LOG.warning("post review comment failed for %s: %s", issue_id, exc)
+        return False
+    if result.returncode != 0:
+        LOG.warning("post review comment failed for %s: %s", issue_id, result.stderr[-300:])
+        return False
+    LOG.info("review comment posted for %s", issue_id)
+    return True
+
+
+
+def _notify_review_done_safe(issue_id: str, report: str, backend: str) -> None:
+    try:
+        from status_watcher import notify_review_done
+        notify_review_done(issue_id, report, backend)
+    except Exception:
+        pass
+
 class HermesReviewDispatcher:
     def __init__(self, config: HermesReviewConfig | None = None):
         self.config = config or HermesReviewConfig.from_env()
@@ -156,6 +188,11 @@ class HermesReviewDispatcher:
         if not report:
             LOG.warning("Hermes review produced empty report: %s", issue_id)
             return False
+
+        # ── 写回 Multica 评论 ───────────────────────────────────────────
+        _post_review_comment(issue_id, report)
+        # ── 审查完毕 webhook 通知 ──────────────────────────────────────
+        _notify_review_done_safe(issue_id, report, "hermes")
 
         if self.config.daemon_cid:
             return self._send_via_dingtalk_daemon(issue_id, report)

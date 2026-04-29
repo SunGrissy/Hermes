@@ -10,4 +10,4 @@ if (-not (Test-Path ".\.venv\Scripts\python.exe")) {
     Write-Host "未找到 .venv，请先执行: py -m venv .venv ; .\.venv\Scripts\Activate.ps1 ; pip install -r requirements.txt"
     exit 1
 }
-& ".\.venv\Scripts\python.exe" ".\dispatch_bot.py"
+& ".\.venv\Scripts\python.exe" ".\watchdog.py"

@@ -1,5 +1,23 @@
 # Work Log - MyAgents Root
 
+## [2026-04-29] - Multica 工作流收口：审查落盘、巡检规则、watchdog 守护与 UUM-27 救援
+
+**状态**: 验收通过
+
+**内容**:
+- `tools/multica-dingtalk-bridge/status_watcher.py`：通知标题统一为 `[标签] ISSUE-ID: 标题`；`[Claude 完成]` 增加审查状态说明；补齐 run 过渡通知/失败兜底；`approved` 自动 merge + push + `done`。
+- `tools/multica-dingtalk-bridge/code_review_dispatcher.py`、`hermes_review_dispatcher.py`：审查结果自动写入 Multica 评论，并发送 `[审查完毕]` 通知。
+- `tools/multica-dingtalk-bridge/watchdog.py`：dispatch_bot 守护（30s 检查、5s 重启、1h 最多 3 次）；`run_bridge.ps1` 改由 watchdog 启动；`pm-system/quick_start.bat` 的 bridge kill 逻辑覆盖 watchdog 进程。
+- `Hermes/dangdang/SKILL.md`：新增 Step 4b（审查自动落盘 + 通知）与 Step 5（巡检：需求不清、停滞、状态滞后、指派不启动、worktree 救援）。
+- `MulticaTasks/2026-04-29-multica-workflow-design.md`：更新到实际运行口径（watchdog 启动、UUM-24/UUM-27 实例闭环、巡检新规则）。
+- UUM-27 救援闭环：从平台分支提取代码，推送 `agent/UUM-27`，合并 `main`，工单状态更新为 `done`。
+
+**测试**:
+- `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：137 passed, 76 subtests passed。
+- `ReadLints`：本轮相关文件无新增 lint 错误。
+
+---
+
 ## [2026-04-29] - Multica 平台 worktree 执行与当当调度 Skill
 
 **状态**: 验收通过

@@ -111,6 +111,38 @@ def extract_review_output(stdout: str) -> str:
     return stdout.strip()
 
 
+def _post_review_comment(config: CodeReviewConfig, issue_id: str, report: str) -> bool:
+    """将审查结果写回 Multica 工单评论。"""
+    try:
+        result = subprocess.run(
+            [config.multica_bin, "issue", "comment", "add", issue_id,
+             "--content", report,
+             "--output", "json"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        LOG.warning("post review comment failed for %s: %s", issue_id, exc)
+        return False
+    if result.returncode != 0:
+        LOG.warning("post review comment failed for %s: %s", issue_id, result.stderr[-300:])
+        return False
+    LOG.info("review comment posted for %s", issue_id)
+    return True
+
+
+def _notify_review_done_safe(issue_id: str, report: str, backend: str) -> None:
+    """尝试发审查完毕 webhook，不抛异常。"""
+    try:
+        from status_watcher import notify_review_done
+        notify_review_done(issue_id, report, backend)
+    except Exception as exc:
+        LOG.debug("notify_review_done failed: %s", exc)
+
+
 def resolve_review_workdir(config: CodeReviewConfig, issue_id: str) -> Path:
     platform_workdir = resolve_platform_review_workdir(config, issue_id)
     if platform_workdir:
@@ -225,6 +257,12 @@ class CodeReviewDispatcher:
         if not report:
             LOG.warning("code review produced empty report: %s", issue_id)
             return False
+
+        # ── 写回 Multica 评论 ───────────────────────────────────────────
+        _post_review_comment(self.config, issue_id, report)
+        # ── 审查完毕 webhook 通知 ──────────────────────────────────────
+        _notify_review_done_safe(issue_id, report, "cli")
+
         if self.config.daemon_cid:
             return self._send_via_dingtalk_daemon(issue_id, report)
         LOG.info("code review finished without delivery target: %s", issue_id)

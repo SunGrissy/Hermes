@@ -31,6 +31,7 @@ description: >-
 - 工作区根目录：`D:\MyAgents`
 - Multica 桥目录：`D:\MyAgents\tools\multica-dingtalk-bridge`
 - 项目映射文件：`D:\MyAgents\tools\multica-dingtalk-bridge\multica_project_map.json`
+- 需求文档落盘目录（与 Multica 短描述配合）：`D:\MyAgents\MulticaTasks\`（`.md`）
 - 平台隔离 workspace root：`C:\Users\TU\multica_workspaces`
 - pm-system 平台 repo URL：`file:///D:/MyAgents/pm-system`
 - 当前主要执行 Agent：`克劳德`
@@ -44,6 +45,22 @@ multica daemon status --output json
 multica issue get UUM-24 --output json
 multica issue runs UUM-24 --output json
 ```
+
+## 目标流水线（钉钉当当 ↔ Multica 克劳德 ↔ 审查 ↔ 通知老大）
+
+老大期望的整体效果是：
+
+1. **钉钉里通过当当派单** → Multica 建单并指派 **克劳德**。
+2. **克劳德排队**：由 **Multica daemon** 调度（并发上限见主机上的 `MULTICA_DAEMON_MAX_CONCURRENT_TASKS` 等）；连续多单从平台侧排队，**不是当当本地排序**。
+3. **每单开发完成后**状态进入 **`In Review`**（由克劳德或流程置位）。
+4. **自动审查**：本机 **`dispatch_bot.py` 常驻** 且 **`status_watcher`** 轮询到 **`In Review`** 时，根据 **`IN_REVIEW_REVIEW_BACKEND`** 触发：
+   - **`cli`**：`claude` CLI 只读审查 → **dingtalk-desktop** `daemon /send` 私聊老大；
+   - **`hermes`**：调用 **`Hermes/hermes-agent/run_agent.py`**（当当侧 **multica-code-review** skill）→ 同样经 daemon（或 `HERMES_REVIEW_DINGTALK_TARGET`）通知老大。
+5. **钉钉里的当当**不会凭空收到「克劳德完工」推送——除非另有 Hermes Stream 入站对接。**「当当自动审」**在本仓库落地为：**派单桥代为调用 Hermes 审查进程**，而不是再给当当发一条手动 `@`。
+
+配置摘要见 **`tools/multica-dingtalk-bridge/README.md`**（`IN_REVIEW_REVIEW_BACKEND`、`CODE_REVIEW_*`、`HERMES_REVIEW_*`、`dispatch_bot`）。
+
+**审查失败兜底**：若 `dingtalk-desktop/webhook_config.json` 已配置 **`当当`**（或 `MULTICA_REVIEW_ESCALATION_WEBHOOK_URL`），派单桥在 **Hermes/CLI 自动审查失败**（进程挂、超时、投递失败）时会向该机器人 **再发一条 Markdown**，写明工单号与原因，避免 silently 失败。
 
 ## 工作流程（Agentic Protocol）
 
@@ -61,23 +78,45 @@ multica issue runs UUM-24 --output json
 
 如果同时包含多个意图，按顺序处理：先定位状态，再决定是否建单/退回/审查。
 
+### Step 1b: 识别「本地需求文档」路径（勿装看不见）
+
+老大常在正文里写 **`D:/MyAgents/...`、`\MulticaTasks\...`** 或 **`按 xxx.md 实现`**。这些是**本机仓库内的 Markdown**，不是「缺少正文」：
+
+| 信号 | 当当应做的事 |
+|---|---|
+| 描述中含 `D:/`、`D:\` 且以 `.md` 结尾 | 视为需求文档路径；在 Hermes 运行环境里 **读取该文件**（read_file 或终端 `Get-Content -Encoding utf8`），从文档提炼摘要与验收条款 |
+| 描述中含 `@doc:相对路径` | 与上相同，`相对路径` 相对 `D:\MyAgents` |
+| 仅写了 `MulticaTasks/某文件名.md` 无盘符 | 拼成 `D:\MyAgents\MulticaTasks\某文件名.md` 再读 |
+
+**禁止**：在已给出清晰 `.md` 路径且文件可读时，仍追问「请粘贴文档内容」「验收标准是什么」（除非文档里完全没有 AC）。应先读后归纳，缺一项再问一项。
+
+建单时请在 issue **描述末尾**保留文档指针，并追加一行便于执行端注入：
+
+```text
+（以下为机器可读附件标记，勿删）
+@doc:MulticaTasks/2026-04-29-producer-tower-batch-api.md
+```
+
+若用户已在正文写过完整 `D:/MyAgents/...md`，可不重复 `@doc:`，本地桥同样会从路径注入上下文。
+
 ### Step 2: 建单与分派
 
 1. 提取派单字段：
    - 标题：一句话说明交付物。
-   - 描述：背景、需求、约束、验收标准。
+   - 描述：背景、需求、约束、验收标准。**若存在本地 `.md` 路径，先读后把要点与 `@doc:` 行写入描述**，避免 Multica 上单太长。
    - 项目：优先从标题/描述匹配 `multica_project_map.json`；匹配不到时询问。
-   - 优先级：默认 `medium`，紧急才用 `high` / `urgent`。
+   - 优先级：默认 `medium`，除非老大写了 **紧急/P0** 或文档明示。
    - 执行 Agent：默认 `克劳德`，除非老大指定。
 
-2. 信息不足时先问：
+2. 仅在以下情况追问（不要程式化「永远缺两项」）：
 
-```text
-这单还缺两个信息：
-1. 落哪个项目：pm-system / performeval / dingtalk-desktop / 其它？
-2. 验收标准：做到什么算完成？
-确认后我再建单。
-```
+| 缺什么 | 再问 |
+|---|---|
+| 读完文档仍无法判断交付边界 | 一两句澄清范围 |
+| 项目歧义（多个子项目命中） | 确认落到哪个 project |
+| 标题为空或过泛 | 请老大收窄一句标题 |
+
+否则直接进入建单。
 
 3. 信息充分时建单：
 
@@ -210,12 +249,76 @@ UUM-xx Review 结论：
 - 建议下一步：退回 todo / 保持 in_review 等人工验收 / 可合并
 ```
 
-如果发现阻塞项，默认只报告，不自动改状态。只有老大说“退回”“让克劳德修”“按建议处理”时，才执行：
+审查完成后**必须**执行两步自动落盘：
+
+### Step 4b: 审查结果落盘 + 通知
+
+**a) 写 Multica 评论：**
+
+```powershell
+multica issue comment add UUM-xx --content "<审查报告全文>" --output json
+```
+
+**b) 发送 webhook 通知老大：**
+
+发 Markdown 通知到 webhook。格式：
+
+```
+[审查完毕] UUM-xx: <工单标题>
+
+工单：UUM-xx
+审查后端：Hermes/当当
+结论：<阻塞项有/无>
+结果摘要：<报告前 300 字>
+下一步：查看 Multica 评论详情，确认后改为 approved 自动合并。
+```
+
+这两步是自动的——审查完就做，不等老大说"退回"。
+
+如果审查发现阻塞项，再追加退回评论并改状态：
 
 ```powershell
 multica issue comment add UUM-xx --content "<review 摘要与退回原因>"
 multica issue update UUM-xx --status todo --assignee "克劳德" --output json
 ```
+
+---
+
+### Step 5: 巡检（定期或老大指令触发）
+
+当当具备自主巡检能力。触发条件：老大说"巡检""巡逻""看看工单""状态对吗"，或定时触发。
+
+#### 5.1 需求不清 / 归属不清
+
+| 检测条件 | 动作 |
+|---------|------|
+| issue 描述 < 50 字 | 私聊老大确认 |
+
+#### 5.2 停滞检测
+
+| 条件 | 阈值 |
+|------|------|
+| todo 无人认领 | > 24h |
+| in_progress 无 run 活动 | > 8h |
+| in_review 无人推进 | > 24h |
+
+检测到停滞 → 逐一私聊老大确认下一步。
+
+#### 5.3 已完成但状态未更新
+
+| 证据 | 条件 | 动作 |
+|------|------|------|
+| 强证据 | agent 分支已合 main + run 完成 + in_review | 自动改 done |
+| 强证据 | run 完成 + todo | 自动改 in_review |
+| 中证据 | run 完成 + in_progress | 自动改 in_review |
+| 弱证据 | git diff main..agent 为空 | 发确认 |
+
+#### 5.4 指派不启动 / worktree 产出未推分支
+
+| 现象 | 动作 |
+|------|------|
+| assignee=agent + todo + 无活跃 run | 报告老大 |
+| 评论含代码描述 + git 无对应分支 | 报告老大，尝试进 worktree 救援 |
 
 ## 安全护栏
 
@@ -269,3 +372,5 @@ git branch --show-current
 | 日期 | 版本 | 变更 |
 |---|---|---|
 | 2026-04-29 | v1.0 | 为 Hermes profile dangdang 新增 Multica 派单、Agent 调度、ClaudeReviewer 审查流程 |
+| 2026-04-29 | v1.1 | 派单识别：`D:/MyAgents/**/*.md` 与 `@doc:` 视为可读本地文档；读后再问；建单描述保留 `@doc:` 供 task_context 注入 |
+| 2026-04-29 | v1.2 | 文档化「当当 ↔ daemon 排队 ↔ In Review → CLI/Hermes 审查」；与 `status_watcher` + `IN_REVIEW_REVIEW_BACKEND` 对齐 |

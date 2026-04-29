@@ -64,6 +64,8 @@ class CodeReviewDispatcherTests(unittest.TestCase):
 
             completed = unittest.mock.Mock(returncode=0, stdout='{"type":"result","result":"OK"}', stderr="")
             with (
+                patch("code_review_dispatcher._post_review_comment", return_value=True),
+                patch("code_review_dispatcher._notify_review_done_safe"),
                 patch("code_review_dispatcher.resolve_platform_run_workdir", return_value=None),
                 patch("code_review_dispatcher.subprocess.run", return_value=completed) as run,
             ):

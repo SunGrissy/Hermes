@@ -24,10 +24,24 @@ except Exception:  # pragma: no cover - 保持状态通知不被可选审查链�
     def trigger_code_review_async(issue: dict, prev_status: str, curr_status: str) -> None:
         return None
 
+try:
+    from hermes_review_dispatcher import trigger_hermes_review_async
+except Exception:  # pragma: no cover
+    def trigger_hermes_review_async(issue: dict, prev_status: str, curr_status: str) -> None:
+        return None
+
+try:
+    from review_escalation import escalation_enabled
+except Exception:  # pragma: no cover
+    def escalation_enabled() -> bool:
+        return False
+
 LOG = logging.getLogger("status-watcher")
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _CACHE_PATH = _REPO_ROOT / "shared-memory" / "multica-status-cache.json"
+_RUN_FAIL_CACHE_PATH = _REPO_ROOT / "shared-memory" / "multica-run-fail-cache.json"
+_RUN_TRANSITION_CACHE_PATH = _REPO_ROOT / "shared-memory" / "multica-run-transition-cache.json"
 _POLL_INTERVAL_S = int(os.environ.get("STATUS_WATCHER_INTERVAL", "300"))  # 默认 5 分钟
 _STARTUP_DELAY_S = 30  # 启动后延迟，等 multica 登录完成
 
@@ -36,6 +50,8 @@ _NOTIFY_ON_ENTER: dict[str, str] = {
     "inreview": "[待审查]",
     "done": "[已完成]",
     "cancelled": "[已取消]",
+    "failed": "[运行失败]",
+    "approved": "[审查通过]",
 }
 
 
@@ -43,6 +59,95 @@ _NOTIFY_ON_ENTER: dict[str, str] = {
 
 def _normalize_status(s: str) -> str:
     return (s or "").lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+def _review_backend_mode() -> str:
+    """IN_REVIEW_REVIEW_BACKEND：cli | hermes | both；非法值回退 cli。"""
+    mode = os.environ.get("IN_REVIEW_REVIEW_BACKEND", "cli").strip().lower()
+    if mode not in ("cli", "hermes", "both"):
+        return "cli"
+    return mode
+
+
+def _thread_issue_tag(issue: dict) -> str:
+    raw = str(issue.get("identifier") or issue.get("id") or "issue")[:40]
+    return "".join(c if c.isalnum() or c in "-_" else "-" for c in raw)
+
+
+def _cli_dispatch_with_escalation(issue: dict, prev_status: str, curr_status: str) -> None:
+    """同步跑 CLI 审查；失败则发兜底 webhook（需配置 escalation URL）。"""
+    from code_review_dispatcher import CodeReviewDispatcher
+    from review_escalation import send_review_escalation
+
+    dispatcher = CodeReviewDispatcher()
+    if not dispatcher.config.enabled:
+        return
+    ok = dispatcher.dispatch(issue, prev_status, curr_status)
+    if not ok:
+        send_review_escalation(
+            issue,
+            reason="Claude CLI 审查失败或未产出可投递结果（含 dingtalk daemon 私聊投递失败）。",
+            backend="cli",
+        )
+
+
+def _hermes_dispatch_with_escalation(issue: dict, prev_status: str, curr_status: str) -> None:
+    """同步跑 Hermes 审查；失败则发兜底 webhook。"""
+    from hermes_review_dispatcher import HermesReviewDispatcher
+    from review_escalation import send_review_escalation
+
+    dispatcher = HermesReviewDispatcher()
+    if not dispatcher.config.enabled:
+        return
+    ok = dispatcher.dispatch(issue, prev_status, curr_status)
+    if not ok:
+        send_review_escalation(
+            issue,
+            reason="Hermes（当当侧 run_agent）未成功：脚本缺失、超时、空输出、或 daemon 投递失败（当当/Hermes 进程异常时可出现）。",
+            backend="hermes",
+        )
+
+
+def _invoke_review_chain(issue: dict, prev_status: str, curr_status: str) -> None:
+    """工单进入 In Review 后触发审查：CLI（claude）、Hermes（当当侧 run_agent + skill）、或二者。
+
+    若配置了审查兜底 webhook（webhook_config「当当」或 MULTICA_REVIEW_ESCALATION_WEBHOOK_URL），
+    则在后台线程内**同步**执行 dispatch，失败时向该 webhook 发 Markdown 提醒老大介入。
+    """
+    mode = _review_backend_mode()
+    use_esc = False
+    try:
+        use_esc = escalation_enabled()
+    except Exception as exc:
+        LOG.debug("escalation_enabled check failed: %s", exc)
+
+    if mode in ("cli", "both"):
+        try:
+            if use_esc:
+                threading.Thread(
+                    target=_cli_dispatch_with_escalation,
+                    args=(issue, prev_status, curr_status),
+                    daemon=True,
+                    name=f"code-review-esc-{_thread_issue_tag(issue)}",
+                ).start()
+            else:
+                trigger_code_review_async(issue, prev_status, curr_status)
+        except Exception as exc:
+            LOG.warning("failed to trigger CLI code review: %s", exc)
+
+    if mode in ("hermes", "both"):
+        try:
+            if use_esc:
+                threading.Thread(
+                    target=_hermes_dispatch_with_escalation,
+                    args=(issue, prev_status, curr_status),
+                    daemon=True,
+                    name=f"hermes-review-esc-{_thread_issue_tag(issue)}",
+                ).start()
+            else:
+                trigger_hermes_review_async(issue, prev_status, curr_status)
+        except Exception as exc:
+            LOG.warning("failed to trigger Hermes review: %s", exc)
 
 
 def _run_multica(*args: str, timeout: int = 30) -> tuple[bool, str]:
@@ -94,6 +199,292 @@ def _save_cache(cache: dict[str, str]) -> None:
         )
     except Exception as exc:
         LOG.warning("status cache save failed: %s", exc)
+
+
+
+
+def _load_run_transition_cache() -> dict[str, str]:
+    try:
+        if _RUN_TRANSITION_CACHE_PATH.exists():
+            return json.loads(_RUN_TRANSITION_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+def _save_run_transition_cache(cache: dict[str, str]) -> None:
+    try:
+        _RUN_TRANSITION_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _RUN_TRANSITION_CACHE_PATH.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as exc:
+        LOG.warning("run transition cache save failed: %s", exc)
+
+_BACKEND_HINT: dict[str, str] = {
+    "cli": "代码审查由 Claude CLI 自动执行。",
+    "hermes": "代码审查由 Hermes/当当自动执行。",
+    "both": "代码审查由 Claude CLI 与 Hermes/当当并行执行。",
+}
+
+
+def _get_issue_title(issue_id: str, issues_map: dict[str, dict] | None) -> str:
+    """从 issues_map 或缓存中取工单标题；回退用 issue_id。"""
+    if issues_map and issue_id in issues_map:
+        return str(issues_map[issue_id].get("title") or issue_id)
+    return issue_id
+
+
+def _build_review_status_line(status: str) -> str:
+    """根据当前工单状态，生成审查状态说明。"""
+    backend = _review_backend_mode()
+    backend_note = _BACKEND_HINT.get(backend, "")
+    if status in ("in_review", "In Review"):
+        return (
+            f"**审查状态：** 已自动进入 In Review 状态。{backend_note}\n"
+            "审查结果将写入 Multica 评论，并伴发 [审查完毕] 通知。"
+        )
+    return (
+        "**审查状态：** 未自动进入 In Review。\n"
+        "如需审查：在 Multica 将工单状态改为 **In Review**，"
+        "或告诉当当 `审查 {issue_id}`。"
+    )
+
+
+def _check_run_transitions(
+    cache: dict[str, str], webhook_url: str, issues_map: dict[str, dict] | None = None
+) -> dict[str, str]:
+    """检测 run 状态变化，发通知（Claude 开始/完成）。
+    通知标题格式：[标签] ISSUE-ID: 工单标题
+    Claude 完成时顺带说明审查状态（是否已自动进入 in_review / 如何触发审查）。
+    返回更新后的 transition cache。"""
+    tcache = _load_run_transition_cache()
+    for issue_id, status in cache.items():
+        norm = _normalize_status(status)
+        if norm not in ("todo", "inprogress", "inreview"):
+            continue
+        latest = _get_latest_run(issue_id)
+        if not latest:
+            continue
+        run_id = latest.get("id") or ""
+        run_status = (latest.get("status") or "").lower()
+        if not run_id:
+            continue
+        prev = tcache.get(issue_id, "")
+        if prev != run_id:
+            # 获取工单标题
+            issue_title = _get_issue_title(issue_id, issues_map)
+            if run_status == "in_progress":
+                webhook_title = f"[Claude 工作中] {issue_id}: {issue_title}"
+                body = (f"## [Claude 工作中] {issue_id}: {issue_title}\n\n"
+                        f"Claude 已开始处理 {issue_id}，正在执行中。")
+                _send_webhook(webhook_url, webhook_title, body)
+                LOG.info("notified run started: %s (run=%s)", issue_id, run_id)
+            elif run_status == "completed":
+                review_info = _build_review_status_line(status)
+                webhook_title = f"[Claude 完成] {issue_id}: {issue_title}"
+                body = (f"## [Claude 完成] {issue_id}: {issue_title}\n\n"
+                        f"Claude 已完成 {issue_id}。\n\n"
+                        f"{review_info}")
+                _send_webhook(webhook_url, webhook_title, body)
+                LOG.info("notified run completed: %s (run=%s)", issue_id, run_id)
+                # ── 若工单已进入 in_review 但之前未通知，补发 ────────
+                if status == "in_review":
+                    issue = {"identifier": issue_id, "title": issue_title, "assignee": "Agent"}
+                    stitle, sbody = _build_notification(issue, "in_progress", "in_review", "[待审查]")
+                    _send_webhook(webhook_url, stitle, sbody)
+                    LOG.info("补发 [待审查] for %s (run 完成时发现 in_review)", issue_id)
+            tcache[issue_id] = run_id
+    _save_run_transition_cache(tcache)
+    return tcache
+
+
+# ─── Run 失败检测兜底 ─────────────────────────────────────────────────────────
+
+def _load_run_fail_cache() -> dict[str, str]:
+    """加载已通知过的 run failure id 缓存。"""
+    try:
+        if _RUN_FAIL_CACHE_PATH.exists():
+            return json.loads(_RUN_FAIL_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_run_fail_cache(cache: dict[str, str]) -> None:
+    try:
+        _RUN_FAIL_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _RUN_FAIL_CACHE_PATH.write_text(
+            json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except Exception as exc:
+        LOG.warning("run fail cache save failed: %s", exc)
+
+
+def _get_latest_run(issue_id: str) -> dict | None:
+    """查询工单的最新一条 run，返回 run dict 或 None。"""
+    ok, output = _run_multica("issue", "runs", issue_id, "--output", "json")
+    if not ok:
+        LOG.debug("fetch runs for %s failed: %s", issue_id, output[:200])
+        return None
+    try:
+        runs = json.loads(output)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(runs, list) and len(runs) > 0:
+        return runs[0]  # 首位 = 最新
+    return None
+
+
+
+
+def _merge_agent_branch(issue: dict) -> bool:
+    """approved 后自动合并 agent 分支 → main → push。"""
+    issue_id = str(issue.get("identifier") or issue.get("id") or "")
+    if not issue_id:
+        return False
+    branch = f"agent/{issue_id}"
+    # 检查分支存在
+    try:
+        r = subprocess.run(
+            ["git", "branch", "--list", branch],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception as exc:
+        LOG.warning("merge check branch failed for %s: %s", issue_id, exc)
+        return False
+    if not r.stdout.strip():
+        LOG.info("merge skipped for %s: branch %s not found", issue_id, branch)
+        return False
+    # 检查是否已合入
+    try:
+        r2 = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", branch, "main"],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if r2.returncode == 0:
+            LOG.info("merge skipped for %s: already merged", issue_id)
+            return True
+    except Exception:
+        pass
+    # 执行合并
+    try:
+        r3 = subprocess.run(
+            ["git", "merge", branch],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if r3.returncode != 0:
+            LOG.warning("merge conflict for %s: %s", issue_id, r3.stderr[-300:])
+            # 发 webhook 通知冲突
+            url = _load_webhook_url()
+            if url:
+                _send_webhook(url, f"[合并冲突] {issue_id}",
+                    f"## [合并冲突] {issue_id}\n\n"
+                    f"分支 `{branch}` 合并到 main 时冲突。\n"
+                    f"请手动处理：`cd D:/MyAgents && git merge {branch}`")
+            return False
+        # 推送
+        r4 = subprocess.run(
+            ["git", "push", "origin", "main"],
+            cwd=str(_REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if r4.returncode != 0:
+            LOG.warning("merge push failed for %s: %s", issue_id, r4.stderr[-300:])
+            return False
+        LOG.info("merged %s to main and pushed", issue_id)
+        # ── 自动改 Multica 状态为 done ────────────────────────
+        _run_multica("issue", "update", issue_id, "--status", "done")
+        return True
+    except Exception as exc:
+        LOG.warning("merge failed for %s: %s", issue_id, exc)
+        return False
+
+# ─── 审查完毕通知（供 dispatcher 调用） ────────────────────────────────────
+
+def notify_review_done(issue_id: str, report: str, backend: str) -> bool:
+    """审查结束后向 webhook 发通知。"""
+    url = _load_webhook_url()
+    if not url:
+        return False
+    backend_cn = "Claude CLI" if backend == "cli" else "Hermes（当当）"
+    body = (
+        f"## [审查完毕] {issue_id}\n\n"
+        f"**工单：** {issue_id}\n"
+        f"**审查后端：** {backend_cn}\n"
+        f"**结果摘要：** {report[:300]}{'...' if len(report) > 300 else ''}\n"
+        f"**下一步：** 查看 Multica 评论，确认后改为 approved 自动合并。"
+    )
+    return _send_webhook(url, f"[审查完毕] {issue_id}", body)
+
+
+# ─── Run 失败检测兜底 ─────────────────────────────────────────────────────
+
+def _check_run_failures(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
+    """对缓存中 status 为 in_progress 的工单，检查最新 run 是否失败。
+    
+    若 run 进入 failed 但 issue status 未变，通过 webhook 发通知，
+    避免因 status 卡住而漏报。
+    
+    返回更新后的 run-fail-cache（调用方负责存盘）。
+    """
+    fail_cache = _load_run_fail_cache()
+    for issue_id, status in cache.items():
+        norm = _normalize_status(status)
+        # 只在工单仍在运行 / 待办中时才有必要检测——done/cancelled/inreview 不用
+        if norm not in ("inprogress", "todo", "backlog", "blocked"):
+            continue
+        latest = _get_latest_run(issue_id)
+        if not latest:
+            continue
+        run_status = (latest.get("status") or "").lower()
+        if run_status != "failed":
+            continue
+        run_id = latest.get("id") or ""
+        if not run_id:
+            continue
+        # 已通知过则跳过
+        prev_run_id = fail_cache.get(issue_id)
+        if prev_run_id == run_id:
+            continue
+        fail_cache[issue_id] = run_id
+        # 构造通知
+        failure_reason = latest.get("failure_reason") or latest.get("error") or "agent_error"
+        attempt = latest.get("attempt", 1)
+        max_attempts = latest.get("max_attempts", 1)
+        error_detail = (latest.get("error") or "无详细错误信息")[:200]
+        label = "[运行失败]"
+        title, _ = _build_notification(
+            {"identifier": issue_id, "title": issue_id},
+            status,
+            f"failed (run #{attempt})",
+            label,
+        )
+        body = (
+            f"## {label} — {issue_id}\n\n"
+            f"**工单：** {issue_id}\n"
+            f"**工单状态：** {status}（未变化）\n"
+            f"**Run 状态：** failed（第 {attempt}/{max_attempts} 次尝试）\n"
+            f"**失败原因：** {failure_reason}\n"
+            f"**错误详情：** {error_detail}\n"
+            f"**下一步：** 如需重试，在 Multica 改为 todo + 加评论，或直接联系老大/当当。"
+        )
+        if _send_webhook(webhook_url, title, body):
+            LOG.info("notified run failure for %s (run=%s)", issue_id, run_id)
+        else:
+            LOG.warning("failed to send run failure webhook for %s", issue_id)
+    _save_run_fail_cache(fail_cache)
+    return fail_cache
 
 
 def _load_webhook_url() -> str:
@@ -152,9 +543,16 @@ def _build_notification(
     # 代码审查触发提示（仅 In Review 时附加）
     hermes_hint = ""
     if _normalize_status(curr_status) == "inreview":
+        backend = _review_backend_mode()
+        backend_tip = {
+            "cli": "`CODE_REVIEW_ENABLED=1` + `CODE_REVIEW_DAEMON_CID` → Claude CLI 审查并 daemon 私聊",
+            "hermes": "`HERMES_REVIEW_ENABLED=1` + `HERMES_REVIEW_DAEMON_CID` → Hermes run_agent（当当 skill）审查并投递",
+            "both": "CLI 与 Hermes 均可能触发（见各自 ENABLED），勿重复开两套",
+        }.get(backend, "")
         hermes_hint = (
             "\n\n---\n"
-            f"**触发代码审查：** 可发送 `审查 {issue_id}`；若已配置 `CODE_REVIEW_ENABLED=1`，会自动启动 reviewer。"
+            f"**自动审查：** `IN_REVIEW_REVIEW_BACKEND={backend}`。{backend_tip}\n"
+            f"亦可手动：`审查 {issue_id}`（当当）。"
         )
 
     webhook_title = f"{label} {issue_id}"
@@ -176,7 +574,7 @@ def poll_once(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
 
     返回更新后的 cache（调用方负责存盘）。
     """
-    ok, output = _run_multica("issue", "list", "--limit", "500", "--format", "json")
+    ok, output = _run_multica("issue", "list", "--limit", "500", "--output", "json")
     if not ok:
         LOG.warning("status watcher multica list failed: %s", output[:300])
         return cache  # 保持旧 cache，下次重试
@@ -208,6 +606,12 @@ def poll_once(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
         if prev is not None and prev != status:
             transitions.append((issue, prev, status))
 
+    # ── 构建 issues_map 供 _check_run_transitions 获取标题 ──────
+    issues_map: dict[str, dict] = {
+        str(issue.get("identifier") or issue.get("id") or ""): issue
+        for issue in issues if isinstance(issue, dict)
+    }
+
     LOG.debug(
         "poll_once done: total=%d transitions=%d", len(new_cache), len(transitions)
     )
@@ -231,11 +635,26 @@ def poll_once(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
             )
         if norm == "inreview":
             try:
-                trigger_code_review_async(issue, prev, curr)
+                _invoke_review_chain(issue, prev, curr)
             except Exception as exc:
-                LOG.warning("failed to trigger code review: %s", exc)
+                LOG.warning("failed to trigger review chain: %s", exc)
+        # ── approved 状态自动 git merge ────────────────────────────
+        if norm == "approved":
+            _merge_agent_branch(issue)
 
     _save_cache(new_cache)
+
+    # ── Run 级失败兜底检测 ──────────────────────────────────────────────
+    try:
+        _check_run_failures(new_cache, webhook_url)
+    except Exception as exc:
+        LOG.warning("run failure check failed: %s", exc)
+    # ── Run 过渡通知（Claude 开始/完成） ───────────────────────────────
+    try:
+        _check_run_transitions(new_cache, webhook_url, issues_map)
+    except Exception as exc:
+        LOG.warning("run transition check failed: %s", exc)
+
     return new_cache
 
 
