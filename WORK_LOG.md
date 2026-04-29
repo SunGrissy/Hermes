@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-30] - pm-system：策划周计划卡片删除角标改为×（UUM-34）
+
+**状态**: 已完成
+
+**内容**:
+- `pm-system/ui/components/planner-workbench.js`：卡片左上角彻底删除入口由汉字改为 **`×`**，`title`/`aria-label` 为英文；与弹窗内「彻底删除」同 API。
+- 子模块 `main` 已推送；根仓同步子模块指针。
+
+---
+
 ## [2026-04-29] - Claude 遥测包入库 + 设计文档 §9.7 + 桥接与配置增量
 
 **状态**: 验收通过（本提交）
