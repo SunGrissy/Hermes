@@ -1,5 +1,37 @@
 # Work Log - MyAgents Root
 
+## [2026-04-29] - Multica done 工单分支巡检 + pm-system 主线合入
+
+**状态**: 已完成
+
+**内容**:
+- 对 `multica issue list --status done` 所列工单做分支巡检：父仓 `main` 上仅存的 `agent/UUM-*` 分支相对 `main` 均为 ancestor（已合）。
+- `pm-system` 子模块：`agent/agent/6830482a` 相对 `main` 尚有一条未合提交（UUM-31 工作台删除后不全量刷新等），已合并入 `main` 并 `push origin main`；其余相关 `agent/*` 分支已为 ancestor。
+- 合并后与本地 stash（排期工作台 WIP）在 `planner-workbench.js` 发生冲突，已手工解决并单独提交 `feat(planner): 工作台排期周筛选与删除批量体验`（含 `planner-board-templates.js`）；已推送子模块 `main`，并 `stash drop` 已应用的「pre-merge UUM-31」条目。
+- 根仓本提交：同步更新 `pm-system` 子模块指针与 `WORK_LOG.md`。
+
+---
+
+## [2026-04-29] - Claude 遥测 + 实时策略 + 桥接与文档（本批提交）
+
+**状态**: 验收通过（本提交）
+
+**内容**:
+- `tools/claude_call_telemetry/`：`call_claude_with_telemetry`、按日 JSONL、`aggregate.py`、单测；与「任务数 vs 调用次数」统计口径对齐。
+- `tools/multica-dingtalk-bridge/`：审查路径接入遥测；`notify_scope` / `review_webhook_format`、主流程与 watchdog、README / `.env.example`；根 `.gitignore` 忽略 `.multica_bridge_watchdog.lock`。
+- `shared-memory/claude-calls/`：`README.md`、`.gitignore`（忽略 `*.jsonl` 遥测落盘）。
+- `config.yaml`：`agent.realtime` 与 system_prompt 实时规则；`delegation` 默认 `tuyoo` + `claude-sonnet-4.6`。
+- `MulticaTasks/2026-04-29-multica-workflow-design.md`：§9 实时双轨 + **§9.7 OpenClaw2 运维备忘**（端口、CLI 修复、钉钉 runtime、`schtasks`）。
+
+**测试**:
+- `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：144 passed, 76 subtests passed。
+- `cd d:\MyAgents; $env:PYTHONPATH='tools'; py -m pytest tools/claude_call_telemetry/tests/test_telemetry.py -q`：5 passed。
+
+**备注**:
+- `D:/OpenClaw/openclaw.json` 与 `D:/OpenClaw2/openclaw.json` 为**本机路径**，不入父仓；策略段以设计文档 §9 与 Hermes `config.yaml` 为准同步。
+
+---
+
 ## [2026-04-29] - Multica 主 Webhook 精简 + 审查完毕「说人话」摘要
 
 **状态**: 验收通过
@@ -16,7 +48,7 @@
 
 ## [2026-04-29] - 实时任务分级策略落地（Hermes/OpenClaw2）
 
-**状态**: 待验收
+**状态**: 已并入本日「Claude 遥测 + 实时策略 + 桥接与文档」提交说明
 
 **内容**:
 - `config.yaml`：新增 `agent.realtime` 配置段（心跳、总时长、轮数、单任务 Claude 调用上限、通知模式、升舱关键词），并在 `agent.system_prompt` 写入实时任务执行规则（doing 首响、阶段变化更新、保活心跳、异常必达、三上限治理、可写仓库但遵守 git 安全红线）。
@@ -31,7 +63,7 @@
 
 ## [2026-04-29] - Claude 调用遥测（task_id / call_index / JSONL）
 
-**状态**: 待验收
+**状态**: 已并入本日「Claude 遥测 + 实时策略 + 桥接与文档」提交说明
 
 **内容**:
 - 新增 `tools/claude_call_telemetry/`：`call_claude_with_telemetry` 封装子进程、按日写入 `shared-memory/claude-calls/calls-YYYY-MM-DD.jsonl`；`call_index` 可按 `task_id` 自动递增；`dangerous_keywords_hit`、token 用量（从 JSON stdout 尽力解析）。
