@@ -1,4 +1,5 @@
 import json
+import subprocess
 import unittest
 import tempfile
 from pathlib import Path
@@ -62,17 +63,22 @@ class CodeReviewDispatcherTests(unittest.TestCase):
                 extra_args=("--print", "--output-format", "json"),
             )
 
-            completed = unittest.mock.Mock(returncode=0, stdout='{"type":"result","result":"OK"}', stderr="")
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout='{"type":"result","result":"OK"}',
+                stderr="",
+            )
             with (
                 patch("code_review_dispatcher._post_review_comment", return_value=True),
                 patch("code_review_dispatcher._notify_review_done_safe"),
                 patch("code_review_dispatcher.resolve_platform_run_workdir", return_value=None),
-                patch("code_review_dispatcher.subprocess.run", return_value=completed) as run,
+                patch("code_review_dispatcher.call_claude_with_telemetry", return_value=completed) as run,
             ):
                 self.assertTrue(CodeReviewDispatcher(cfg).dispatch({"identifier": "UUM-42"}, "a", "b"))
 
-        args = run.call_args.args[0]
-        self.assertEqual(args[:4], ["claude", "--print", "--output-format", "json"])
+        cmd = run.call_args.kwargs["cmd"]
+        self.assertEqual(cmd[:4], ["claude", "--print", "--output-format", "json"])
         self.assertEqual(Path(run.call_args.kwargs["cwd"]), worktree)
 
     def test_resolve_review_workdir_falls_back_to_repo_root(self):

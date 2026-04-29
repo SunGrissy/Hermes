@@ -397,3 +397,14 @@ cd tools/multica-dingtalk-bridge
 2. 再接入 Claude 调用封装（含 JSONL 遥测）。
 3. 接入 AI 卡片单条刷新；不支持更新的通道走文本降级。
 4. 最后开启双上限硬门禁（时间 + 轮数 + Claude 调用数）。
+
+### 9.7 OpenClaw2 运维备忘（端口 / CLI / 钉钉 runtime）
+
+> 与 Multica 工单流独立；本节记录本机排查结论，便于换机或复现时对照。
+
+- **实例与端口**：`D:/OpenClaw2/openclaw.json` 为 OpenClaw2 配置；gateway 常用 **18790**。与虾叔侧 OpenClaw（如 **18789**）并存时务必区分 `OPENCLAW_STATE_DIR` / `OPENCLAW_CONFIG_PATH`，避免混用状态目录。
+- **全局 CLI 损坏**：若 `openclaw` 命令缺失或 shim 指向不存在的 `openclaw.mjs`，执行 `npm i -g openclaw@latest` 重装全局包后再试。
+- **拉起顺序**：先设环境变量指向 OpenClaw2 配置与状态目录，再 `openclaw gateway --port 18790`（或配置文件内端口）。
+- **`openclaw health` 超时但端口已 Listen**：多为 WebSocket 握手未就绪或子通道未连上；并行查看 `%TEMP%\openclaw\` 下当日日志。
+- **`DingTalk runtime not initialize` / `startAccount` 失败**：`dingtalk-connector` 未成功 `setDingtalkRuntime`。日志若出现 **`ERR_UNSUPPORTED_ESM_URL_SCHEME`（`protocol 'd:'`）**，多为 Windows 下把 `D:\...` 当非法 ESM URL 导入；需对齐 OpenClaw / connector 版本或重装 `plugins.installs` 中钉钉相关条目。
+- **`schtasks` 拒绝访问**：`openclaw doctor --repair --force` 写计划任务失败时，用**管理员** PowerShell 执行，或改用手动/自建启动脚本，不依赖计划任务。

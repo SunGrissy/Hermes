@@ -13,6 +13,25 @@ agent:
   gateway_notify_interval: 600
   verbose: false
   reasoning_effort: medium
+  realtime:
+    enabled: true
+    default_level: L1
+    heartbeat_seconds: 240
+    max_task_minutes: 45
+    max_agent_turns: 24
+    max_claude_calls: 8
+    notify_mode: single_card_refresh
+    fallback_notify_mode: merged_text
+    claude_provider: tuyoo
+    claude_model: claude-sonnet-4.6
+    claude_command: claude
+    escalate_keywords:
+    - 用Claude
+    - 指派Claude
+    - 实时处理
+    - 立即处理
+    - 复杂重构
+    - 多文件
   system_prompt: |
     你是满满，硅基军团的总管。你的上级只有一个：老大。
 
@@ -32,6 +51,16 @@ agent:
     5. 汇报结论：任务完成后，在群里给老大一个简洁的验收摘要：
        "老大，[xxx] 已完成。结论：xxx。如需调整请指示。"
     6. 仅在需要老大做价值判断或拍板时 @ 老大。日常执行和验收你不@ 老大。
+
+    实时任务执行规则（新增，必须遵守）：
+    1) 分级处理：L0 快速答复；L1 工具轻编排；L2 升舱 Claude。
+    2) 触发 L2 的条件：老大明确要求用 Claude，或任务涉及长文档/多文件/复杂推理，或 L1 超时/失败。
+    3) 收到实时任务后先立即回复一条 doing（可带 emoji）表示接单，再进入执行。
+    4) 通知不刷屏：优先单条卡片刷新；仅在阶段变化时更新。若卡片更新不可用，降级为合并文本更新。
+    5) 保活心跳：连续一段时间无阶段变化时，发送“仍在处理 + 当前阶段 + 已耗时”。
+    6) 异常必达：超时、失败、上限触发、工具异常必须单独通知，包含 task_id、原因和下一步建议。
+    7) 双上限治理：同时检查总时长上限和轮数上限；并限制单任务 Claude 调用次数。触发任一即停止推进并上报。
+    8) 允许 Claude 写仓库，但必须遵守仓库 git 安全红线：禁止 force push、hard reset、clean -fd。
 
     沟通风格：先结论再步骤，少客套、不上价值。表达偏内部分析、可执行。
     不称呼用户为"您"或其他客套称呼，只用"老大"。
@@ -280,12 +309,12 @@ memory:
   nudge_interval: 10
   flush_min_turns: 6
 delegation:
-  model: ''
-  provider: ''
+  model: claude-sonnet-4.6
+  provider: tuyoo
   base_url: ''
   api_key: ''
   max_iterations: 50
-  reasoning_effort: ''
+  reasoning_effort: medium
   default_toolsets:
   - terminal
   - file
@@ -369,17 +398,15 @@ platform_toolsets:
   dingtalk:
   - hermes-dingtalk
 custom_providers:
-- name: tuyoo
-  base_url: https://relay.tuyoo.com/v1
-  key_env: TUYOO_RELAY_API_KEY
+- name: kimi-code
+  base_url: https://api.kimi.com/coding/v1
+  key_env: KIMI_API_KEY
   models:
-    claude-sonnet-4.6:
-      context_length: 200000
-    glm-5.1:
-      context_length: 131072
+    kimi-2.6:
+      context_length: 256000
 model:
-  provider: kimi-coding
-  default: kimi-k2.6
+  provider: kimi-code
+  default: kimi-2.6
 platforms:
   dingtalk:
     enabled: true

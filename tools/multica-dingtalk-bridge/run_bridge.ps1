@@ -2,6 +2,14 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
+# 只保留一组 bridge：先结束本目录残留的 watchdog / dispatch_bot，再由下方拉起唯一 watchdog。
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $cl = $_.CommandLine
+    if (-not $cl) { return $false }
+    if ($cl -notlike '*multica-dingtalk-bridge*') { return $false }
+    return ($cl -like '*watchdog.py*') -or ($cl -like '*dispatch_bot.py*')
+} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Seconds 1
 # 合并 Machine+User PATH，避免双击/计划任务启动时找不到 multica（仅继承窄 PATH）。
 $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")

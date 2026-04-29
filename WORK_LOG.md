@@ -1,5 +1,23 @@
 # Work Log - MyAgents Root
 
+## [2026-04-29] - Claude 遥测包入库 + 设计文档 §9.7 + 桥接与配置增量
+
+**状态**: 验收通过（本提交）
+
+**内容**:
+- 新增 `tools/claude_call_telemetry/`（`telemetry.py`、`aggregate.py`、单测）。
+- 新增 `shared-memory/claude-calls/`（`README.md`、`.gitignore` 忽略 `*.jsonl`）。
+- `MulticaTasks/2026-04-29-multica-workflow-design.md`：§9.7 OpenClaw2 / 钉钉 runtime / `schtasks` 排查备忘。
+- `config.yaml`：`agent.realtime`、system_prompt 实时规则、`delegation` 等与 Hermes 对齐的增量。
+- 根 `.gitignore`：忽略 `tools/multica-dingtalk-bridge/.multica_bridge_watchdog.lock`。
+- `tools/multica-dingtalk-bridge/`：`task_context.py`、`watchdog.py`、`run_bridge.ps1`、`tests/test_code_review_dispatcher.py` 等与遥测/守护相关的增量。
+
+**测试**:
+- `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：144 passed, 76 subtests passed。
+- `cd d:\MyAgents; $env:PYTHONPATH='tools'; py -m pytest tools/claude_call_telemetry/tests/test_telemetry.py -q`：5 passed。
+
+---
+
 ## [2026-04-29] - Multica done 工单分支巡检 + pm-system 主线合入
 
 **状态**: 已完成

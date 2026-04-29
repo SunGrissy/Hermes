@@ -9,12 +9,18 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# [AgentBridge Task] 2026-04-29 单实例常驻：启动前清理 + 文件锁，避免两组 watchdog/dispatch 抢 Stream
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_PATH = SCRIPT_DIR / "watchdog.log"
 DISPATCH_BOT = SCRIPT_DIR / "dispatch_bot.py"
+LOCK_PATH = SCRIPT_DIR / ".multica_bridge_watchdog.lock"
 CHECK_INTERVAL = 30   # 秒
 RESTART_DELAY = 5     # 秒
 MAX_RETRIES_PER_HOUR = 3
+
+# 单实例锁文件句柄：进程退出前保持打开，避免第二组 watchdog+dispatch 常驻
+_LOCK_FH = None
 
 
 def log(msg: str) -> None:
@@ -28,17 +34,51 @@ def log(msg: str) -> None:
         pass
 
 
+def _acquire_singleton_lock() -> None:
+    """同目录仅允许一个 watchdog；已存在则退出（避免双开 Stream / 双份 webhook）。"""
+    global _LOCK_FH
+    fh = None
+    try:
+        fh = open(LOCK_PATH, "a+b")
+        fh.seek(0)
+        if sys.platform == "win32":
+            import msvcrt
+
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (OSError, BlockingIOError):
+        if fh is not None:
+            try:
+                fh.close()
+            except OSError:
+                pass
+        log("singleton lock not acquired; another bridge watchdog is already running; exiting")
+        print(
+            "multica bridge: another watchdog is already running for this directory.",
+            file=sys.stderr,
+            flush=True,
+        )
+        sys.exit(1)
+    _LOCK_FH = fh
+    try:
+        _LOCK_FH.seek(0)
+        _LOCK_FH.truncate()
+        _LOCK_FH.write(str(os.getpid()).encode("ascii"))
+        _LOCK_FH.flush()
+    except OSError:
+        pass
+
+
 def start_dispatch() -> subprocess.Popen:
     """启动 dispatch_bot.py 子进程。"""
     log(f"Starting dispatch_bot.py...")
+    # 不使用 stdout=PIPE：watchdog 不消费管道时，子进程日志写满会阻塞，导致派单/审查链路假死。
     proc = subprocess.Popen(
         [sys.executable, str(DISPATCH_BOT)],
         cwd=str(SCRIPT_DIR),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
     )
     log(f"dispatch_bot.py started (pid={proc.pid})")
     return proc
@@ -68,6 +108,8 @@ def main() -> None:
     if not DISPATCH_BOT.is_file():
         log(f"ERROR: dispatch_bot.py not found at {DISPATCH_BOT}")
         sys.exit(1)
+
+    _acquire_singleton_lock()
 
     log("=== Watchdog started ===")
 

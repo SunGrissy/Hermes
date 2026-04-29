@@ -42,6 +42,8 @@ ENV/
 # ========================
 # Runtime data (backend JSON, backups)
 # ========================
+# multica-dingtalk-bridge 单实例锁（本地 watchdog 占用，勿提交）
+tools/multica-dingtalk-bridge/.multica_bridge_watchdog.lock
 backend/data/
 *.json.bak
 *.annotations.json
