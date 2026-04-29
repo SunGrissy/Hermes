@@ -129,10 +129,13 @@ def _post_review_comment(issue_id: str, report: str) -> bool:
 
 
 
-def _notify_review_done_safe(issue_id: str, report: str, backend: str) -> None:
+def _notify_review_done_safe(
+    issue_id: str, report: str, backend: str, *, issue_title: str | None = None
+) -> None:
     try:
         from status_watcher import notify_review_done
-        notify_review_done(issue_id, report, backend)
+
+        notify_review_done(issue_id, report, backend, issue_title=issue_title)
     except Exception:
         pass
 
@@ -149,6 +152,7 @@ class HermesReviewDispatcher:
             return False
 
         issue_id = _issue_id(issue) or "UNKNOWN"
+        issue_title = str(issue.get("title") or issue.get("name") or issue_id)
         prompt = build_review_prompt(issue, prev_status, curr_status)
         env = os.environ.copy()
         env["HERMES_HOME"] = str(self.config.hermes_home)
@@ -192,7 +196,7 @@ class HermesReviewDispatcher:
         # ── 写回 Multica 评论 ───────────────────────────────────────────
         _post_review_comment(issue_id, report)
         # ── 审查完毕 webhook 通知 ──────────────────────────────────────
-        _notify_review_done_safe(issue_id, report, "hermes")
+        _notify_review_done_safe(issue_id, report, "hermes", issue_title=issue_title)
 
         if self.config.daemon_cid:
             return self._send_via_dingtalk_daemon(issue_id, report)

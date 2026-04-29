@@ -25,6 +25,14 @@ if TYPE_CHECKING:
 
 LOG = logging.getLogger("feedback-handler")
 
+try:
+    from notify_scope import is_minimal_webhook_scope
+except ImportError:  # pragma: no cover
+
+    def is_minimal_webhook_scope() -> bool:
+        return False
+
+
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _WEBHOOK_CONFIG_PATH = _REPO_ROOT / "dingtalk-desktop" / "webhook_config.json"
 
@@ -113,6 +121,9 @@ def _format_notification(result: "AgentRunResult", task: dict[str, Any]) -> tupl
 
 def notify_agent_started(task: dict[str, Any], webhook_url: str = "") -> bool:
     """Agent 真正开始执行时发送钉钉通知，让用户知道 claude 已启动。"""
+    if is_minimal_webhook_scope():
+        LOG.debug("minimal webhook scope: skip agent-started for %s", task.get("id"))
+        return True
     url = webhook_url.strip() or _load_webhook_url()
     if not url:
         return False
@@ -133,6 +144,12 @@ def notify_agent_done(
     webhook_url: str = "",
 ) -> bool:
     """发送 Agent 完成钉钉通知。返回是否发送成功。"""
+    if is_minimal_webhook_scope() and result.success:
+        LOG.debug(
+            "minimal webhook scope: skip agent-done success for %s",
+            result.task_id,
+        )
+        return True
     url = webhook_url.strip() or _load_webhook_url()
     if not url:
         LOG.warning("no webhook URL configured, skipping DingTalk notification")
@@ -153,6 +170,9 @@ def notify_eval_split(
     webhook_url: str = "",
 ) -> bool:
     """Phase-1 完成后：发送评估结果 + 拆分计划到钉钉 webhook。"""
+    if is_minimal_webhook_scope():
+        LOG.debug("minimal webhook scope: skip eval-split for %s", task.get("id"))
+        return True
     url = webhook_url.strip() or _load_webhook_url()
     if not url:
         return False
@@ -197,6 +217,14 @@ def notify_sub_task_done(
     webhook_url: str = "",
 ) -> bool:
     """每个子任务完成后发送进度通知。"""
+    if is_minimal_webhook_scope():
+        LOG.debug(
+            "minimal webhook scope: skip sub-task-done %s %d/%d",
+            task_id,
+            idx,
+            total,
+        )
+        return True
     url = webhook_url.strip() or _load_webhook_url()
     if not url:
         return False

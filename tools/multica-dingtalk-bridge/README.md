@@ -28,6 +28,10 @@
 
 **可选**：`MULTICA_BOT_LLM_PROVIDER` — 默认 `mock`，不访问外部 LLM。设为 `openai` 时必须显式配置 `MULTICA_BOT_LLM_API_KEY`，并按需配置 `MULTICA_BOT_LLM_BASE_URL`、`MULTICA_BOT_LLM_MODEL`；脚本不会读取全局 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`，也不会读取旧的 `MULTICA_BOT_OPENAI_API_KEY`，避免误把用户消息发到未确认的外部服务。用户消息与上下文会发送到配置的 LLM endpoint，请只接可信服务。
 
+**可选**：`MULTICA_WEBHOOK_NOTIFY_SCOPE` — 控制 `DEV_AGENT_NOTIFY_WEBHOOK`（或 `webhook_config.json` 的 `cursor_session`）上哪些事件会推 Markdown。默认 **`review_and_failures`**：只推 **审查完毕**、**运行/工单失败**、**自动合并冲突** 等需要介入的；不推 Claude 工作中/完成、待审查、已完成、审查通过，也不推 Agent 启动/规划/子任务进度（避免 AgentWork 一类机器人刷屏）。需要恢复此前「状态与 run 全量通知」时设为 **`all`**。
+
+**可选**：`MULTICA_AUTO_MERGE_TRIGGER_STATUS` — `status_watcher` 在检测到 Multica 工单进入某状态后，尝试把本仓库 **`agent/{工单号}`** 合并进 **`main`** 并 `git push origin main`（无该分支则跳过）。默认 **`approved`**（与早期脚本一致）；若 Multica 工作区**没有** `approved` 状态、只能选 **Done** 关单，请设为 **`done`**，改为「关单即尝试合并」。合并成功后仍会调用 `multica issue update … --status done`（已是 Done 时等价幂等）。
+
 ## 能力与安全边界
 
 - 固定命令继续保留：`派单` / `#派单` 创建工单，`查工单` / `#查工单` 查看队列，`删除派单` / `#删除派单` / `取消派单` / `#取消派单` 取消工单。
@@ -80,7 +84,9 @@ cd d:\MyAgents\tools\multica-dingtalk-bridge
 .\run_bridge.ps1
 ```
 
-也可从 **`pm-system/quick_start.bat`** 无参启动：会顺带拉起派单桥（独立窗口标题 `Multica_DT_Bridge`）；菜单 **[7]** 单独重启，**[8]** 全部关闭，**[9]** 全部重启。
+**单实例（只保留一组 bridge）**：`run_bridge.ps1` 会先结束命令行里带本目录路径的 **`watchdog.py` / `dispatch_bot.py`** 残留进程，再拉起一组；`watchdog.py` 还会对同目录下的 **`.multica_bridge_watchdog.lock`** 加独占锁，若已有守护进程在跑则第二次启动会直接退出并提示，避免双开抢 Stream、重复发 webhook。
+
+也可从 **`pm-system/quick_start.bat`** 无参启动：会顺带拉起派单桥（独立窗口标题 `Multica_Bridge`）；菜单 **[7]** 单独重启，**[8]** 全部关闭，**[9]** 全部重启。
 
 **通用**：
 
@@ -141,9 +147,27 @@ python dispatch_bot.py
 
 设置环境变量 `DINGTALK_WEBHOOK_URL` 后，建单成功会向该 Webhook 发一条 Markdown；取消工单成功时也会发送取消摘要（与仓库 `cursor-to-dingtalk` 机器人格式兼容）。
 
-## 可选：In Review 自动触发 ClaudeAgent 审查
+## 可选：In Review 自动触发审查（CLI / Hermes 当当）
 
-`status_watcher.py` 会监听工单状态变化。默认只发 Webhook 提醒；如果开启代码审查，则工单进入 `In Review` 时会后台启动独立 ClaudeAgent reviewer 做只读代码审查，结果通过 `dingtalk-desktop` daemon 私聊投递。
+`status_watcher.py`（由 `dispatch_bot.py` 启动）会监听工单状态变化：进入 **`In Review`** 时除 Webhook 外，可按配置触发 **审查链**。
+
+### Multica 排队（克劳德「按规则排队」）
+
+平台 **`multica daemon`** 按 workspace 配置执行任务；并发上限见环境变量（示例脚本中的）**`MULTICA_DAEMON_MAX_CONCURRENT_TASKS`**（例如 `2` 表示同时最多跑 2 个）。连续派 3 单时，多出来的会在 daemon 队列里等待，**不由当当本地排序**——这是 Multica 的执行语义。
+
+### 审查后端：`IN_REVIEW_REVIEW_BACKEND`
+
+| 值 | 行为 |
+|----|------|
+| **`cli`**（默认） | 仅 **`code_review_dispatcher`**：`claude --print ...` 只读审查 + `DINGTALK_DAEMON_URL` / `CODE_REVIEW_DAEMON_CID` 私聊投递 |
+| **`hermes`** | 仅 **`hermes_review_dispatcher`**：调用本机 **`Hermes/hermes-agent/run_agent.py`**，提示词走当当侧的 **multica-code-review** skill，结果同样经 daemon 私聊（或 `HERMES_REVIEW_DINGTALK_TARGET`） |
+| **`both`** | 两套各跑一次（易重复报告，通常不建议） |
+
+配合开关：**`cli`** 路径需 **`CODE_REVIEW_ENABLED=1`**；**`hermes`** 路径需 **`HERMES_REVIEW_ENABLED=1`** 且 **`HERMES_REVIEW_DAEMON_CID`**（或发送目标）配置正确。
+
+> 「钉钉里当当收到完工通知再自动审」：**钉钉侧并无通用回调把消息送进 Hermes**。自动化依赖 **本机 `dispatch_bot` + status_watcher** 扫到 **`In Review`** 后拉起 **`hermes`** 审查链；你在钉钉里对当当说的派单仍是在 **Multica 建单**，与这条链路衔接。
+
+旧版文档下文描述 **`CODE_REVIEW_*`**（CLI）细节；若选用 **`hermes`**，请同步阅读 **`hermes_review_dispatcher.py`** 顶部环境与 **`Hermes/dangdang/SKILL.md`**。
 
 自动开发 Agent 会为每个工单创建独立工作区：`.worktrees/{issue_id}`，对应分支仍为 `agent/{issue_id}`。Claude 执行、diff 收集和后续审查都优先在这个 worktree 内完成，避免多个工单在同一个仓库目录里互相切分支。
 
@@ -200,7 +224,20 @@ DINGTALK_DAEMON_URL=http://127.0.0.1:19200
 3. Claude CLI 输出建议使用 JSON：`--print --output-format json`，便于脚本提取 `result`。
 4. `CODE_REVIEW_DAEMON_CID` 为空时只运行审查并记日志，不投递私聊。
 
-关闭 `CODE_REVIEW_ENABLED` 即回滚到原来的“只发状态变更 Webhook”模式。Hermes 审查 Skill 仍可作为人工入口备用，但不在默认自动链路上。
+关闭 `CODE_REVIEW_ENABLED` 且 `HERMES_REVIEW_ENABLED` 未开（或 `IN_REVIEW_REVIEW_BACKEND` 未指向对应后端）时，仅保留状态变更 Webhook。仍可手动在钉钉对当当发 **`审查 UUM-xx`**。
+
+### 「完工 → 通知当当」在当前架构下的含义
+
+- **通知**：Webhook（若配置）会推送 **状态变为 `In Review`**；这不是单独再给当当发一条 IM，除非你在群里对接了 Hermes 入站。
+- **当当自动审**：即 **`IN_REVIEW_REVIEW_BACKEND=hermes`** + **`HERMES_REVIEW_ENABLED=1`** + **`dispatch_bot` 常驻**，由派单桥代为调用 Hermes `run_agent`，**不等你在钉钉里再打一遍「审查」**。
+
+### 审查失败兜底 Webhook（Hermes 挂了也能通知老大）
+
+若 **`dingtalk-desktop/webhook_config.json`** 配置了 **`当当`** 键（机器人 URL），或环境变量 **`MULTICA_REVIEW_ESCALATION_WEBHOOK_URL`** 非空，则 `status_watcher` 在触发 **CLI / Hermes 审查**时会在后台线程内 **同步**跑完 `dispatch`；**任一端返回失败**（含 `run_agent.py` 不存在、超时、空报告、daemon 投递失败）时，向该 webhook 再发一条 **Markdown**，标明工单号与失败原因，便于介入。
+
+未配置兜底 URL 时行为与旧版一致（仅异步触发审查线程，失败只写日志）。
+
+> Token 敏感：生产环境可只用 **`MULTICA_REVIEW_ESCALATION_WEBHOOK_URL`** 指向本机私密 `.env`，避免把机器人 URL 提交到 Git。
 
 ## 安全
 

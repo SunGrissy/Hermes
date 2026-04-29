@@ -8,10 +8,17 @@ import logging
 import os
 import shlex
 import subprocess
+import sys
 import threading
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+
+_TOOLS_DIR = Path(__file__).resolve().parent.parent
+if str(_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TOOLS_DIR))
+
+from claude_call_telemetry.telemetry import call_claude_with_telemetry  # noqa: E402
 
 LOG = logging.getLogger("code-review-dispatcher")
 
@@ -134,11 +141,14 @@ def _post_review_comment(config: CodeReviewConfig, issue_id: str, report: str) -
     return True
 
 
-def _notify_review_done_safe(issue_id: str, report: str, backend: str) -> None:
+def _notify_review_done_safe(
+    issue_id: str, report: str, backend: str, *, issue_title: str | None = None
+) -> None:
     """尝试发审查完毕 webhook，不抛异常。"""
     try:
         from status_watcher import notify_review_done
-        notify_review_done(issue_id, report, backend)
+
+        notify_review_done(issue_id, report, backend, issue_title=issue_title)
     except Exception as exc:
         LOG.debug("notify_review_done failed: %s", exc)
 
@@ -232,16 +242,16 @@ class CodeReviewDispatcher:
         cmd = [self.config.command, *self.config.extra_args, prompt]
         env = os.environ.copy()
         env.setdefault("PYTHONIOENCODING", "utf-8")
+        issue_title = str(issue.get("title") or issue.get("name") or issue_id)
         try:
-            result = subprocess.run(
-                cmd,
-                cwd=str(workdir),
+            result = call_claude_with_telemetry(
+                cmd=cmd,
+                cwd=workdir,
                 env=env,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
                 timeout=self.config.timeout_s,
+                task_id=f"code-review:{issue_id}",
+                caller="multica-dingtalk-bridge.code_review_dispatcher",
+                task_title=issue_title,
             )
         except subprocess.TimeoutExpired:
             LOG.warning("code review timed out: %s", issue_id)
@@ -261,7 +271,7 @@ class CodeReviewDispatcher:
         # ── 写回 Multica 评论 ───────────────────────────────────────────
         _post_review_comment(self.config, issue_id, report)
         # ── 审查完毕 webhook 通知 ──────────────────────────────────────
-        _notify_review_done_safe(issue_id, report, "cli")
+        _notify_review_done_safe(issue_id, report, "cli", issue_title=issue_title)
 
         if self.config.daemon_cid:
             return self._send_via_dingtalk_daemon(issue_id, report)

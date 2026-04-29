@@ -5,7 +5,11 @@ from unittest.mock import patch
 
 import status_watcher
 
+# 本文件多数用例假定「状态机全量 webhook」；默认环境为精简模式时需显式还原。
+_SCOPE_ALL = {"MULTICA_WEBHOOK_NOTIFY_SCOPE": "all"}
 
+
+@patch.dict(os.environ, _SCOPE_ALL, clear=False)
 class StatusWatcherReviewDispatchTests(unittest.TestCase):
     def _run_poll(self, status):
         cache = {"UUM-42": "in_progress"}
@@ -70,6 +74,76 @@ class StatusWatcherReviewDispatchTests(unittest.TestCase):
         trigger = self._run_poll("cancelled")
 
         trigger.assert_not_called()
+
+    def test_approved_transition_calls_merge(self):
+        cache = {"UUM-42": "in_review"}
+        issue = {
+            "identifier": "UUM-42",
+            "title": "x",
+            "status": "approved",
+            "assignee": "Agent",
+        }
+        output = {"issues": [issue]}
+        with (
+            patch("status_watcher.escalation_enabled", return_value=False),
+            patch("status_watcher._run_multica", return_value=(True, json.dumps(output))),
+            patch("status_watcher._send_webhook", return_value=True),
+            patch("status_watcher._save_cache"),
+            patch("status_watcher._save_run_fail_cache"),
+            patch("status_watcher._load_run_transition_cache", return_value={}),
+            patch("status_watcher._load_run_fail_cache", return_value={}),
+            patch("status_watcher.trigger_code_review_async"),
+            patch("status_watcher._merge_agent_branch") as merge,
+        ):
+            status_watcher.poll_once(cache, "https://example.invalid/webhook")
+        merge.assert_called_once()
+
+    def test_done_transition_does_not_call_merge_by_default(self):
+        cache = {"UUM-42": "in_review"}
+        issue = {
+            "identifier": "UUM-42",
+            "title": "x",
+            "status": "done",
+            "assignee": "Agent",
+        }
+        output = {"issues": [issue]}
+        with (
+            patch("status_watcher.escalation_enabled", return_value=False),
+            patch("status_watcher._run_multica", return_value=(True, json.dumps(output))),
+            patch("status_watcher._send_webhook", return_value=True),
+            patch("status_watcher._save_cache"),
+            patch("status_watcher._save_run_fail_cache"),
+            patch("status_watcher._load_run_transition_cache", return_value={}),
+            patch("status_watcher._load_run_fail_cache", return_value={}),
+            patch("status_watcher.trigger_code_review_async"),
+            patch("status_watcher._merge_agent_branch") as merge,
+        ):
+            status_watcher.poll_once(cache, "https://example.invalid/webhook")
+        merge.assert_not_called()
+
+    def test_done_transition_calls_merge_when_env_done_trigger(self):
+        cache = {"UUM-42": "in_review"}
+        issue = {
+            "identifier": "UUM-42",
+            "title": "x",
+            "status": "done",
+            "assignee": "Agent",
+        }
+        output = {"issues": [issue]}
+        with (
+            patch.dict(os.environ, {"MULTICA_AUTO_MERGE_TRIGGER_STATUS": "done"}, clear=False),
+            patch("status_watcher.escalation_enabled", return_value=False),
+            patch("status_watcher._run_multica", return_value=(True, json.dumps(output))),
+            patch("status_watcher._send_webhook", return_value=True),
+            patch("status_watcher._save_cache"),
+            patch("status_watcher._save_run_fail_cache"),
+            patch("status_watcher._load_run_transition_cache", return_value={}),
+            patch("status_watcher._load_run_fail_cache", return_value={}),
+            patch("status_watcher.trigger_code_review_async"),
+            patch("status_watcher._merge_agent_branch") as merge,
+        ):
+            status_watcher.poll_once(cache, "https://example.invalid/webhook")
+        merge.assert_called_once()
 
     # ─── failed 转换 ─────────────────────────────────────────────────────
 
@@ -212,6 +286,35 @@ class StatusWatcherReviewDispatchTests(unittest.TestCase):
             status_watcher.poll_once(cache, "https://example.invalid/webhook")
 
         webhook.assert_not_called()
+
+
+class StatusWatcherMinimalWebhookTests(unittest.TestCase):
+    """MULTICA_WEBHOOK_NOTIFY_SCOPE=review_and_failures 时：少发状态噪音，审查链仍跑。"""
+
+    def test_inreview_skips_transition_webhook_still_triggers_review(self):
+        cache = {"UUM-42": "in_progress"}
+        issue = {
+            "identifier": "UUM-42",
+            "title": "登录页白屏",
+            "status": "In Review",
+            "assignee": "Agent",
+        }
+        output = {"issues": [issue]}
+        with (
+            patch.dict(os.environ, {"MULTICA_WEBHOOK_NOTIFY_SCOPE": "review_and_failures"}, clear=False),
+            patch("status_watcher.escalation_enabled", return_value=False),
+            patch("status_watcher._run_multica", return_value=(True, json.dumps(output))),
+            patch("status_watcher._send_webhook", return_value=True) as webhook,
+            patch("status_watcher._save_cache"),
+            patch("status_watcher._save_run_fail_cache"),
+            patch("status_watcher._load_run_transition_cache", return_value={}),
+            patch("status_watcher._load_run_fail_cache", return_value={}),
+            patch("status_watcher.trigger_code_review_async") as trigger,
+        ):
+            status_watcher.poll_once(cache, "https://example.invalid/webhook")
+
+        webhook.assert_not_called()
+        trigger.assert_called_once()
 
 
 if __name__ == "__main__":

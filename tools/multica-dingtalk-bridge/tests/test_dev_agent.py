@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -63,6 +64,70 @@ class TaskContextTests(unittest.TestCase):
         sizes = estimate_context_size(self._make_task())
         self.assertIsInstance(sizes, dict)
         self.assertTrue(all(isinstance(v, int) for v in sizes.values()))
+
+    def test_collect_attachment_paths_at_doc_relative(self):
+        from task_context import _REPO_ROOT, collect_attachment_paths
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".md",
+            prefix="tc_doc_",
+            delete=False,
+            encoding="utf-8",
+            dir=str(_REPO_ROOT),
+        ) as tmp:
+            tmp.write("# hello doc")
+            rel = Path(tmp.name).relative_to(_REPO_ROOT).as_posix()
+
+        try:
+            paths = collect_attachment_paths(f"see\n@doc:{rel}\nend")
+            self.assertEqual(len(paths), 1)
+            self.assertEqual(paths[0].resolve(), Path(tmp.name).resolve())
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+
+    def test_collect_attachment_paths_windows_md_under_repo(self):
+        from task_context import _REPO_ROOT, collect_attachment_paths
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".md",
+            prefix="tc_win_",
+            delete=False,
+            encoding="utf-8",
+            dir=str(_REPO_ROOT),
+        ) as tmp:
+            tmp.write("# win path doc")
+
+        try:
+            paths = collect_attachment_paths(f"按 {tmp.name.replace(chr(92), '/')} 实现")
+            self.assertEqual(len(paths), 1)
+            self.assertEqual(paths[0].resolve(), Path(tmp.name).resolve())
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+
+    def test_build_context_includes_attachment_section(self):
+        from task_context import _REPO_ROOT, build_context
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            suffix=".md",
+            prefix="tc_ctx_",
+            delete=False,
+            encoding="utf-8",
+            dir=str(_REPO_ROOT),
+        ) as tmp:
+            tmp.write("# SPEC\n验收：单元测试通过")
+
+        try:
+            rel = Path(tmp.name).relative_to(_REPO_ROOT).as_posix()
+            ctx = build_context(
+                self._make_task(description=f"@doc:{rel}\n其它说明"),
+            )
+            self.assertIn("SPEC", ctx)
+            self.assertIn("附件文档", ctx)
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
 
 
 # ─────────────────────────────────────────────────────────
@@ -310,18 +375,29 @@ class FeedbackHandlerFormatTests(unittest.TestCase):
 
     def test_notify_no_webhook_returns_false(self):
         from feedback_handler import notify_agent_done
-        with patch("feedback_handler._load_webhook_url", return_value=""):
-            result = self._make_result()
-            ok = notify_agent_done(result, self._make_task(), webhook_url="")
-            self.assertFalse(ok)
+        with patch.dict(os.environ, {"MULTICA_WEBHOOK_NOTIFY_SCOPE": "all"}, clear=False):
+            with patch("feedback_handler._load_webhook_url", return_value=""):
+                result = self._make_result()
+                ok = notify_agent_done(result, self._make_task(), webhook_url="")
+                self.assertFalse(ok)
 
     def test_notify_sends_webhook(self):
         from feedback_handler import notify_agent_done
-        with patch("feedback_handler._send_webhook", return_value=True) as mock_send:
-            result = self._make_result()
-            ok = notify_agent_done(result, self._make_task(), webhook_url="https://fake.webhook/")
-            self.assertTrue(ok)
-            mock_send.assert_called_once()
+        with patch.dict(os.environ, {"MULTICA_WEBHOOK_NOTIFY_SCOPE": "all"}, clear=False):
+            with patch("feedback_handler._send_webhook", return_value=True) as mock_send:
+                result = self._make_result()
+                ok = notify_agent_done(result, self._make_task(), webhook_url="https://fake.webhook/")
+                self.assertTrue(ok)
+                mock_send.assert_called_once()
+
+    def test_minimal_scope_skips_successful_agent_done(self):
+        from feedback_handler import notify_agent_done
+
+        with patch.dict(os.environ, {"MULTICA_WEBHOOK_NOTIFY_SCOPE": "review_and_failures"}, clear=False):
+            with patch("feedback_handler._send_webhook", return_value=True) as mock_send:
+                ok = notify_agent_done(self._make_result(), self._make_task(), webhook_url="https://fake.webhook/")
+        self.assertTrue(ok)
+        mock_send.assert_not_called()
 
 
 # ─────────────────────────────────────────────────────────

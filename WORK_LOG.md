@@ -1,5 +1,50 @@
 # Work Log - MyAgents Root
 
+## [2026-04-29] - Multica 主 Webhook 精简 + 审查完毕「说人话」摘要
+
+**状态**: 验收通过
+
+**内容**:
+- 新增 `MULTICA_WEBHOOK_NOTIFY_SCOPE`（默认 `review_and_failures`）：`DEV_AGENT_NOTIFY_WEBHOOK` / `cursor_session` 仅推 **审查完毕**、**工单/运行失败**、**自动合并冲突** 等需介入项；不再推 Claude 工作中/完成、待审查、状态机噪音，且 `feedback_handler` 在精简模式下跳过 Agent 启动/规划/子任务进度与 **成功** 的 Agent 完成通知（减轻 AgentWork 刷屏）。
+- 新增 `tools/multica-dingtalk-bridge/notify_scope.py`、`review_webhook_format.py`：`[审查完毕]` 正文去掉 Markdown 表格、抽取问题/风险小节生成短摘要；钉钉标题带工单标题；完整报告仍以 Multica 评论为准。
+- `status_watcher.py`、`code_review_dispatcher.py`、`hermes_review_dispatcher.py`、`feedback_handler.py` 及对应单测；`README.md`、`.env.example` 说明；`MulticaTasks/2026-04-29-multica-workflow-design.md` §5 配置表与 §8.4 落地说明。
+
+**测试**:
+- `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：141 passed。
+
+---
+
+## [2026-04-29] - 实时任务分级策略落地（Hermes/OpenClaw2）
+
+**状态**: 待验收
+
+**内容**:
+- `config.yaml`：新增 `agent.realtime` 配置段（心跳、总时长、轮数、单任务 Claude 调用上限、通知模式、升舱关键词），并在 `agent.system_prompt` 写入实时任务执行规则（doing 首响、阶段变化更新、保活心跳、异常必达、三上限治理、可写仓库但遵守 git 安全红线）。
+- `config.yaml`：`delegation` 默认切到 `provider=tuyoo` + `model=claude-sonnet-4.6`，用于复杂任务升舱 Claude。
+- `D:/OpenClaw/openclaw.json`：幂等追加 `[REALTIME_TIER_POLICY_V1]` 实时策略段，并新增 `realtimePolicy` 字段（与 Hermes 参数对齐）。
+
+**验证**:
+- `py -c "import yaml; yaml.safe_load(open('d:/MyAgents/config.yaml', encoding='utf-8').read()); print('config.yaml OK')"`。
+- `py -c "import json; json.loads(open('d:/OpenClaw/openclaw.json', encoding='utf-8').read()); print('openclaw.json OK')"`。
+
+---
+
+## [2026-04-29] - Claude 调用遥测（task_id / call_index / JSONL）
+
+**状态**: 待验收
+
+**内容**:
+- 新增 `tools/claude_call_telemetry/`：`call_claude_with_telemetry` 封装子进程、按日写入 `shared-memory/claude-calls/calls-YYYY-MM-DD.jsonl`；`call_index` 可按 `task_id` 自动递增；`dangerous_keywords_hit`、token 用量（从 JSON stdout 尽力解析）。
+- `tools/multica-dingtalk-bridge/code_review_dispatcher.py`：CLI 审查改为经遥测封装，`task_id`=`code-review:{issue_id}`，`caller`=`multica-dingtalk-bridge.code_review_dispatcher`。
+- `tools/claude_call_telemetry/aggregate.py`：按日汇总 distinct_tasks、total_calls、avg_calls_per_task、caller 分布、危险词命中行数等。
+- `shared-memory/claude-calls/README.md` + `.gitignore`（忽略 `*.jsonl`）。
+
+**测试**:
+- `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：137 passed。
+- `PYTHONPATH=tools py -m pytest claude_call_telemetry/tests/test_telemetry.py -q`：5 passed。
+
+---
+
 ## [2026-04-29] - Multica 工作流收口：审查落盘、巡检规则、watchdog 守护与 UUM-27 救援
 
 **状态**: 验收通过

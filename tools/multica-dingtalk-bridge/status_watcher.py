@@ -36,6 +36,8 @@ except Exception:  # pragma: no cover
     def escalation_enabled() -> bool:
         return False
 
+from notify_scope import is_minimal_webhook_scope
+
 LOG = logging.getLogger("status-watcher")
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
@@ -59,6 +61,31 @@ _NOTIFY_ON_ENTER: dict[str, str] = {
 
 def _normalize_status(s: str) -> str:
     return (s or "").lower().replace(" ", "").replace("_", "").replace("-", "")
+
+
+def _auto_merge_trigger_norm() -> str:
+    """MULTICA_AUTO_MERGE_TRIGGER_STATUS：approved（默认）| done。
+
+    Multica 工作区若无 **approved** 状态，可设为 **done**，在关单时尝试合并本地 ``agent/{工单号}``。
+    """
+    raw = (os.environ.get("MULTICA_AUTO_MERGE_TRIGGER_STATUS") or "approved").strip().lower()
+    if raw == "done":
+        return "done"
+    return "approved"
+
+
+def _should_auto_merge_on_status(norm: str) -> bool:
+    return norm == _auto_merge_trigger_norm()
+
+
+def _webhook_merge_ack_line() -> str:
+    """审查完毕 webhook 末尾一句：按当前合并触发状态提示。"""
+    if _auto_merge_trigger_norm() == "done":
+        return "若认可：在 Multica 标 **Done**，会按配置尝试把 agent 分支合进 main。"
+    return (
+        "若认可：工作区若有 **approved** 可用来触合并；若没有，在桥 `.env` 设 "
+        "`MULTICA_AUTO_MERGE_TRIGGER_STATUS=done` 后用 **Done** 触发。"
+    )
 
 
 def _review_backend_mode() -> str:
@@ -115,6 +142,9 @@ def _invoke_review_chain(issue: dict, prev_status: str, curr_status: str) -> Non
     则在后台线程内**同步**执行 dispatch，失败时向该 webhook 发 Markdown 提醒老大介入。
     """
     mode = _review_backend_mode()
+    issue_id = str(issue.get("identifier") or issue.get("id") or "")
+    cli_on = _is_truthy_env("CODE_REVIEW_ENABLED")
+    hermes_on = _is_truthy_env("HERMES_REVIEW_ENABLED")
     use_esc = False
     try:
         use_esc = escalation_enabled()
@@ -122,6 +152,8 @@ def _invoke_review_chain(issue: dict, prev_status: str, curr_status: str) -> Non
         LOG.debug("escalation_enabled check failed: %s", exc)
 
     if mode in ("cli", "both"):
+        if not cli_on:
+            LOG.info("skip CLI auto review for %s: CODE_REVIEW_ENABLED is off", issue_id)
         try:
             if use_esc:
                 threading.Thread(
@@ -136,6 +168,8 @@ def _invoke_review_chain(issue: dict, prev_status: str, curr_status: str) -> Non
             LOG.warning("failed to trigger CLI code review: %s", exc)
 
     if mode in ("hermes", "both"):
+        if not hermes_on:
+            LOG.info("skip Hermes auto review for %s: HERMES_REVIEW_ENABLED is off", issue_id)
         try:
             if use_esc:
                 threading.Thread(
@@ -220,11 +254,34 @@ def _save_run_transition_cache(cache: dict[str, str]) -> None:
     except Exception as exc:
         LOG.warning("run transition cache save failed: %s", exc)
 
-_BACKEND_HINT: dict[str, str] = {
-    "cli": "代码审查由 Claude CLI 自动执行。",
-    "hermes": "代码审查由 Hermes/当当自动执行。",
-    "both": "代码审查由 Claude CLI 与 Hermes/当当并行执行。",
-}
+def _is_truthy_env(name: str) -> bool:
+    return (os.environ.get(name, "") or "").strip().lower() in {"1", "true", "yes", "on", "y"}
+
+
+def _review_trigger_summary(issue_id: str) -> str:
+    """返回 in_review 下可直接给人的审查链路状态说明。"""
+    mode = _review_backend_mode()
+    cli_on = _is_truthy_env("CODE_REVIEW_ENABLED")
+    hermes_on = _is_truthy_env("HERMES_REVIEW_ENABLED")
+
+    if mode == "cli":
+        if cli_on:
+            return "自动审查：已触发 ClaudeReviewer，结果会回写到 Multica 评论。"
+        return f"自动审查：未启用（CLI 开关关闭）。如需现在审查：对当当说 `审查 {issue_id}`。"
+
+    if mode == "hermes":
+        if hermes_on:
+            return "自动审查：已触发当当/Hermes 审查，结果会回写到 Multica 评论。"
+        return f"自动审查：未启用（Hermes 审查开关关闭）。如需现在审查：对当当说 `审查 {issue_id}`。"
+
+    # both
+    if cli_on and hermes_on:
+        return "自动审查：双通道已触发（ClaudeReviewer + 当当/Hermes），可能收到两份审查结果。"
+    if cli_on:
+        return "自动审查：配置为双通道，但当前仅 ClaudeReviewer 已启用。"
+    if hermes_on:
+        return "自动审查：配置为双通道，但当前仅当当/Hermes 已启用。"
+    return f"自动审查：未启用（CLI/Hermes 均关闭）。如需现在审查：对当当说 `审查 {issue_id}`。"
 
 
 def _get_issue_title(issue_id: str, issues_map: dict[str, dict] | None) -> str:
@@ -236,13 +293,9 @@ def _get_issue_title(issue_id: str, issues_map: dict[str, dict] | None) -> str:
 
 def _build_review_status_line(status: str) -> str:
     """根据当前工单状态，生成审查状态说明。"""
-    backend = _review_backend_mode()
-    backend_note = _BACKEND_HINT.get(backend, "")
+    issue_id = "{issue_id}"
     if status in ("in_review", "In Review"):
-        return (
-            f"**审查状态：** 已自动进入 In Review 状态。{backend_note}\n"
-            "审查结果将写入 Multica 评论，并伴发 [审查完毕] 通知。"
-        )
+        return f"**审查状态：** 已进入 In Review。{_review_trigger_summary(issue_id)}"
     return (
         "**审查状态：** 未自动进入 In Review。\n"
         "如需审查：在 Multica 将工单状态改为 **In Review**，"
@@ -274,25 +327,21 @@ def _check_run_transitions(
             # 获取工单标题
             issue_title = _get_issue_title(issue_id, issues_map)
             if run_status == "in_progress":
-                webhook_title = f"[Claude 工作中] {issue_id}: {issue_title}"
-                body = (f"## [Claude 工作中] {issue_id}: {issue_title}\n\n"
-                        f"Claude 已开始处理 {issue_id}，正在执行中。")
-                _send_webhook(webhook_url, webhook_title, body)
-                LOG.info("notified run started: %s (run=%s)", issue_id, run_id)
+                if not is_minimal_webhook_scope():
+                    webhook_title = f"[Claude 工作中] {issue_id}: {issue_title}"
+                    body = (f"## [Claude 工作中] {issue_id}: {issue_title}\n\n"
+                            f"Claude 已开始处理 {issue_id}，正在执行中。")
+                    _send_webhook(webhook_url, webhook_title, body)
+                    LOG.info("notified run started: %s (run=%s)", issue_id, run_id)
             elif run_status == "completed":
-                review_info = _build_review_status_line(status)
-                webhook_title = f"[Claude 完成] {issue_id}: {issue_title}"
-                body = (f"## [Claude 完成] {issue_id}: {issue_title}\n\n"
-                        f"Claude 已完成 {issue_id}。\n\n"
-                        f"{review_info}")
-                _send_webhook(webhook_url, webhook_title, body)
-                LOG.info("notified run completed: %s (run=%s)", issue_id, run_id)
-                # ── 若工单已进入 in_review 但之前未通知，补发 ────────
-                if status == "in_review":
-                    issue = {"identifier": issue_id, "title": issue_title, "assignee": "Agent"}
-                    stitle, sbody = _build_notification(issue, "in_progress", "in_review", "[待审查]")
-                    _send_webhook(webhook_url, stitle, sbody)
-                    LOG.info("补发 [待审查] for %s (run 完成时发现 in_review)", issue_id)
+                if not is_minimal_webhook_scope():
+                    review_info = _build_review_status_line(status).replace("{issue_id}", issue_id)
+                    webhook_title = f"[Claude 完成] {issue_id}: {issue_title}"
+                    body = (f"## [Claude 完成] {issue_id}: {issue_title}\n\n"
+                            f"Claude 已完成 {issue_id}。\n\n"
+                            f"{review_info}")
+                    _send_webhook(webhook_url, webhook_title, body)
+                    LOG.info("notified run completed: %s (run=%s)", issue_id, run_id)
             tcache[issue_id] = run_id
     _save_run_transition_cache(tcache)
     return tcache
@@ -338,7 +387,7 @@ def _get_latest_run(issue_id: str) -> dict | None:
 
 
 def _merge_agent_branch(issue: dict) -> bool:
-    """approved 后自动合并 agent 分支 → main → push。"""
+    """进入配置的合并触发状态（默认 approved，见 MULTICA_AUTO_MERGE_TRIGGER_STATUS）后自动合并 agent 分支 → main → push。"""
     issue_id = str(issue.get("identifier") or issue.get("id") or "")
     if not issue_id:
         return False
@@ -412,20 +461,45 @@ def _merge_agent_branch(issue: dict) -> bool:
 
 # ─── 审查完毕通知（供 dispatcher 调用） ────────────────────────────────────
 
-def notify_review_done(issue_id: str, report: str, backend: str) -> bool:
-    """审查结束后向 webhook 发通知。"""
+def _dingtalk_markdown_title(prefix: str, issue_id: str, subtitle: str, max_len: int = 50) -> str:
+    """钉钉 markdown.title 长度上限约 50，截断避免被截断成半截词。"""
+    subtitle = (subtitle or "").strip() or issue_id
+    base = f"{prefix} {issue_id}"
+    room = max_len - len(base) - 2
+    if room < 4:
+        return base[:max_len]
+    tail = subtitle[:room]
+    if len(base) + 2 + len(tail) > max_len:
+        tail = tail[: max(0, max_len - len(base) - 2)]
+    out = f"{base}: {tail}".strip()
+    return out[:max_len]
+
+
+def notify_review_done(
+    issue_id: str,
+    report: str,
+    backend: str,
+    *,
+    issue_title: str | None = None,
+) -> bool:
+    """审查结束后向 webhook 发短摘要（去表格、口语化）；完整报告已在 Multica 评论。"""
+    from review_webhook_format import humanize_review_for_webhook
+
     url = _load_webhook_url()
     if not url:
         return False
     backend_cn = "Claude CLI" if backend == "cli" else "Hermes（当当）"
+    title_display = (issue_title or "").strip() or issue_id
+    human = humanize_review_for_webhook(report)
     body = (
-        f"## [审查完毕] {issue_id}\n\n"
-        f"**工单：** {issue_id}\n"
-        f"**审查后端：** {backend_cn}\n"
-        f"**结果摘要：** {report[:300]}{'...' if len(report) > 300 else ''}\n"
-        f"**下一步：** 查看 Multica 评论，确认后改为 approved 自动合并。"
+        f"## [审查完毕] {issue_id}：{title_display}\n\n"
+        f"这条工单刚跑完自动代码审查（{backend_cn}）。下面是说人话的摘要；"
+        f"表格和原文细节都在 **Multica 工单评论** 里。\n\n"
+        f"{human}\n\n"
+        f"{_webhook_merge_ack_line()}"
     )
-    return _send_webhook(url, f"[审查完毕] {issue_id}", body)
+    md_title = _dingtalk_markdown_title("[审查完毕]", issue_id, title_display)
+    return _send_webhook(url, md_title, body)
 
 
 # ─── Run 失败检测兜底 ─────────────────────────────────────────────────────
@@ -530,7 +604,13 @@ def _build_notification(
     """返回 (webhook_title, markdown_body)。"""
     issue_id = str(issue.get("identifier") or issue.get("id") or "?")
     title_text = str(issue.get("title") or issue.get("name") or issue_id)
-    assignee = str(issue.get("assignee") or issue.get("assigneeId") or "未知")
+    assignee = str(
+        issue.get("assignee")
+        or issue.get("assignee_name")
+        or issue.get("assigneeId")
+        or issue.get("assignee_id")
+        or ("Agent" if str(issue.get("assignee_type") or "").lower() == "agent" else "未知")
+    )
 
     # 检查是否有 agent 分支可供审查
     branch = _check_agent_branch(issue_id)
@@ -540,30 +620,36 @@ def _build_notification(
         else ""
     )
 
-    # 代码审查触发提示（仅 In Review 时附加）
-    hermes_hint = ""
-    if _normalize_status(curr_status) == "inreview":
-        backend = _review_backend_mode()
-        backend_tip = {
-            "cli": "`CODE_REVIEW_ENABLED=1` + `CODE_REVIEW_DAEMON_CID` → Claude CLI 审查并 daemon 私聊",
-            "hermes": "`HERMES_REVIEW_ENABLED=1` + `HERMES_REVIEW_DAEMON_CID` → Hermes run_agent（当当 skill）审查并投递",
-            "both": "CLI 与 Hermes 均可能触发（见各自 ENABLED），勿重复开两套",
-        }.get(backend, "")
-        hermes_hint = (
-            "\n\n---\n"
-            f"**自动审查：** `IN_REVIEW_REVIEW_BACKEND={backend}`。{backend_tip}\n"
-            f"亦可手动：`审查 {issue_id}`（当当）。"
-        )
+    next_step = ""
+    norm = _normalize_status(curr_status)
+    if norm == "inreview":
+        next_step = _review_trigger_summary(issue_id)
+    elif norm == "approved":
+        if _auto_merge_trigger_norm() == "approved":
+            next_step = "下一步：标为 approved 后，系统会尝试自动合并 agent 分支到 main。"
+        else:
+            next_step = "当前自动合并由 **Done** 触发；approved 不会执行合并。"
+    elif norm == "done":
+        if _auto_merge_trigger_norm() == "done":
+            next_step = "下一步：关单后系统会尝试自动合并 agent 分支到 main（无本地分支则跳过）。"
+        else:
+            next_step = (
+                "下一步：默认需 **approved** 才会自动合并；若 Multica 没有该状态，"
+                "可在桥 `.env` 设 `MULTICA_AUTO_MERGE_TRIGGER_STATUS=done` 后改用关单触发。"
+            )
+    elif norm == "failed":
+        next_step = "下一步：打开工单 runs 看最后一次失败日志并重试。"
 
     webhook_title = f"{label} {issue_id}"
     body = (
         f"## {label} — {issue_id}\n\n"
-        f"**工单：** [{issue_id}] {title_text[:60]}\n"
+        f"**工单：** {title_text[:80]}\n"
         f"**状态：** {prev_status} → **{curr_status}**\n"
         f"**负责人：** {assignee}"
         f"{branch_line}"
-        f"{hermes_hint}"
     )
+    if next_step:
+        body += f"\n\n**说明：** {next_step}"
     return webhook_title, body
 
 
@@ -623,7 +709,14 @@ def poll_once(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
         if not label:
             continue
         title, body = _build_notification(issue, prev, curr, label)
-        if _send_webhook(webhook_url, title, body):
+        if is_minimal_webhook_scope() and label != "[运行失败]":
+            LOG.debug(
+                "minimal webhook scope: skip status transition %s -> %s (%s)",
+                prev,
+                curr,
+                label,
+            )
+        elif _send_webhook(webhook_url, title, body):
             LOG.info(
                 "notified transition %s: %s -> %s",
                 issue.get("identifier") or issue.get("id"), prev, curr,
@@ -638,8 +731,8 @@ def poll_once(cache: dict[str, str], webhook_url: str) -> dict[str, str]:
                 _invoke_review_chain(issue, prev, curr)
             except Exception as exc:
                 LOG.warning("failed to trigger review chain: %s", exc)
-        # ── approved 状态自动 git merge ────────────────────────────
-        if norm == "approved":
+        # ── 自动 git merge（MULTICA_AUTO_MERGE_TRIGGER_STATUS，默认 approved）──
+        if _should_auto_merge_on_status(norm):
             _merge_agent_branch(issue)
 
     _save_cache(new_cache)
