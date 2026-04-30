@@ -1,5 +1,20 @@
 # Work Log - MyAgents Root
 
+## [2026-04-30] - 合并 main 审查标准 + Claude 自助同步技能
+
+**状态**: 已完成（本提交）
+
+**内容**:
+- 新增 `docs/review-merge-main-policy.md`：小功能尽量全自动、合入 `main` 须高质量可用的 P0 门禁（API 契约、鉴权、事务/幂等、JSON 并发、自动审最低产出等）。
+- `docs/DOC_HUB.md`、`docs/narrative/multica-tasks/2026-04-29-multica-workflow-design.md`：挂链与「最后更新」说明。
+- 新增 `.cursor/skills/claude-self-serve-skills/SKILL.md`；更新 `.cursor/skills/README.md`（Meta Pack 条目）。
+
+**测试**: 文档与 Skill 变更，无运行时测试。
+
+**备注**: 根仓 `git submodule status` 当前因 `_external/claude-code` 无 `.gitmodules` 映射报错；与本次文件无关，推送前未改子模块指针。
+
+---
+
 ## [2026-04-30] - Multica 派单桥：审查闭环状态机 + done 合分支与【已合并】前缀
 
 **状态**: 已完成（本提交）

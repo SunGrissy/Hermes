@@ -13,6 +13,7 @@
 | **跨项目工作日志** | [../WORK_LOG.md](../WORK_LOG.md) |
 | **硅基 / Hermes 集成叙述** | [silicon-legion-orchestration.md](silicon-legion-orchestration.md)、[hermes-dingtalk-gateway.md](hermes-dingtalk-gateway.md) |
 | **文档分类规划（元）** | [documentation-taxonomy-plan.md](documentation-taxonomy-plan.md) |
+| **合并 main / Review 标准** | [review-merge-main-policy.md](review-merge-main-policy.md)（小功能自动化 + 主干高质量门禁） |
 
 ## Multica 工单附件路径（约定）
 

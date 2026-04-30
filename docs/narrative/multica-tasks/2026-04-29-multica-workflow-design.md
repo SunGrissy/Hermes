@@ -1,6 +1,6 @@
 # Multica 自动化工作流设计文档
 
-> 最后更新：2026-04-29 21:25  
+> 最后更新：2026-04-30（§2.2 增加合并 main 质量口径链接）  
 > 维护者：Agent 数字分身  
 > 入口：`tools/multica-dingtalk-bridge/dispatch_bot.py`
 
@@ -69,6 +69,8 @@ Claude 完成通知正文中附带审查状态：
 
 - **已自动进入 In Review：** `审查状态：已自动进入 In Review 状态。代码审查由 Claude CLI 自动执行。审查结果将写入 Multica 评论，并伴发 [审查完毕] 通知。`
 - **未自动进入 In Review：** `审查状态：未自动进入 In Review。如需审查：在 Multica 将工单状态改为 In Review，或告诉当当 审查 {issue_id}。`
+
+**合并 main 的质量口径（必须与之一致）：** 小功能尽量全自动，但 **`main` 合入 = 高质量可用**——自动审查 + P0 清单见 [`docs/review-merge-main-policy.md`](../../review-merge-main-policy.md)。
 
 ### 2.3 通知矩阵
 

@@ -119,6 +119,7 @@
 |-------|------|
 | skill-guide | Skill 写作指南（面向 Agent + 人类） |
 | cognitive-furnace | 认知炼化炉——从素材蒸馏思维 OS |
+| claude-self-serve-skills | **Claude 自助装载**：把仓库 `.cursor/skills` 同步到 `%USERPROFILE%\.cursor\skills`，可选 Claude Code 目录 |
 
 ---
 
