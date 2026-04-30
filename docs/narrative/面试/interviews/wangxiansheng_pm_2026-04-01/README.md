@@ -22,8 +22,8 @@
 
 **要图2 渲染效果（推荐分享）**——打开阅读器页面，不要打开 `/api/file`（那是 JSON，会像图1）：
 
-- `http://YOUR_LAN_IP:8899/read?path=面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`  
-- 或等价：`http://YOUR_LAN_IP:8899/?path=面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`
+- `http://YOUR_LAN_IP:8899/read?path=docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`  
+- 或等价：`http://YOUR_LAN_IP:8899/?path=docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`
 
 **仅调试接口（返回 JSON）**：`http://YOUR_LAN_IP:8899/api/file?path=...`
 

@@ -1,5 +1,15 @@
 # Work Log - MyAgents Root
 
+## [2026-04-30] - 叙事类文档归拢至 docs/narrative/
+
+**状态**: 已完成
+
+**内容**:
+- 根目录 `MulticaTasks/`、`面试/` 迁入 `docs/narrative/multica-tasks/`、`docs/narrative/面试/`；原 `docs/` 根下 JD / 快手直播 / 锦标赛设计 / Kickoff 议程 / 策划线待办 / design-council rollout / Feature 工作流 等迁入 `docs/narrative/{requirements,meetings,plans,workflows}/`。
+- 新增 `docs/DOC_HUB.md`、`docs/narrative/README.md`；更新 `workspace-map.mdc`、`CLAUDE.md`、`docs/script-entry-index.md`、`docs/documentation-taxonomy-plan.md`、`workspace-docs/README.md`、`.cursor/skills/README.md`、面试与 Multica 相关 Skills、`tools/multica-dingtalk-bridge/task_context.py` 注释、`Hermes/dangdang/SKILL.md` 等路径引用。
+
+---
+
 ## [2026-04-30] - pm-system：策划周计划卡片删除角标改为×（UUM-34）
 
 **状态**: 已完成
@@ -17,7 +27,7 @@
 **内容**:
 - 新增 `tools/claude_call_telemetry/`（`telemetry.py`、`aggregate.py`、单测）。
 - 新增 `shared-memory/claude-calls/`（`README.md`、`.gitignore` 忽略 `*.jsonl`）。
-- `MulticaTasks/2026-04-29-multica-workflow-design.md`：§9.7 OpenClaw2 / 钉钉 runtime / `schtasks` 排查备忘。
+- `docs/narrative/multica-tasks/2026-04-29-multica-workflow-design.md`：§9.7 OpenClaw2 / 钉钉 runtime / `schtasks` 排查备忘。
 - `config.yaml`：`agent.realtime`、system_prompt 实时规则、`delegation` 等与 Hermes 对齐的增量。
 - 根 `.gitignore`：忽略 `tools/multica-dingtalk-bridge/.multica_bridge_watchdog.lock`。
 - `tools/multica-dingtalk-bridge/`：`task_context.py`、`watchdog.py`、`run_bridge.ps1`、`tests/test_code_review_dispatcher.py` 等与遥测/守护相关的增量。
@@ -49,7 +59,7 @@
 - `tools/multica-dingtalk-bridge/`：审查路径接入遥测；`notify_scope` / `review_webhook_format`、主流程与 watchdog、README / `.env.example`；根 `.gitignore` 忽略 `.multica_bridge_watchdog.lock`。
 - `shared-memory/claude-calls/`：`README.md`、`.gitignore`（忽略 `*.jsonl` 遥测落盘）。
 - `config.yaml`：`agent.realtime` 与 system_prompt 实时规则；`delegation` 默认 `tuyoo` + `claude-sonnet-4.6`。
-- `MulticaTasks/2026-04-29-multica-workflow-design.md`：§9 实时双轨 + **§9.7 OpenClaw2 运维备忘**（端口、CLI 修复、钉钉 runtime、`schtasks`）。
+- `docs/narrative/multica-tasks/2026-04-29-multica-workflow-design.md`：§9 实时双轨 + **§9.7 OpenClaw2 运维备忘**（端口、CLI 修复、钉钉 runtime、`schtasks`）。
 
 **测试**:
 - `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：144 passed, 76 subtests passed。
@@ -67,7 +77,7 @@
 **内容**:
 - 新增 `MULTICA_WEBHOOK_NOTIFY_SCOPE`（默认 `review_and_failures`）：`DEV_AGENT_NOTIFY_WEBHOOK` / `cursor_session` 仅推 **审查完毕**、**工单/运行失败**、**自动合并冲突** 等需介入项；不再推 Claude 工作中/完成、待审查、状态机噪音，且 `feedback_handler` 在精简模式下跳过 Agent 启动/规划/子任务进度与 **成功** 的 Agent 完成通知（减轻 AgentWork 刷屏）。
 - 新增 `tools/multica-dingtalk-bridge/notify_scope.py`、`review_webhook_format.py`：`[审查完毕]` 正文去掉 Markdown 表格、抽取问题/风险小节生成短摘要；钉钉标题带工单标题；完整报告仍以 Multica 评论为准。
-- `status_watcher.py`、`code_review_dispatcher.py`、`hermes_review_dispatcher.py`、`feedback_handler.py` 及对应单测；`README.md`、`.env.example` 说明；`MulticaTasks/2026-04-29-multica-workflow-design.md` §5 配置表与 §8.4 落地说明。
+- `status_watcher.py`、`code_review_dispatcher.py`、`hermes_review_dispatcher.py`、`feedback_handler.py` 及对应单测；`README.md`、`.env.example` 说明；`docs/narrative/multica-tasks/2026-04-29-multica-workflow-design.md` §5 配置表与 §8.4 落地说明。
 
 **测试**:
 - `cd tools/multica-dingtalk-bridge && py -m pytest tests/ -q`：141 passed。
@@ -114,7 +124,7 @@
 - `tools/multica-dingtalk-bridge/code_review_dispatcher.py`、`hermes_review_dispatcher.py`：审查结果自动写入 Multica 评论，并发送 `[审查完毕]` 通知。
 - `tools/multica-dingtalk-bridge/watchdog.py`：dispatch_bot 守护（30s 检查、5s 重启、1h 最多 3 次）；`run_bridge.ps1` 改由 watchdog 启动；`pm-system/quick_start.bat` 的 bridge kill 逻辑覆盖 watchdog 进程。
 - `Hermes/dangdang/SKILL.md`：新增 Step 4b（审查自动落盘 + 通知）与 Step 5（巡检：需求不清、停滞、状态滞后、指派不启动、worktree 救援）。
-- `MulticaTasks/2026-04-29-multica-workflow-design.md`：更新到实际运行口径（watchdog 启动、UUM-24/UUM-27 实例闭环、巡检新规则）。
+- `docs/narrative/multica-tasks/2026-04-29-multica-workflow-design.md`：更新到实际运行口径（watchdog 启动、UUM-24/UUM-27 实例闭环、巡检新规则）。
 - UUM-27 救援闭环：从平台分支提取代码，推送 `agent/UUM-27`，合并 `main`，工单状态更新为 `done`。
 
 **测试**:
@@ -252,8 +262,8 @@
 **状态**: 已提交并推送
 
 **内容**:
-- `docs/锦标赛赛季玩法-设计文档.md`：附录赛季重置/未领奖/弹窗序列；BUILD（B1~B8）与 MAKE 拆解；数值 N12；体验差异化专项等。
-- `docs/锦标赛赛季玩法-Kickoff议程.md`：Kickoff 评审会目标与议程（含定位宣讲、风险全员识别、HOW 专项会后排期）。
+- `docs/narrative/requirements/锦标赛赛季玩法-设计文档.md`：附录赛季重置/未领奖/弹窗序列；BUILD（B1~B8）与 MAKE 拆解；数值 N12；体验差异化专项等。
+- `docs/narrative/meetings/锦标赛赛季玩法-Kickoff议程.md`：Kickoff 评审会目标与议程（含定位宣讲、风险全员识别、HOW 专项会后排期）。
 
 ---
 
@@ -340,8 +350,8 @@
 **状态**: 已提交并推送
 
 **内容**:
-- `面试/interviews/liguanlin_da_2026-04-20/`：复试面试清单、基于录音转写的复试评价（对照清单维度评分与录用建议）。
-- `面试/已面试索引.md`：追加李冠霖条目。
+- `docs/narrative/面试/interviews/liguanlin_da_2026-04-20/`：复试面试清单、基于录音转写的复试评价（对照清单维度评分与录用建议）。
+- `docs/narrative/面试/已面试索引.md`：追加李冠霖条目。
 
 ---
 
@@ -404,8 +414,8 @@
 **内容**:
 - `.cursor/skills`：README 冲突合并；旧 skill 下线/删除与 `cognitive-design`、`design-council`、`design-review`、`dingtalk-meeting-room`、`git-ops`、`skill-guide`、`thinking-tools` 等新目录入库；`producer-mind` / `interview-checklist` / `resume-screening` 等更新。
 - `.cursor/rules`：`acceptance-checklist`、`partner-router`、`regression-testing`、`resume-screening`、`skill-evolution`、`version-management` 等调整。
-- `dingtalk-desktop`：版本 digest / webhook 脚本小改；`docs/design-council-rollout-plan.md`、`palace/game_review/docs` 策划审查设计文档、`PLAN_双Git工作流迁移.md`、`面试/已面试索引.md`。
-- 新增文档：`docs/JD-游戏直播运营.md`，快手游戏直播相关摸底/对齐/蹲守手册；`recruitment-toolkit` 数据分析师初筛清单；多份 `面试/interviews/**` 材料。
+- `dingtalk-desktop`：版本 digest / webhook 脚本小改；`docs/narrative/plans/design-council-rollout-plan.md`、`palace/game_review/docs` 策划审查设计文档、`PLAN_双Git工作流迁移.md`、`docs/narrative/面试/已面试索引.md`。
+- 新增文档：`docs/narrative/requirements/JD-游戏直播运营.md`，快手游戏直播相关摸底/对齐/蹲守手册；`recruitment-toolkit` 数据分析师初筛清单；多份 `docs/narrative/面试/interviews/**` 材料。
 - **子模块**：`pm-system` 提交验收中状态专项进度摘要与制作人塔样式；根指针同步 `pm-system`、`task_reminder`、`cci_system`、`performeval`。
 
 ---
@@ -1129,7 +1139,7 @@
 **状态**: 已提交推送 tygit（显式 URL，未推 GitHub）
 
 **内容**:
-- 同步 `performeval` 子模块指针：`面试/陈子豪_运营策划/`（含 `陈子豪_简历.pdf`）、`面试/简历初筛/初审报告_陈子豪_运营策划.md`，子模块内 `WORK_LOG.md` 已记一笔
+- 同步 `performeval` 子模块指针：`performeval/面试/陈子豪_运营策划/`（含 `陈子豪_简历.pdf`）、`performeval/面试/简历初筛/初审报告_陈子豪_运营策划.md`，子模块内 `WORK_LOG.md` 已记一笔
 
 ---
 

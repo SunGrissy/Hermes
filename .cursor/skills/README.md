@@ -4,6 +4,8 @@
 
 **与 Cursor 用户目录同步**：全局技能在 `%USERPROFILE%\.cursor\skills\`。以本仓库 `.cursor/skills` 为权威副本；新增或改版 skill 后，将同名目录复制到用户目录，避免全局旧版与项目不一致。详见 `digital-twin-voice` Skill 末节。
 
+**给人读的叙事文档（非 Skill）：** `docs/DOC_HUB.md`、`docs/narrative/`（工单附件、面试材料、会议议程、需求/JD、人在回路计划）。
+
 ---
 
 ## Pack 总览（6 组，40+ 个 Skill）

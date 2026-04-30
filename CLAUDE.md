@@ -24,8 +24,9 @@
 | `palace/` | 内部引擎/脚本与相关物料 | 按任务进入子目录 |
 | `tools/` | 桥接脚本、第三方工具克隆等 | 如 `tools/multica-dingtalk-bridge/` |
 | `workspace-docs/` | 管理规范文档 | `README.md` |
-| `面试/interviews/` | 面试清单与评价材料 | 按候选人子目录存放 |
-| `docs/` | 跨项目文档 | 按需 |
+| `docs/narrative/面试/interviews/` | 面试清单与评价材料 | 按候选人子目录存放 |
+| `docs/` | 跨项目文档、规格与索引 | 总览见 `docs/DOC_HUB.md` |
+| `docs/narrative/` | 叙事类：工单附件、面试、会议、需求/JD、人在回路计划 | `docs/narrative/README.md` |
 
 **独立 Git 仓库（父仓 `.gitignore` 常忽略或子模块管理，勿当普通子文件夹乱提交）：**
 
@@ -74,7 +75,16 @@
 
 ---
 
-## 8. 需要细节时读哪里
+## 8. Multica / 本地桥工单与附件文档
+
+- 工单正文可简短；**详细需求放在仓库内 Markdown**（例如 `docs/narrative/multica-tasks/*.md`），并在描述里二选一写明：
+  - **推荐**：单独一行 `@doc:docs/narrative/multica-tasks/某文件.md`（相对 `D:\MyAgents`），或
+  - 直接写出 **`D:/MyAgents/.../*.md`** 路径（须在仓库根目录内）。
+- **本地桥** `tools/multica-dingtalk-bridge` 的 `task_context.py` 会把上述路径对应文件**全文注入** Claude 执行上下文（过长会截断）；平台 Agent 若在隔离 worktree 内执行，应用 **Read** 读取同一路径（相对于父仓）或按注释优先读附件。
+
+---
+
+## 9. 需要细节时读哪里
 
 | 主题 | 路径 |
 |------|------|

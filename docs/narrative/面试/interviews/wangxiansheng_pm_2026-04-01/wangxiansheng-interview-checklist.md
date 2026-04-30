@@ -52,7 +52,7 @@
 
 ---
 
-## 二、资料包 README（`面试/interviews/wangxiansheng_pm_2026-04-01/README.md`）
+## 二、资料包 README（`docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/README.md`）
 
 以下为 README 全文，标题层级已下调以便嵌在本清单内阅读。
 
@@ -83,8 +83,8 @@
 
 **要渲染阅读（图2）**：用下面之一，**不要**用 `/api/file`（那是 JSON，会像图1）。
 
-- `http://YOUR_LAN_IP:8899/read?path=面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`
-- 或：`http://YOUR_LAN_IP:8899/?path=面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`
+- `http://YOUR_LAN_IP:8899/read?path=docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`
+- 或：`http://YOUR_LAN_IP:8899/?path=docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`
 
 **仅接口调试**：`http://YOUR_LAN_IP:8899/api/file?path=...`
 

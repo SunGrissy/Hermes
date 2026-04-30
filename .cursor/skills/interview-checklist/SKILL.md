@@ -234,9 +234,9 @@ description: 从候选人简历生成标准化面试清单（初面执行清单�
 ## 输出约定
 
 - 文件命名：`{候选人姓名}-面试清单.md` 或 `{拼音}-interview-checklist.md`
-- 存放位置（MyAgents 内）：`面试/interviews/{拼音}_{岗位缩写}_{日期}/`
+- 存放位置（MyAgents 内）：`docs/narrative/面试/interviews/{拼音}_{岗位缩写}_{日期}/`
 - 清单生成后，提醒用户是否需要发钉钉通知（参考 `interview-checklist-dingtalk` SKILL）
-- 清单生成后，在 `面试/已面试索引.md` 追加一行（如该文件存在）
+- 清单生成后，在 `docs/narrative/面试/已面试索引.md` 追加一行（如该文件存在）
 
 ## reference/ 目录说明
 

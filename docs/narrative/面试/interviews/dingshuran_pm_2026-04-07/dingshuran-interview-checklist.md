@@ -70,8 +70,8 @@
 
 将 `YOUR_LAN_IP` 换成本机 IPv4，且 md-reader 根目录需指向 `D:/MyAgents`。
 
-- `http://YOUR_LAN_IP:8899/read?path=面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
-- 或：`http://YOUR_LAN_IP:8899/?path=面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
+- `http://YOUR_LAN_IP:8899/read?path=docs/narrative/面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
+- 或：`http://YOUR_LAN_IP:8899/?path=docs/narrative/面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
 
 ---
 
@@ -233,10 +233,10 @@
 
 ## 九、与三位标杆材料的索引（仓库内）
 
-- 李菡：`面试/interviews/lihan_pm_2026-03-23/李菡-面试清单.md`  
+- 李菡：`docs/narrative/面试/interviews/lihan_pm_2026-03-23/李菡-面试清单.md`  
 - 赵珊珊：`performeval/面试/赵珊珊_PM/面试评估_赵珊珊_PM项目管理.md`、`复试考察清单_赵珊珊_全栈PM.md`  
 - 侯晓渝：`performeval/面试/侯晓渝_PM/初试评价-高级管线PM-侯晓渝.md`  
-- PM 清单结构参考：`面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`  
+- PM 清单结构参考：`docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md`  
 
 ---
 

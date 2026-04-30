@@ -1,6 +1,6 @@
 ---
 name: interview-checklist-dingtalk
-description: 面试清单（*.md）生成完成后，将 md-reader 的**本机 IP 直链**（含 ?path=）通过钉钉机器人发到**助理通知群**；正文含**面试岗位**与会话 Agent 代号。Use when the user asks to「面试清单发钉钉」「清单推助理群」或刚写完 interviews/**/ *-面试清单.md 需要通知团队。
+description: 面试清单（*.md）生成完成后，将 md-reader 的**本机 IP 直链**（含 ?path=）通过钉钉机器人发到**助理通知群**；正文含**面试岗位**与会话 Agent 代号。Use when the user asks to「面试清单发钉钉」「清单推助理群」或刚在 docs/narrative/面试/interviews 下写好清单需要通知团队。
 ---
 
 # 面试清单 → 钉钉助理通知群（md-reader 链接）
@@ -10,7 +10,7 @@ description: 面试清单（*.md）生成完成后，将 md-reader 的**本机 I
 ## 何时执行
 
 - 用户明确说「把面试清单发钉钉」「推助理通知群」「清单好了通知一下」
-- Agent 刚生成或更新 `interviews/**/ *-面试清单.md`（或同类路径），用户希望同步到群里
+- Agent 刚生成或更新 `docs/narrative/面试/interviews/**/ *-面试清单.md`（或同类路径），用户希望同步到群里
 
 ## 前置条件
 
@@ -21,14 +21,14 @@ description: 面试清单（*.md）生成完成后，将 md-reader 的**本机 I
 
 ## 执行步骤（Agent 必做）
 
-1. 确认清单文件已保存，记下**相对工作区根**的路径（如 `interviews/zhangling_ops_2026-03-24/张凌-面试清单.md`）。
+1. 确认清单文件已保存，记下**相对工作区根**的路径（如 `docs/narrative/面试/interviews/zhangling_ops_2026-03-24/张凌-面试清单.md`）。
 2. **面试岗位**：钉钉正文在「面试清单已生成」下增加一行 **`面试岗位`**。优先传 `--role "运营策划"`（或环境变量 `INTERVIEW_ROLE`）；未传时脚本会读**同目录** `README.md` 里 `- 目标岗位：…` 一行自动推断（故资料包 README 建议写清目标岗位）。
 3. 运行通知脚本（**不要用管道传长中文路径**，直接传文件路径参数）：
 
 ```powershell
 cd "d:\MyAgents"
 $env:AGENT_SESSION_CODE = "AgentXXX"
-py .cursor/skills/interview-checklist-dingtalk/scripts/notify_interview_md_reader.py "interviews\xxx\候选人-面试清单.md" --role "运营策划"
+py .cursor/skills/interview-checklist-dingtalk/scripts/notify_interview_md_reader.py "docs/narrative/面试/interviews\xxx\候选人-面试清单.md" --role "运营策划"
 ```
 
 - **指定 IP**（自动探测不准时）：`--host 172.16.3.197` 或 `MD_READER_PUBLIC_HOST=172.16.3.197`

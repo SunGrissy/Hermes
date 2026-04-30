@@ -7,7 +7,7 @@
 - README.md 已注明清单内含简历+README。
 
 **内网直链（仅 ASCII，md-reader 根目录需为 D:/MyAgents）：**
-http://172.16.3.197:8899/api/file?path=面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md
+http://172.16.3.197:8899/api/file?path=docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md
 
 **本地路径：**
-面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md
+docs/narrative/面试/interviews/wangxiansheng_pm_2026-04-01/wangxiansheng-interview-checklist.md

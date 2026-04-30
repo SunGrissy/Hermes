@@ -31,7 +31,7 @@ description: >-
 - 工作区根目录：`D:\MyAgents`
 - Multica 桥目录：`D:\MyAgents\tools\multica-dingtalk-bridge`
 - 项目映射文件：`D:\MyAgents\tools\multica-dingtalk-bridge\multica_project_map.json`
-- 需求文档落盘目录（与 Multica 短描述配合）：`D:\MyAgents\MulticaTasks\`（`.md`）
+- 需求文档落盘目录（与 Multica 短描述配合）：`D:\MyAgents\docs\narrative\multica-tasks\`（`.md`）
 - 平台隔离 workspace root：`C:\Users\TU\multica_workspaces`
 - pm-system 平台 repo URL：`file:///D:/MyAgents/pm-system`
 - 当前主要执行 Agent：`克劳德`
@@ -80,13 +80,13 @@ multica issue runs UUM-24 --output json
 
 ### Step 1b: 识别「本地需求文档」路径（勿装看不见）
 
-老大常在正文里写 **`D:/MyAgents/...`、`\MulticaTasks\...`** 或 **`按 xxx.md 实现`**。这些是**本机仓库内的 Markdown**，不是「缺少正文」：
+老大常在正文里写 **`D:/MyAgents/...`、`\docs\narrative\multica-tasks\...`** 或 **`按 xxx.md 实现`**。这些是**本机仓库内的 Markdown**，不是「缺少正文」：
 
 | 信号 | 当当应做的事 |
 |---|---|
 | 描述中含 `D:/`、`D:\` 且以 `.md` 结尾 | 视为需求文档路径；在 Hermes 运行环境里 **读取该文件**（read_file 或终端 `Get-Content -Encoding utf8`），从文档提炼摘要与验收条款 |
 | 描述中含 `@doc:相对路径` | 与上相同，`相对路径` 相对 `D:\MyAgents` |
-| 仅写了 `MulticaTasks/某文件名.md` 无盘符 | 拼成 `D:\MyAgents\MulticaTasks\某文件名.md` 再读 |
+| 仅写了 `docs/narrative/multica-tasks/某文件名.md` 无盘符 | 拼成 `D:\MyAgents\docs\narrative\multica-tasks\某文件名.md` 再读 |
 
 **禁止**：在已给出清晰 `.md` 路径且文件可读时，仍追问「请粘贴文档内容」「验收标准是什么」（除非文档里完全没有 AC）。应先读后归纳，缺一项再问一项。
 
@@ -94,7 +94,7 @@ multica issue runs UUM-24 --output json
 
 ```text
 （以下为机器可读附件标记，勿删）
-@doc:MulticaTasks/2026-04-29-producer-tower-batch-api.md
+@doc:docs/narrative/multica-tasks/2026-04-29-producer-tower-batch-api.md
 ```
 
 若用户已在正文写过完整 `D:/MyAgents/...md`，可不重复 `@doc:`，本地桥同样会从路径注入上下文。

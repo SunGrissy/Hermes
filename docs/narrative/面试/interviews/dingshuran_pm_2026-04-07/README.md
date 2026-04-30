@@ -22,8 +22,8 @@
 
 将 `YOUR_LAN_IP` 换成本机 IPv4，且 md-reader 根目录需指向 `D:/MyAgents`。
 
-- `http://YOUR_LAN_IP:8899/read?path=面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
-- 或：`http://YOUR_LAN_IP:8899/?path=面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
+- `http://YOUR_LAN_IP:8899/read?path=docs/narrative/面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
+- 或：`http://YOUR_LAN_IP:8899/?path=docs/narrative/面试/interviews/dingshuran_pm_2026-04-07/dingshuran-interview-checklist.md`
 
 ## 本轮生成说明
 

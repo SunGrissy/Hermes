@@ -68,7 +68,7 @@ _MAX_DOC_ATTACHMENT_BYTES = int(os.environ.get("TASK_CONTEXT_DOC_MAX_BYTES", "60
 
 # @doc:相对或绝对路径（每行一条，也可插在描述任意行）
 _DOC_LINE_RE = re.compile(r"^\s*@doc:\s*(.+?)\s*$", re.MULTILINE | re.IGNORECASE)
-# 形如 D:/MyAgents/MulticaTasks/foo.md 的本地需求文档路径（须在仓库根目录之下）
+# 形如 D:/MyAgents/docs/narrative/multica-tasks/foo.md 的本地需求文档路径（须在仓库根目录之下）
 _WIN_REPO_MD_RE = re.compile(r"(?:[Dd]:)[\\/][^\s<>\"]+\.md\b")
 
 
