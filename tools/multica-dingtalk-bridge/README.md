@@ -30,7 +30,7 @@
 
 **可选**：`MULTICA_WEBHOOK_NOTIFY_SCOPE` — 控制 `DEV_AGENT_NOTIFY_WEBHOOK`（或 `webhook_config.json` 的 `cursor_session`）上哪些事件会推 Markdown。默认 **`review_and_failures`**：只推 **审查完毕**、**运行/工单失败**、**自动合并冲突** 等需要介入的；不推 Claude 工作中/完成、待审查、已完成、审查通过，也不推 Agent 启动/规划/子任务进度（避免 AgentWork 一类机器人刷屏）。需要恢复此前「状态与 run 全量通知」时设为 **`all`**。
 
-**可选**：`MULTICA_AUTO_MERGE_TRIGGER_STATUS` — `status_watcher` 在检测到 Multica 工单进入某状态后，尝试把本仓库 **`agent/{工单号}`** 合并进 **`main`** 并 `git push origin main`（无该分支则跳过）。默认 **`approved`**（与早期脚本一致）；若 Multica 工作区**没有** `approved` 状态、只能选 **Done** 关单，请设为 **`done`**，改为「关单即尝试合并」。合并成功后仍会调用 `multica issue update … --status done`（已是 Done 时等价幂等）。
+自动状态机（当前默认）：Agent 完成后置 `in_review` → 巡检触发 Reviewer → 审查通过置 `done` → `done` 触发自动合并 `agent/{工单号}` 到 `main` 并 `git push origin main`（无该分支则跳过）→ 合并成功后自动给标题补 `【已合并】` 前缀。
 
 ## 能力与安全边界
 

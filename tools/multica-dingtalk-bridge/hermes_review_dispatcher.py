@@ -105,6 +105,71 @@ def extract_final_response(stdout: str) -> str:
     return tail.strip(" \n-")
 
 
+def _is_review_passed(report: str) -> bool:
+    """审查是否通过：允许“无阻塞/低风险”通过。"""
+    text = (report or "").strip()
+    if not text:
+        return False
+    lower = text.lower()
+
+    pass_tokens = (
+        "未发现阻塞",
+        "无阻塞",
+        "审查通过",
+        "可合并",
+        "可以合并",
+        "建议合并",
+        "未发现问题",
+        "no blocker",
+        "no blocking",
+        "low risk",
+        "低风险",
+        "风险很低",
+        "仅低风险",
+    )
+    if any(token in lower for token in pass_tokens):
+        return True
+
+    fail_tokens = (
+        "不通过",
+        "未通过",
+        "拒绝合并",
+        "禁止合并",
+        "必须修复",
+        "阻塞项",
+        "高风险",
+        "critical",
+        "blocker",
+        "failed",
+    )
+    if any(token in lower for token in fail_tokens):
+        return False
+
+    return False
+
+
+def _mark_issue_done(issue_id: str) -> bool:
+    """审查通过后将工单状态改为 done。"""
+    multica = shutil.which("multica") or "multica"
+    try:
+        result = subprocess.run(
+            [multica, "issue", "update", issue_id, "--status", "done", "--output", "json"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        LOG.warning("mark issue done failed for %s: %s", issue_id, exc)
+        return False
+    if result.returncode != 0:
+        LOG.warning("mark issue done failed for %s: %s", issue_id, result.stderr[-300:])
+        return False
+    LOG.info("issue marked done after review: %s", issue_id)
+    return True
+
+
 def _post_review_comment(issue_id: str, report: str) -> bool:
     """将审查结果写回 Multica 工单评论。"""
     multica = shutil.which("multica") or "multica"
@@ -195,6 +260,9 @@ class HermesReviewDispatcher:
 
         # ── 写回 Multica 评论 ───────────────────────────────────────────
         _post_review_comment(issue_id, report)
+        # ── 审查通过自动置 done（允许低风险通过）────────────────────────
+        if _is_review_passed(report):
+            _mark_issue_done(issue_id)
         # ── 审查完毕 webhook 通知 ──────────────────────────────────────
         _notify_review_done_safe(issue_id, report, "hermes", issue_title=issue_title)
 

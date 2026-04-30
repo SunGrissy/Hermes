@@ -5,6 +5,7 @@ from unittest.mock import patch
 from hermes_review_dispatcher import (
     HermesReviewConfig,
     HermesReviewDispatcher,
+    _is_review_passed,
     build_review_prompt,
     extract_final_response,
     trigger_hermes_review_async,
@@ -80,6 +81,12 @@ class HermesReviewDispatcherTests(unittest.TestCase):
 
         with patch("hermes_review_dispatcher.urllib.request.urlopen", return_value=FakeResponse()):
             self.assertTrue(HermesReviewDispatcher(cfg)._send_via_dingtalk_daemon("UUM-42", "报告"))
+
+    def test_review_passed_heuristic(self):
+        self.assertTrue(_is_review_passed("未发现阻塞项，风险很低"))
+        self.assertTrue(_is_review_passed("审查通过，可以合并"))
+        self.assertFalse(_is_review_passed("高风险，必须修复后再合并"))
+        self.assertFalse(_is_review_passed(""))
 
 
 if __name__ == "__main__":

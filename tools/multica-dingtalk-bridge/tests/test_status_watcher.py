@@ -75,7 +75,7 @@ class StatusWatcherReviewDispatchTests(unittest.TestCase):
 
         trigger.assert_not_called()
 
-    def test_approved_transition_calls_merge(self):
+    def test_approved_transition_does_not_call_merge(self):
         cache = {"UUM-42": "in_review"}
         issue = {
             "identifier": "UUM-42",
@@ -96,9 +96,9 @@ class StatusWatcherReviewDispatchTests(unittest.TestCase):
             patch("status_watcher._merge_agent_branch") as merge,
         ):
             status_watcher.poll_once(cache, "https://example.invalid/webhook")
-        merge.assert_called_once()
+        merge.assert_not_called()
 
-    def test_done_transition_does_not_call_merge_by_default(self):
+    def test_done_transition_calls_merge_by_default(self):
         cache = {"UUM-42": "in_review"}
         issue = {
             "identifier": "UUM-42",
@@ -119,7 +119,44 @@ class StatusWatcherReviewDispatchTests(unittest.TestCase):
             patch("status_watcher._merge_agent_branch") as merge,
         ):
             status_watcher.poll_once(cache, "https://example.invalid/webhook")
-        merge.assert_not_called()
+        merge.assert_called_once()
+
+    def test_mark_issue_merged_adds_title_prefix(self):
+        issue_id = "UUM-42"
+        get_payload = json.dumps({"identifier": issue_id, "title": "登录页白屏"})
+        calls = []
+
+        def fake_run_multica(*args, **kwargs):
+            calls.append(args)
+            if args[:3] == ("issue", "get", issue_id):
+                return True, get_payload
+            return True, "{}"
+
+        with patch("status_watcher._run_multica", side_effect=fake_run_multica):
+            status_watcher._mark_issue_merged(issue_id)
+
+        self.assertIn(("issue", "update", issue_id, "--status", "done"), calls)
+        self.assertIn(
+            ("issue", "update", issue_id, "--title", "【已合并】登录页白屏"),
+            calls,
+        )
+
+    def test_mark_issue_merged_skip_prefixed_title(self):
+        issue_id = "UUM-42"
+        get_payload = json.dumps({"identifier": issue_id, "title": "【已合并】登录页白屏"})
+        calls = []
+
+        def fake_run_multica(*args, **kwargs):
+            calls.append(args)
+            if args[:3] == ("issue", "get", issue_id):
+                return True, get_payload
+            return True, "{}"
+
+        with patch("status_watcher._run_multica", side_effect=fake_run_multica):
+            status_watcher._mark_issue_merged(issue_id)
+
+        title_updates = [c for c in calls if len(c) >= 4 and c[:3] == ("issue", "update", issue_id) and c[3] == "--title"]
+        self.assertEqual(title_updates, [])
 
     def test_done_transition_calls_merge_when_env_done_trigger(self):
         cache = {"UUM-42": "in_review"}

@@ -1,5 +1,24 @@
 # Work Log - MyAgents Root
 
+## [2026-04-30] - Multica 派单桥：审查闭环状态机 + done 合分支与【已合并】前缀
+
+**状态**: 已完成（本提交）
+
+**内容**:
+- `tools/multica-dingtalk-bridge/dispatch_bot.py`：本地 dev Agent 跑成功后调用 `multica issue status` 将工单置为 **`in_review`**。
+- `multica_client.py`：新增 `set_issue_status`（封装 `multica issue status`）。
+- `code_review_dispatcher.py` / `hermes_review_dispatcher.py`：审查判定通过后置 **`done`**（与合法状态集一致，不再依赖不存在的 `approved`）。
+- `status_watcher.py`：仅在 **`done`** 时触发父仓 `agent/{工单号}` → `main` 合并；合并成功或已合入时调用 **`_mark_issue_merged`**（保持 `done` + 标题补 **`【已合并】`**）；去掉对不存在状态的依赖说明。
+- `README.md`、相关 **`tests/`** 断言与用例对齐上述行为。
+
+**测试**:
+- `cd tools/multica-dingtalk-bridge` 且 `PYTHONPATH` 指向该目录：`py -m pytest tests/ -q` — **149 passed**, 76 subtests passed。
+
+**备注**:
+- 工单若实际交付在 **子模块**（如 `pm-system`）而父仓无 `agent/UUM-*` 分支，自动合并与标题前缀不会触发；UUM-30 等场景已用 Multica 手工补前缀并对齐结论（真源在子模块 `main`）。
+
+---
+
 ## [2026-04-30] - 叙事类文档归拢至 docs/narrative/
 
 **状态**: 已完成

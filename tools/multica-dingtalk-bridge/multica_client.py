@@ -221,3 +221,19 @@ class MulticaClient:
         if project_id:
             args.extend(["--project", project_id])
         return await self.run_json(args)
+
+    async def set_issue_status(self, issue_ref: str, status: str) -> MulticaResult:
+        """更新工单状态。"""
+        status_value = str(status or "").strip()
+        if not status_value:
+            return MulticaResult(
+                ok=False,
+                returncode=2,
+                stdout="",
+                stderr="status is required",
+            )
+        args = ["issue", "status", issue_ref, status_value, "--output", "json"]
+        project_id = self._env.get("MULTICA_PROJECT_ID", "").strip()
+        if project_id:
+            args.extend(["--project", project_id])
+        return await self.run_json(args)

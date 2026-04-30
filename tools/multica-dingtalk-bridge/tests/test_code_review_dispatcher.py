@@ -8,6 +8,7 @@ from unittest.mock import patch
 from code_review_dispatcher import (
     CodeReviewConfig,
     CodeReviewDispatcher,
+    _is_review_passed,
     build_review_prompt,
     extract_review_output,
     resolve_platform_review_workdir,
@@ -71,15 +72,55 @@ class CodeReviewDispatcherTests(unittest.TestCase):
             )
             with (
                 patch("code_review_dispatcher._post_review_comment", return_value=True),
+                patch("code_review_dispatcher._mark_issue_done", return_value=True) as mark_done,
                 patch("code_review_dispatcher._notify_review_done_safe"),
                 patch("code_review_dispatcher.resolve_platform_run_workdir", return_value=None),
                 patch("code_review_dispatcher.call_claude_with_telemetry", return_value=completed) as run,
             ):
                 self.assertTrue(CodeReviewDispatcher(cfg).dispatch({"identifier": "UUM-42"}, "a", "b"))
+                mark_done.assert_not_called()
 
         cmd = run.call_args.kwargs["cmd"]
         self.assertEqual(cmd[:4], ["claude", "--print", "--output-format", "json"])
         self.assertEqual(Path(run.call_args.kwargs["cwd"]), worktree)
+
+    def test_dispatch_marks_done_when_review_passed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = Path(tmp)
+            worktree = repo_root / ".worktrees" / "UUM-42"
+            worktree.mkdir(parents=True)
+            cfg = CodeReviewConfig(
+                enabled=True,
+                command="claude",
+                repo_root=repo_root,
+                multica_bin="multica",
+                timeout_s=1,
+                send_timeout_s=1,
+                daemon_cid="",
+                daemon_url="http://127.0.0.1:19200",
+                extra_args=("--print", "--output-format", "json"),
+            )
+            completed = subprocess.CompletedProcess(
+                args=[],
+                returncode=0,
+                stdout='{"type":"result","result":"审查通过：仅低风险建议，可合并"}',
+                stderr="",
+            )
+            with (
+                patch("code_review_dispatcher._post_review_comment", return_value=True),
+                patch("code_review_dispatcher._mark_issue_done", return_value=True) as mark_done,
+                patch("code_review_dispatcher._notify_review_done_safe"),
+                patch("code_review_dispatcher.resolve_platform_run_workdir", return_value=None),
+                patch("code_review_dispatcher.call_claude_with_telemetry", return_value=completed),
+            ):
+                self.assertTrue(CodeReviewDispatcher(cfg).dispatch({"identifier": "UUM-42"}, "a", "b"))
+                mark_done.assert_called_once_with(cfg, "UUM-42")
+
+    def test_review_passed_heuristic(self):
+        self.assertTrue(_is_review_passed("未发现阻塞项，低风险建议"))
+        self.assertTrue(_is_review_passed("审查通过，可以合并"))
+        self.assertFalse(_is_review_passed("存在阻塞项，必须修复后再合并"))
+        self.assertFalse(_is_review_passed(""))
 
     def test_resolve_review_workdir_falls_back_to_repo_root(self):
         with tempfile.TemporaryDirectory() as tmp:

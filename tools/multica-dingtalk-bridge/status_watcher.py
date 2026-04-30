@@ -53,7 +53,6 @@ _NOTIFY_ON_ENTER: dict[str, str] = {
     "done": "[已完成]",
     "cancelled": "[已取消]",
     "failed": "[运行失败]",
-    "approved": "[审查通过]",
 }
 
 
@@ -64,14 +63,8 @@ def _normalize_status(s: str) -> str:
 
 
 def _auto_merge_trigger_norm() -> str:
-    """MULTICA_AUTO_MERGE_TRIGGER_STATUS：approved（默认）| done。
-
-    Multica 工作区若无 **approved** 状态，可设为 **done**，在关单时尝试合并本地 ``agent/{工单号}``。
-    """
-    raw = (os.environ.get("MULTICA_AUTO_MERGE_TRIGGER_STATUS") or "approved").strip().lower()
-    if raw == "done":
-        return "done"
-    return "approved"
+    """固定工作流：done 触发自动合并。"""
+    return "done"
 
 
 def _should_auto_merge_on_status(norm: str) -> bool:
@@ -79,13 +72,8 @@ def _should_auto_merge_on_status(norm: str) -> bool:
 
 
 def _webhook_merge_ack_line() -> str:
-    """审查完毕 webhook 末尾一句：按当前合并触发状态提示。"""
-    if _auto_merge_trigger_norm() == "done":
-        return "若认可：在 Multica 标 **Done**，会按配置尝试把 agent 分支合进 main。"
-    return (
-        "若认可：工作区若有 **approved** 可用来触合并；若没有，在桥 `.env` 设 "
-        "`MULTICA_AUTO_MERGE_TRIGGER_STATUS=done` 后用 **Done** 触发。"
-    )
+    """审查完毕 webhook 末尾一句：固定 done 触发合并。"""
+    return "若认可：系统会自动将工单标为 **Done**，并在 Done 后尝试把 agent 分支合进 main。"
 
 
 def _review_backend_mode() -> str:
@@ -198,6 +186,24 @@ def _run_multica(*args: str, timeout: int = 30) -> tuple[bool, str]:
         return r.returncode == 0, r.stdout or r.stderr or ""
     except Exception as exc:
         return False, str(exc)
+
+
+def _mark_issue_merged(issue_id: str) -> None:
+    """合并成功后：确保状态 done，并给标题补【已合并】前缀。"""
+    if not issue_id:
+        return
+    _run_multica("issue", "update", issue_id, "--status", "done")
+    ok, out = _run_multica("issue", "get", issue_id, "--output", "json")
+    if not ok:
+        return
+    try:
+        data = json.loads(out)
+    except json.JSONDecodeError:
+        return
+    title = str(data.get("title") or "").strip()
+    if not title or title.startswith("【已合并】"):
+        return
+    _run_multica("issue", "update", issue_id, "--title", f"【已合并】{title}")
 
 
 def _check_agent_branch(issue_id: str) -> str:
@@ -418,6 +424,7 @@ def _merge_agent_branch(issue: dict) -> bool:
         )
         if r2.returncode == 0:
             LOG.info("merge skipped for %s: already merged", issue_id)
+            _mark_issue_merged(issue_id)
             return True
     except Exception:
         pass
@@ -452,8 +459,7 @@ def _merge_agent_branch(issue: dict) -> bool:
             LOG.warning("merge push failed for %s: %s", issue_id, r4.stderr[-300:])
             return False
         LOG.info("merged %s to main and pushed", issue_id)
-        # ── 自动改 Multica 状态为 done ────────────────────────
-        _run_multica("issue", "update", issue_id, "--status", "done")
+        _mark_issue_merged(issue_id)
         return True
     except Exception as exc:
         LOG.warning("merge failed for %s: %s", issue_id, exc)
@@ -624,19 +630,8 @@ def _build_notification(
     norm = _normalize_status(curr_status)
     if norm == "inreview":
         next_step = _review_trigger_summary(issue_id)
-    elif norm == "approved":
-        if _auto_merge_trigger_norm() == "approved":
-            next_step = "下一步：标为 approved 后，系统会尝试自动合并 agent 分支到 main。"
-        else:
-            next_step = "当前自动合并由 **Done** 触发；approved 不会执行合并。"
     elif norm == "done":
-        if _auto_merge_trigger_norm() == "done":
-            next_step = "下一步：关单后系统会尝试自动合并 agent 分支到 main（无本地分支则跳过）。"
-        else:
-            next_step = (
-                "下一步：默认需 **approved** 才会自动合并；若 Multica 没有该状态，"
-                "可在桥 `.env` 设 `MULTICA_AUTO_MERGE_TRIGGER_STATUS=done` 后改用关单触发。"
-            )
+        next_step = "下一步：关单后系统会尝试自动合并 agent 分支到 main（无本地分支则跳过）。"
     elif norm == "failed":
         next_step = "下一步：打开工单 runs 看最后一次失败日志并重试。"
 

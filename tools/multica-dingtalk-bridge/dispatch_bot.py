@@ -1350,6 +1350,24 @@ class MulticaDispatchHandler(dingtalk_stream.ChatbotHandler):
         except Exception as exc:
             self._log.debug("multica comment skipped: %s", exc)
 
+        # Agent 成功完成后自动推进到 in_review，交由巡检触发 Reviewer。
+        if result.success:
+            try:
+                status_ret = await self._multica.set_issue_status(issue_id, "in_review")
+                if not status_ret.ok:
+                    self._log.warning(
+                        "auto set in_review failed issue=%s rc=%s stderr=%s",
+                        issue_id,
+                        status_ret.returncode,
+                        _redact_sensitive_text((status_ret.stderr or "")[:300]),
+                    )
+            except Exception as exc:
+                self._log.warning(
+                    "auto set in_review raised issue=%s err=%s",
+                    issue_id,
+                    _redact_sensitive_text(str(exc)),
+                )
+
     async def _handle_delete_dispatch(
         self,
         incoming: dingtalk_stream.ChatbotMessage,
