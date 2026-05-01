@@ -7,10 +7,19 @@
   "priority": "medium",
   "project_hint": "",
   "multica_labels": [],
-  "status": "failed",
-  "created_at": "2026-04-28T21:48:28",
-  "claimed_at": "2026-04-28T21:48:29",
+  "status": "partial",
+  "created_at": "2026-04-28T23:37:51",
+  "claimed_at": "2026-04-28T23:37:52",
   "branch": "agent/UUM-24",
-  "error": "git checkout -b agent/UUM-24 failed: fatal: a branch named 'agent/UUM-24' already exists",
-  "completed_at": "2026-04-28T21:48:29"
+  "worktree_path": "D:\\MyAgents\\.worktrees\\UUM-24",
+  "summary": "子任务1: 未完成 — (empty result)",
+  "files_changed": [],
+  "sub_tasks": [
+    {
+      "index": 1,
+      "title": "完成整个任务",
+      "success": false
+    }
+  ],
+  "completed_at": "2026-04-28T23:39:16"
 }

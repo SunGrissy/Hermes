@@ -21,6 +21,37 @@
 | 格式：`![描述](MEDIA:D:/path/to/image.jpg)` | connector 自动上传到钉钉 |
 | PNG 大图也能发，但压缩成 JPG 更稳 | 建议先压缩 |
 
+## OpenClaw exec：PowerShell 陷阱
+
+**OpenClaw exec 默认跑在 PowerShell 下**，不是 CMD。以下写法必踩：
+
+### `&&` 不是逻辑与
+
+PowerShell 里 `&&` 会被解析为 `&`（后台运算符）+ 语法错误。
+```
+# ❌
+cmd /c "git status && git push"
+
+# ✅ 写 .bat 或分步 exec
+```
+
+### `$_` 被 exec 拦截
+
+`Where-Object { $_.xxx }` 中 `$_` 被 exec 吞掉，报错。
+
+### 编码乱码
+
+PowerShell pipeline 输出 GBK，Python 内联执行（`py -c "..."`）含中文/emoji 必崩。
+
+### 黄金法则
+
+| 场景 | 做法 |
+|------|------|
+| 简单命令 | 直接 exec |
+| 涉及 `&&` `||` `$_` `$?` | 写 .bat 文件再 exec |
+| 多步 git 操作 | 写 .bat 文件 |
+| Python 含中文/emoji | 写 .py 文件再 exec |
+
 ## 进程管理
 
 - `dingtalk-desktop/daemon.py` 是持久服务，前台运行会阻塞并超时

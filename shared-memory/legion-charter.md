@@ -75,7 +75,7 @@
 // [AgentXia Task] 涉及文件: file1, file2
 ```
 
-- **Agent 代号**：各 Agent 使用自己的身份缩写（虾叔=Xia, 满满=Man, 阿茶=Cha, 小美=Mei, 妙妙=Miao, 小马=Ma）
+- **Agent 代号**：各 Agent 使用自己的身份缩写（虾叔=Xia, 满满=Man, 阿茶=Cha, 小美=Mei, 妙妙=Miao, 小马=Ma, 当当=Dang）
 - **位置**：修改文件顶部，import 语句之后
 - **内容**：开始时间 + 任务目标 + 涉及文件列表
 - **清理**：验收通过后，按代号精确匹配删除自己的标记，**不得误删其他 Agent 的标记**

@@ -1,0 +1,25 @@
+{
+  "id": "UUM-25",
+  "title": "派单描述：",
+  "description": "󠁪 PmSystem 后端任务 #2：OPS Push to Version 运营规划→版本推送 API\n背景：当前组版本时阿茶只能直连 SQLite（features INSERT + operation_matrices JSON blob UPDATE），老大要求全走 API。前端（business/operations-manager.js）已有 pushToVersion 逻辑但只在浏览器跑，后端需要暴露等效接口。\n需实现：\n1. POST /api/operations/push-to-version — 单条推送\n- 根据 tagId 查 operation_matrices.data.dimensionValues[]\n- 若 metadata.sentToVersions 已包含该 versionId → 幂等返回\n- 否则创建 Feature 记录 + 回写矩阵 JSON\n2. POST /api/operations/bulk-push — 批量推送（月度组版本用）\n- 默认逐个独立事务（部分成功部分失败），支持 atomic=true 全量事务\n- 返回 {processed, created, idempotentSkipped, features, errors}\n核心约束：\n- 单条推送必须是原子事务：要么 features INSERT + operation_matrices UPDATE 都成功，要么全回滚\n- Feature 创建字段必须精确对照文档里表格（name, group, source=ops, status=draft 等）\n- group 是 SQLite 保留字，SQLAlchemy 层/手写 SQL 注意转义\n- operation_matrices 是单条 JSON blob（id=\"global\"），读取→内存修改→UPDATE，建议加乐观锁\n- 同时建议补充 OPS 矩阵读端点（GET /api/operations/matrix 和 GET /api/operations/dimension-values）\n沿用现有认证体系（Bearer JWT），fastapi 风格。\n文档文档 #2 — OPS Push to Version 运营规划推送版本\n🔗 ￼PmSystem API 设计文档 #2 — OPS Push to Version 运营规划推送版本",
+  "definition_of_done": [],
+  "category": "task",
+  "priority": "medium",
+  "project_hint": "",
+  "multica_labels": [],
+  "status": "partial",
+  "created_at": "2026-04-28T23:38:09",
+  "claimed_at": "2026-04-28T23:38:09",
+  "branch": "agent/UUM-25",
+  "worktree_path": "D:\\MyAgents\\.worktrees\\UUM-25",
+  "summary": "子任务1: 未完成 — (timeout after 600s)",
+  "files_changed": [],
+  "sub_tasks": [
+    {
+      "index": 1,
+      "title": "完成整个任务",
+      "success": false
+    }
+  ],
+  "completed_at": "2026-04-28T23:48:27"
+}

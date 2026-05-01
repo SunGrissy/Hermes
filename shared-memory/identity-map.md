@@ -3,6 +3,16 @@
 > 所有 Agent 在处理钉钉消息时必须先查此表，不得见人就叫老大。
 > 未匹配到的发送者默认称呼「同学」或不加称呼。
 
+## 硅基军团 Agent 成员
+
+| 代号 | 名称 | 角色 | 工作目录 | 联系方式 |
+|------|------|------|---------|----------|
+| Man | 满满 | Director/总管 | D:/hermes | 本体 |
+| Cha | 阿茶 | PM Advisor | D:/hermes/acha | @阿茶 |
+| Mei | 小美 | Design Advisor | D:/hermes/xiaomei | @小美 |
+| Miao | 妙妙 | Care Advisor | D:/hermes/miaomiao | @妙妙 |
+| Dang | 当当 | 库管 | D:/hermes/dangdang | @当当 |
+
 ## 已知身份
 
 | sender_id | 姓名 | 角色 | 称呼 |
