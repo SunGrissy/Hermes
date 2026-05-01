@@ -59,22 +59,25 @@ Content-Type: application/json
   "failed": 0,
   "details": [
     {"id": "pt_xxx", "oldStatus": "active", "newStatus": "done"}
-  ]
+  ],
+  "trSyncErrors": [],
+  "partialTrSyncFailed": false
 }
 ```
+
+`trSyncErrors`：对 `source=task_reminder` 且已变更的条目，若回写 TR 失败则追加 `{ "id", "sourceId", "error" }`；与单条 `complete`/`dismiss` 的 `trSyncError` 语义对齐。`partialTrSyncFailed` 为 `true` 表示至少一条 TR 回写失败（本地 JSON 已成功保存）。
 
 **错误码:**
 
 | HTTP | 含义 |
 |------|------|
 | 400 | `ids` 为空或超过 100 条；`status` 非法 |
-| 404 | 部分 ID 不存在（返回 `details` 中标记 `error: "not_found"`） |
-| 403 | 无权限（后续接入权限体系时校验） |
+| 401 / 403 | 未登录 / 只读 viewer 禁止 |
 
 **边界规则:**
 
+*   部分 ID 不存在时**仍返回 HTTP 200**，在 `details` 中标记 `error: "not_found"`（不计入 `updated`）。
 *   状态无变化（如已是 `done`）不计入 `updated`，也不报错。
-*   部分失败时整体仍返回 200，`details` 里逐条标记结果。
 *   修改时同步更新 `updatedAt`；若变为 `done`/`dismissed`，同步写 `completedAt`。
 
 ---
@@ -120,16 +123,20 @@ Content-Type: application/json
 {
   "dryRun": false,
   "updated": 18,
-  "ids": ["pt_xxx", "pt_yyy", "..."]
+  "ids": ["pt_xxx", "pt_yyy", "..."],
+  "trSyncErrors": [],
+  "partialTrSyncFailed": false
 }
 ```
+
+**Response 200 (dryRun=true):** 另含 `"trSyncErrors": []`、`"partialTrSyncFailed": false`（预估阶段不写盘、不调 TR）。
 
 **错误码:**
 
 | HTTP | 含义 |
 |------|------|
-| 400 | `dueBefore` 格式错误；条件组合结果可能误伤，需至少传 `source` 或 `dueBefore` 之一 |
-| 403 | 无权限 |
+| 400 | `dueBefore` 格式错误；条件组合结果可能误伤，需至少传 `source`、`dueBefore`、`status` 之一 |
+| 401 / 403 | 未登录 / 只读 viewer 禁止 |
 
 **边界规则:**
 
@@ -156,6 +163,10 @@ Content-Type: application/json
 GET /api/producer-tower/items?source=task_reminder&status=active&dueBefore=2026-04-20
 ```
 
+**鉴权：**须登录且**非 viewer**（`require_not_viewer`）；非法 `dueBefore` / `dueAfter` 返回 **400**。
+
+**说明：**`ids` 为空时请求体校验返回 **400**（与 OpenAPI 对空数组的 422 二选一，实现统一为 400）。
+
 ---
 
 ## 4. 数据模型补充
@@ -179,7 +190,7 @@ class TowerItem(BaseModel):
 |------|------|
 | AC-01 | `batch-update` 传入 20 个 ID 批量标记 `done`，接口返回 `updated=20`，JSON 文件中对应条目 `status=done` 且 `completedAt` 有值。 |
 | AC-02 | `batch-update` 传入 1 个不存在的 ID，返回 200，`details` 中该条标记 `error=not_found`，其余正常更新。 |
-| AC-03 | `bulk-dismiss` 传 `dryRun=true&source=task_reminder&dueBefore=2026-04-20`，返回预估条数，文件未被修改。 |
+| AC-03 | `bulk-dismiss` JSON 体 `dryRun: true` 且 `source`+`dueBefore` 同上，返回预估条数，文件未被修改。 |
 | AC-04 | `bulk-dismiss` 相同条件 `dryRun=false`，返回实际更新条数及 ID 列表，文件中对应条目 `status=dismissed`。 |
 | AC-05 | `GET /items?source=task_reminder&status=active` 仅返回 `active` 的 TR 导入项。 |
 | AC-06 | 所有新增接口复用现有 `_load_tower_data` / `_save_tower_data`，保持原子写（先写 `.tmp` 再 `replace`）。 |

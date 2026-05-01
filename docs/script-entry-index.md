@@ -8,6 +8,8 @@
 
 **横向参考：** 端口与依赖见 `.cursor/skills/multi-service-orchestration/SKILL.md`；硅基编排背景见 `docs/silicon-legion-orchestration.md`。
 
+**日常「谁跑什么」与开机 SOP：** 见本文 **§5**；端口/计划任务/巡检真源以 **`D:\OpenClaw2\workspace\PORT_MAP.md`**、**`D:\OpenClaw2\workspace\STARTUP.md`** 为准（小马维护），本仓索引不复制易过期的 PID。
+
 **文档枢纽（需求 / 面试 / 会议等非运行时）：** `docs/DOC_HUB.md`、`docs/narrative/README.md`。
 
 ---
@@ -19,7 +21,7 @@
 | 路径 | 用途（简述） |
 |------|----------------|
 | `start_army.bat` | 启动 LLM Plotter（Streamlit）、AlignFlow 前后端、打开 `central-console\index.html`（与 PM 子项目无直接耦合，见脚本正文）。 |
-| `pm-system\quick_start.bat` | PmSystem：拉起后端与前端（含 MD Reader / Palace 路径探测），常用日常入口。 |
+| `pm-system\quick_start.bat` | PmSystem：交互式拉起/重启后端、前端、MD Reader、Palace、钉钉通道、Multica 桥与 **Multica Daemon**（菜单项 1–8；9 全关、0 全重启）；详见 **§5.3**。 |
 | `pm-system\build_and_run.bat` | PM 构建并运行流程（发布/一体化脚本，按需使用）。 |
 | `pm-system\package_minimal.bat` | PM 最小打包相关。 |
 | `pm-system\backend\setup_env.bat` | PM 后端环境初始化。 |
@@ -183,12 +185,188 @@
 |------|----------------|
 | `gateway.cmd` | 第二套 OpenClaw 网关：状态目录 **`D:\OpenClaw2`**，端口 **18790**，与 `D:\OpenClaw`（18789）并存；调用全局 `openclaw gateway`。 |
 
-**说明：** 当前目录下**无**与 `OpenClaw\scripts` 对等的 `scripts` 子目录；辅助脚本以 `D:\OpenClaw\scripts` 或 Hermes/MyAgents 侧为准，或后续再抽到此仓。
+**说明：** 当前目录下**无**与 `OpenClaw\scripts` 对等的 `scripts` 子目录；辅助脚本以 `D:\OpenClaw\scripts` 或 Hermes/MyAgents 侧为准，或后续再抽到此仓。运维级启动顺序、计划任务、双挂救援见 **`D:\OpenClaw2\workspace\STARTUP.md`**。
 
 ---
 
-## 5. 修订记录
+## 5. 日常办公服务矩阵与标准 SOP（老大口径）
+
+本节把「军团 + 钉钉 + Multica + PM 工具栈 + Claude Code」收拢成**一张图 + 一套操作顺序**，与 §1–§4 的脚本路径交叉引用。若与 `PORT_MAP.md` / `STARTUP.md` 冲突，**以 OpenClaw2 工作区两份文档为真源**，本索引只负责入口与决策说明。
+
+### 5.1 服务矩阵（角色 / 入口 / 端口）
+
+| 启动序 | 层级 | 组件 | 数量与角色 | 典型入口 | 端口 / 备注 |
+|:---:|:---:|------|------------|----------|---------------|
+| **1（链首）** | dingtalk-desktop | Daemon | 1 | `py -u D:\MyAgents\dingtalk-desktop\daemon.py`；`quick_start.bat 6` | **19200**；全链首棒，健康 `GET /api/health` |
+| **2（满满阶段）** | Hermes + 必要配套 | 满满主控 + Hermes 通路 | 满满（总管）+ 其军团（阿茶/小美/妙妙/当当按需） | `D:\OpenClaw\gateway.cmd`（先确保 18789）；`D:\OpenClaw\scripts\start_manman.bat`；`start_hermes.bat` | 满满阶段至少包含 **OpenClaw(18789)+满满进程**，以保障 Stream/Webhook/派单链路 |
+| **3（小马阶段）** | OpenClaw2 + 运维配套 | 小马运维中枢 | 小马（18790）+ 巡检/告警配套 | `D:\OpenClaw2\gateway.cmd`；巡检 `patrol_agents.py`；`emergency_webhook.py` | 小马阶段至少包含 **18790 + 巡检/告警**，作为恢复与兜底入口 |
+| **4（业务工具阶段）** | PmSystem 栈 | 后端 / 前端 / 读文档 / Palace | 多 | `pm-system\quick_start.bat` 选 **1–5** | **8000 / 3005 / 8899 / 8300**；钉钉通道为菜单 **6** |
+| 4+ | Multica | 派单桥 + 平台 Daemon | 桥 1 + daemon 1 | `tools\multica-dingtalk-bridge\run_bridge.ps1`；`quick_start.bat 7` / `8` | 桥 **10001**；发钉钉仍经 **19200**；与 Hermes **Stream 互斥**见 README |
+| — | Claude Code | 开发 vs 审查 | **2 个用法**（非 Windows 服务） | Cursor 或 CLI 两上下文 | 无统一端口；`tools\check-claude-code-running.ps1` |
+| — | 其它 | `start_army.bat` 等 | 按需 | 见 §1.1 | 与 PM/军团**无硬耦合** |
+
+**Multica 与钉钉 Stream：** Hermes 网关与 Multica 派单桥**可能互斥抢 Stream**；是否启用 `quick_start.bat 7` 以 `STARTUP.md` 当前策略与 `multica-dingtalk-bridge\README.md` 为准。
+
+### 5.2 现状（如何读「真」状态）
+
+1. **计划任务与开机顺序**：`D:\OpenClaw2\workspace\STARTUP.md`（含 DingTalk-Daemon、OpenClaw、OpenClaw2、Watchdog、Legion-Patrol 等表）。
+2. **端口与各 Agent 存活**：`D:\OpenClaw2\workspace\PORT_MAP.md`（含 `critical` / `auto_rescue` 与 Hermes 行表）。
+3. **本机脚本入口**：本文 §1–§4；MyAgents 根 `scripts\register-*.cmd`（watchdog、git 检查等）见 §3.3。
+
+### 5.3 目标架构：钉钉第一 → 满满第二 → 小马第三 → PM第四
+
+**原则（已定）：**
+
+1. **第一棒：钉钉桌面通道（daemon :19200）先起并先就绪**。后续网关、Hermes、Multica、巡检都把它当消息通道。
+2. **第二棒：满满阶段 = 满满进程 + 必要配套**。最小集合是 `OpenClaw(18789)` + `start_manman.bat`，否则满满启动后链路不完整。
+3. **第三棒：小马阶段 = 小马进程 + 运维配套**。最小集合是 `OpenClaw2(18790)` + 巡检/告警（`patrol_agents.py` / `emergency_webhook.py`）。
+4. **第四棒：PM 系统**（`quick_start 1-5`）在三棒稳定后拉起；Multica/Claude Code按工作流按需附加。
+
+| 维度 | 目标方案 | 现状摘要（`STARTUP.md`） |
+|------|----------|---------------------------|
+| 自启顺序 | **① 钉钉 → ② 满满(含 18789) → ③ 小马(含巡检告警) → ④ PM** | 现状仍偏「钉钉 + 双网关优先，满满偏手动」；需按新顺序调整计划任务与启动编排 |
+| 编排职责 | 满满阶段与小马阶段都按「主进程 + 必要配套」启动，不只拉单进程 | 现有巡检与告警已在；可直接复用并前置到小马阶段 |
+
+#### 5.3.1 依赖关系（谁依赖谁）
+
+```mermaid
+flowchart TB
+  subgraph chain["目标四棒编排"]
+    DT["DingTalk-Daemon :19200<br/>桌面消息通道"]
+    HM["第二棒: 满满阶段<br/>OpenClaw 18789 + 满满/军团"]
+    XM["第三棒: 小马阶段<br/>OpenClaw2 18790 + 巡检/告警"]
+    PM["第四棒: PM系统<br/>quick_start 1-5"]
+    MC["附加: Multica桥/daemon<br/>按需"]
+  end
+  DT --> HM
+  HM --> XM
+  XM --> PM
+  PM --> MC
+  DT --> MC
+  HM --> DT
+  XM --> DT
+  PM --> DT
+```
+
+说明：四棒是**启动顺序**，每一棒内部包含「主进程 + 必要配套」；回箭头表示运行期仍会调用 `19200`。
+
+#### 5.3.2 开机时序：会发生什么（计划任务视角）
+
+以下与 `STARTUP.md` 中的任务名一致；**延迟秒数可按机器调**，关键是 **DingTalk-Daemon 第一个触发**。
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Sch as Windows 任务计划程序
+  participant DT as DingTalk-Daemon :19200
+  participant HM as 满满阶段(18789+满满)
+  participant XM as 小马阶段(18790+巡检)
+  participant PM as PM系统(quick_start 1-5)
+  participant MC as Multica(按需)
+  participant Patrol as Legion-Patrol 等
+
+  Sch->>DT: ① 最先触发 (建议 T+0~15s)
+  activate DT
+  DT->>DT: 绑定 19200, /api/health 可答
+  deactivate DT
+
+  Sch->>HM: ② 满满阶段启动 (先 18789，再 start_manman/start_hermes)
+  activate HM
+  HM->>DT: Stream / 发消息经 19200
+  deactivate HM
+
+  Sch->>XM: ③ 小马阶段启动 (18790 + 巡检/告警)
+  activate XM
+  XM->>DT: 巡检报道/告警经 19200
+  deactivate XM
+
+  Sch->>PM: ④ PM系统启动 (quick_start 1-5)
+  activate PM
+  PM->>DT: 需发消息时经 19200
+  deactivate PM
+
+  opt 按需附加
+    Sch->>MC: 启动桥/daemon (quick_start 7/8)
+    MC->>DT: 派单通知经 19200
+  end
+
+  Patrol->>DT: 周期巡检 19200 健康
+  Patrol->>HM: 检查 18789 + Hermes 进程
+  Patrol->>XM: 检查 18790 + 巡检链路
+```
+
+**读图要点：**
+
+- 若没有步骤 ①，后续三棒都可能「进程在、消息链路不在」。
+- 第二棒与第三棒都不是单进程启动，必须把各自配套一并拉起。
+- `Legion-Patrol` 仍把 **19200** 视为 critical；链首倒了优先救钉钉。
+
+### 5.4 标准 SOP — 推荐操作顺序
+
+**A. 每次开机或远程登录后（验证，约 3–5 分钟）**
+
+1. 打开 `PORT_MAP.md` 或跑 Legion-Patrol / `hermes-healthcheck.ps1`（见 §2、`STARTUP.md`），按新顺序核验：**19200 → 18789+满满 → 18790+巡检 → PM 端口**。
+2. 若用 PM：**8000** 后端与 **3005** 前端（浏览器自开或手输 URL）。
+3. Hermes：确认满满（及需用的 Advisor/当当）进程与钉钉连接态；异常用 `start_hermes.bat` 或各 `restart_*_only.bat`（§2）。
+4. Multica：仅在工作流需要时启 **7**（桥）与 **8**（daemon），并先读完 README 中与 Stream 互斥的说明。
+
+**B. 全量手工拉起（无计划任务或换机后）**
+
+1. **第一棒（钉钉）**：起 `dingtalk-desktop\daemon.py`（或 `quick_start.bat 6`），确认 `19200` 健康可答。
+2. **第二棒（满满 + 配套）**：先起 `D:\OpenClaw\gateway.cmd`（18789），再起 `D:\OpenClaw\scripts\start_manman.bat`（或 `start_hermes.bat`）。
+3. **第三棒（小马 + 配套）**：起 `D:\OpenClaw2\gateway.cmd`（18790），确认 `patrol_agents.py` / `emergency_webhook.py` 在巡检链路内正常工作。
+4. **第四棒（PM 栈）**：`pm-system\quick_start.bat` 按需选 **1–5**；全量重启用 **[0]**，先清冲突用 **[9]**。
+5. **按需附加（Multica）**：`quick_start.bat 7` 与 **8**，或直接 `run_bridge.ps1` / `run_multica_daemon_isolated.ps1`（`tools\multica-dingtalk-bridge\`）。
+6. **工作上下文（Claude Code）**：固定「开发会话」与「审查/高难会话」两个窗口或 profile。
+
+**C. 故障与端口冲突**
+
+- 双挂、小马/满满互救：`STARTUP.md`「常见故障处理」。
+- PM 侧多进程占端口：`quick_start.bat` 菜单 **[9] 全部关闭** 后 **[0] 全部重启**。
+
+### 5.5 与 `start_army.bat` 的关系
+
+`start_army.bat` 拉起的是 **LLM Plotter、AlignFlow、central-console** 等（见脚本正文），**不属于** PmSystem `quick_start` 菜单项；日常若未做对齐/实验，可**不**随军团一起开，避免端口与心智负担混淆。
+
+### 5.6 实施脚本与落地状态（2026-04-30）
+
+编排脚本在 `tools/startup-orchestration/`（复用 `quick_start` 的 PM 节点）：
+
+- `boot-postlogon-chain.ps1`：**登录后**串行执行「等 `19200` → 起 `18789`+满满 → 起 `18790` → `quick_start` 1/2/3/5」；日志在 `logs\postlogon-chain-*.log`。
+- `boot-phase4-pm.ps1`：仅 PM 四步，被上链调用。
+- `boot-phase2-manman.ps1`：保留作**手工**第二棒（若仍用 ONSTART 任务会受 SYSTEM/用户 npm 路径影响，不推荐单独当开机任务）。
+- `register-startup-chain.ps1` / `register-startup-chain.cmd`：管理员注册任务。
+- `README.md`：**满满/小马不起**时的根因（ONSTART + SYSTEM vs 用户目录下 `openclaw`）。
+
+**推荐任务模型（与注册脚本一致）：**
+
+| 任务 | 触发 | 作用 |
+|------|------|------|
+| `DingTalk-Daemon` | **ONSTART** +15s | 链首，尽量早于登录也可用 |
+| `Legion-PostLogon-Bootstrap` | **ONLOGON** +1min | 满满+小马+PM（需已登录用户会话，才能起 npm 下的 OpenClaw） |
+| `OpenClaw Gateway` | **禁用** | 避免与链内 `18789` 重复 |
+
+管理员落地（**管理员 cmd** 可直接双击 `register-startup-chain.cmd`，或）：
+
+```bat
+cd /d D:\MyAgents\tools\startup-orchestration
+powershell -NoProfile -ExecutionPolicy Bypass -File "D:\MyAgents\tools\startup-orchestration\register-startup-chain.ps1"
+```
+
+验证：
+
+```powershell
+schtasks /Query /TN "DingTalk-Daemon" /V /FO LIST
+schtasks /Query /TN "Legion-PostLogon-Bootstrap" /V /FO LIST
+schtasks /Query /TN "OpenClaw Gateway" /V /FO LIST
+```
+
+---
+
+## 6. 修订记录
 
 | 日期 | 说明 |
 |------|------|
 | 2026-04-30 | 初版：四栈 P0 入口索引（按目录枚举 + 抽样读脚本）。 |
+| 2026-04-29 | §5：服务矩阵、SOP、`quick_start` 8/9/0；§5.3 **钉钉链首**、Mermaid 依赖图与时序图；与 `STARTUP`/`PORT_MAP` 对齐。 |
+| 2026-04-30 | 新增 `tools/startup-orchestration/`；§5.6 改为 **ONSTART 钉钉 + ONLOGON 军团链**（`Legion-PostLogon-Bootstrap`），避免 SYSTEM 起不来用户 npm 下 OpenClaw。 |
