@@ -26,4 +26,6 @@ echo ==================================================
 echo.
 echo.
 echo You may close this window, but keep the service windows open (LLM Plotter, AlignFlow).
+echo.
+echo REM To start dispatch_bot with watchdog: cd tools\multica-dingtalk-bridge && py watchdog.py
 pause
