@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## [2026-05-01] - pm-system：批量 PATCH 接口支持 sync_linked_feature_assignee
+
+**状态**: 已完成（子模块 pm-system 已推送）
+
+**内容**:
+- `pm-system/backend/app/schemas/__init__.py`：`WorkItemPatch` 增加 `sync_linked_feature_assignee: Optional[bool] = None` 字段。
+- `pm-system/backend/app/routers/planner.py`：`batch_patch_items` 循环内 `setattr` 后追加 `_sync_planner_assignee_to_linked_features` 调用，与单条 PUT 已有的同步机制对齐。
+
+**测试**:
+- 本地通过：批量 PATCH WorkItem assignee → "测试员" + `syncLinkedFeatureAssignee: true`，关联 Feature assignee 同步写入 "测试员"；清理后恢复。
+
+---
+
 ## [2026-04-30] - 合并 main 审查标准 + Claude 自助同步技能
 
 **状态**: 已完成（本提交）
