@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<title>驯化野生硅基伙伴｜可编辑互动版</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+:root{
+  --slide-w:1280px; --slide-h:720px;
+  --bg:#070b13; --bg2:#0c1220; --card:#111a2b; --card2:#151f32;
+  --text:#efece5; --sub:#a7adbb; --muted:#697184;
+  --gold:#d6ad61; --amber:#f59e0b; --teal:#20c7ae; --blue:#4c8dff; --violet:#9b75ff; --rose:#ff5f7d;
+  --line:rgba(255,255,255,.09); --line2:rgba(214,173,97,.24);
+  --paper:#f5f1e7; --ink:#171512; --warm:#c96442;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:#03050a;color:var(--text);font-family:'Noto Sans SC',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;}
+body{padding:18px 0 72px;}
+.deck{width:100%;}
+.slide{width:var(--slide-w);height:var(--slide-h);margin:22px auto;position:relative;overflow:hidden;padding:54px 72px;background:radial-gradient(circle at 8% 10%,rgba(214,173,97,.13),transparent 34%),radial-gradient(circle at 88% 14%,rgba(32,199,174,.12),transparent 30%),linear-gradient(135deg,var(--bg),var(--bg2));border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.42);page-break-after:always;display:flex;flex-direction:column;}
+.slide::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:48px 48px;mask-image:linear-gradient(180deg,rgba(0,0,0,.42),transparent 78%);pointer-events:none;}
+.slide::after{content:"";position:absolute;left:0;top:0;width:100%;height:4px;background:linear-gradient(90deg,var(--gold),var(--teal),transparent 72%);}
+.cover{justify-content:center;text-align:left;padding:76px 92px;background:radial-gradient(circle at 74% 34%,rgba(32,199,174,.2),transparent 24%),radial-gradient(circle at 24% 20%,rgba(214,173,97,.2),transparent 35%),linear-gradient(135deg,#070b13,#101827 52%,#070b13);}
+.cover .eyebrow{color:var(--teal);font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:22px;}
+.cover h1{font-family:'Noto Serif SC',serif;font-size:74px;line-height:1.08;font-weight:900;letter-spacing:-2px;max-width:880px;}
+.cover .subtitle{font-size:25px;line-height:1.55;color:var(--sub);max-width:900px;margin-top:28px;}
+.cover .meta{position:absolute;left:92px;bottom:58px;color:var(--muted);font-size:15px;}
+.cover .orb{position:absolute;right:86px;bottom:72px;width:230px;height:230px;border-radius:50%;background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.52),rgba(32,199,174,.32) 24%,rgba(214,173,97,.18) 50%,rgba(17,26,43,.9) 73%);border:1px solid rgba(255,255,255,.16);box-shadow:0 0 88px rgba(32,199,174,.18), inset 0 0 48px rgba(255,255,255,.08);}
+.kicker{font-family:'JetBrains Mono',monospace;color:var(--gold);font-size:13px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;}
+.slide-title{font-family:'Noto Serif SC',serif;font-size:42px;line-height:1.18;font-weight:800;letter-spacing:-.6px;margin-bottom:10px;position:relative;z-index:1;}
+.slide-subtitle{font-size:17px;color:var(--sub);line-height:1.55;margin-bottom:26px;position:relative;z-index:1;}
+.body{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px;}
+.section{justify-content:center;padding:72px 92px;}
+.section .kicker{font-size:15px;color:var(--teal)}
+.section .slide-title{font-size:58px;max-width:940px;}
+.section .big-quote{margin-top:32px;max-width:980px;}
+.grid{display:grid;gap:18px}.cols2{grid-template-columns:1fr 1fr}.cols3{grid-template-columns:repeat(3,1fr)}.cols4{grid-template-columns:repeat(4,1fr)}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.025));border:1px solid var(--line);border-radius:18px;padding:24px 26px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);}
+.card.gold{border-left:4px solid var(--gold)}.card.teal{border-left:4px solid var(--teal)}.card.violet{border-left:4px solid var(--violet)}.card.rose{border-left:4px solid var(--rose)}.card.blue{border-left:4px solid var(--blue)}
+.card .label{font-family:'JetBrains Mono',monospace;color:var(--muted);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
+.card h3{font-family:'Noto Serif SC',serif;font-size:25px;line-height:1.25;margin-bottom:10px;color:var(--text)}
+.card p,.card li{font-size:17px;line-height:1.58;color:var(--sub)}
+.card strong{color:var(--gold)}
+ul.clean{list-style:none;display:flex;flex-direction:column;gap:11px}.clean li{font-size:18px;line-height:1.55;color:var(--sub);padding-left:26px;position:relative}.clean li::before{content:"—";position:absolute;left:0;color:var(--gold);font-weight:900}.clean li strong{color:var(--text)}
+.big-quote{border-left:5px solid var(--gold);padding:18px 26px;background:rgba(214,173,97,.08);border-radius:0 18px 18px 0;font-family:'Noto Serif SC',serif;font-size:30px;line-height:1.45;color:var(--text)}
+.big-quote strong{color:var(--gold)}
+.callout{background:rgba(32,199,174,.08);border:1px solid rgba(32,199,174,.22);border-radius:18px;padding:20px 26px;font-size:20px;line-height:1.6;color:var(--text)}
+.callout strong{color:var(--teal)}
+.table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.03)}
+.table th{font-family:'JetBrains Mono',monospace;text-align:left;color:var(--gold);font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:14px 18px;border-bottom:1px solid var(--line)}
+.table td{font-size:17px;line-height:1.45;color:var(--sub);padding:15px 18px;border-bottom:1px solid var(--line);vertical-align:top}.table tr:last-child td{border-bottom:none}.table td:first-child{color:var(--text);font-weight:700}.table strong{color:var(--teal)}
+.flow{display:grid;grid-template-columns:1fr 72px 1fr 72px 1fr;align-items:stretch;gap:14px}.arrow{display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:40px;font-family:'Noto Serif SC',serif}.node{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:20px;padding:26px;min-height:190px}.node .num{font-family:'JetBrains Mono',monospace;color:var(--teal);font-size:14px;margin-bottom:12px}.node h3{font-family:'Noto Serif SC',serif;font-size:27px;margin-bottom:12px}.node p{font-size:18px;line-height:1.55;color:var(--sub)}
+.timeline{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}.step{position:relative;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:16px;padding:18px 16px;min-height:160px}.step .n{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid var(--gold);color:var(--gold);font-family:'JetBrains Mono',monospace;margin-bottom:12px}.step h3{font-size:19px;margin-bottom:8px}.step p{font-size:14px;line-height:1.5;color:var(--sub)}
+.tags{display:flex;flex-wrap:wrap;gap:10px}.tag{display:inline-flex;align-items:center;border-radius:999px;padding:7px 13px;font-size:14px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--sub)}.tag.gold{color:var(--gold);border-color:rgba(214,173,97,.32);background:rgba(214,173,97,.08)}.tag.teal{color:var(--teal);border-color:rgba(32,199,174,.3);background:rgba(32,199,174,.08)}.tag.violet{color:var(--violet);border-color:rgba(155,117,255,.3);background:rgba(155,117,255,.08)}
+.prompt{font-family:'JetBrains Mono',monospace;background:#050812;border:1px solid rgba(32,199,174,.24);border-radius:18px;padding:22px 24px;color:#dce9e6;font-size:16px;line-height:1.65;white-space:pre-wrap;box-shadow:inset 0 0 0 1px rgba(255,255,255,.03)}
+.split{display:grid;grid-template-columns:1.05fr .95fr;gap:22px;align-items:stretch}.split-37{display:grid;grid-template-columns:.85fr 1.15fr;gap:22px;align-items:stretch}
+.stat{font-family:'Noto Serif SC',serif;font-size:52px;font-weight:900;color:var(--gold);line-height:1}.stat-label{font-size:16px;color:var(--sub);margin-top:10px;line-height:1.45}
+.visual-map{height:370px;position:relative;border:1px solid var(--line);border-radius:24px;background:radial-gradient(circle at 50% 50%,rgba(214,173,97,.12),transparent 44%),rgba(255,255,255,.025);overflow:hidden}.circle{position:absolute;border-radius:50%;border:1px solid rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font-family:'Noto Serif SC',serif;font-weight:800}.c-human{width:210px;height:210px;left:82px;top:78px;color:var(--gold);background:rgba(214,173,97,.08)}.c-prob{width:230px;height:230px;left:420px;top:48px;color:var(--violet);background:rgba(155,117,255,.08)}.c-det{width:230px;height:230px;right:88px;top:108px;color:var(--teal);background:rgba(32,199,174,.08)}.connector{position:absolute;height:2px;background:linear-gradient(90deg,var(--gold),var(--violet),var(--teal));left:285px;right:302px;top:185px;opacity:.75}
+.page-num{position:absolute;right:34px;bottom:24px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:12px;z-index:3}.footer{position:absolute;left:72px;bottom:24px;color:var(--muted);font-size:12px;z-index:3}.progress{position:absolute;left:0;bottom:0;height:3px;background:linear-gradient(90deg,var(--gold),var(--teal));z-index:4}
+.controls{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:50;display:flex;gap:10px;background:rgba(5,8,18,.86);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(14px);border-radius:999px;padding:8px 12px;box-shadow:0 10px 30px rgba(0,0,0,.35)}.controls button{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:var(--text);border-radius:999px;padding:8px 14px;cursor:pointer}.controls button:hover{border-color:rgba(214,173,97,.5);color:var(--gold)}
+
+/* Editable interactive version */
+body.edit-mode .editable {
+  outline: 1px dashed rgba(32,199,174,.55);
+  outline-offset: 3px;
+  border-radius: 6px;
+  cursor: text;
+}
+body.edit-mode .editable:hover {
+  outline-color: rgba(214,173,97,.85);
+  background: rgba(214,173,97,.055);
+}
+body.edit-mode .editable:focus {
+  outline: 2px solid rgba(32,199,174,.95);
+  background: rgba(32,199,174,.08);
+  box-shadow: 0 0 0 4px rgba(32,199,174,.12);
+}
+body:not(.edit-mode) .editable { cursor: default; }
+.edit-panel {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 258px;
+  padding: 12px;
+  background: rgba(5,8,18,.88);
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 18px 50px rgba(0,0,0,.42);
+  color: var(--text);
+  font-size: 12px;
+}
+.edit-panel .row { display:flex; gap:8px; flex-wrap:wrap; }
+.edit-panel button {
+  flex: 1;
+  min-width: 70px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.edit-panel button.primary { border-color: rgba(32,199,174,.45); color: var(--teal); background: rgba(32,199,174,.08); }
+.edit-panel button.warn { border-color: rgba(255,95,125,.42); color: var(--rose); background: rgba(255,95,125,.07); }
+.edit-panel button:hover { border-color: rgba(214,173,97,.62); color: var(--gold); }
+.edit-status { color: var(--muted); line-height: 1.45; }
+.edit-status strong { color: var(--teal); font-weight: 700; }
+.edit-hint { color: var(--sub); line-height: 1.45; }
+.toast {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  z-index: 100;
+  opacity: 0;
+  transition: all .22s ease;
+  background: rgba(5,8,18,.92);
+  border: 1px solid rgba(32,199,174,.38);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 9px 16px;
+  box-shadow: 0 12px 38px rgba(0,0,0,.4);
+  pointer-events:none;
+  font-size: 13px;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+@media print { .edit-panel,.toast{display:none!important} body.edit-mode .editable{outline:none!important;background:transparent!important;box-shadow:none!important} }
+
+@media print{body{background:white;padding:0}.slide{margin:0;box-shadow:none;border:none;page-break-after:always}.controls{display:none}@page{size:1280px 720px;margin:0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<section class="slide cover" data-screen-label="01 封面">
+  <div class="eyebrow">AI Practical Sharing / Product Team</div>
+  <h1>驯化野生<br/>硅基伙伴</h1>
+  <div class="subtitle">从真实痛点出发，把 AI 训练成能帮你做事、甚至帮你造工具的伙伴</div>
+  <div class="meta">面向：中心内部产品岗 / 对 AI 实用有困惑的同学<br/>分享人：孙懿（猫姐）</div>
+  <div class="orb"></div><div class="page-num">01 / 18</div><div class="progress" style="width:5.56%"></div>
+</section>
+
+<section class="slide" data-screen-label="02 今天不做工具大全">
+  <div class="kicker">Opening</div><h2 class="slide-title">今天不做“AI 工具大全”</h2>
+  <div class="slide-subtitle">只讲一件事：怎么把通用 AI 驯化成自己的硅基伙伴</div>
+  <div class="body">
+    <div class="big-quote">真正的变化不是多了一个聊天工具，而是每个人都有机会把通用 AI 驯化成自己的伙伴，甚至把长期存在的痛点变成工具、模板和流程。</div>
+    <div class="grid cols4">
+      <div class="card gold"><div class="label">Question 01</div><p>为什么很多人觉得 AI 不好用？</p></div>
+      <div class="card teal"><div class="label">Question 02</div><p>工作里真正的“钉子”是什么？</p></div>
+      <div class="card violet"><div class="label">Question 03</div><p>确定性硅基和概率性硅基怎么配合？</p></div>
+      <div class="card blue"><div class="label">Question 04</div><p>产品岗今天怎么跑通一轮驯化？</p></div>
+    </div>
+  </div><div class="footer">驯化野生硅基伙伴</div><div class="page-num">02 / 18</div><div class="progress" style="width:11.11%"></div>
+</section>
+
+<section class="slide section" data-screen-label="03 核心判断">
+  <div class="kicker">Core Thesis</div><h2 class="slide-title">AI 好不好用，差别不只在工具</h2>
+  <div class="big-quote">差别在于：<strong>你有没有给它成为伙伴的条件。</strong></div>
+  <div class="body" style="justify-content:flex-start;margin-top:26px">
+    <div class="grid cols2">
+      <div class="card gold"><h3>不要从“我能用 AI 做什么”开始</h3><p>这会变成拿着锤子找钉子，最后停在炫技和浅尝辄止。</p></div>
+      <div class="card teal"><h3>要从“哪颗钉子长期扎着我”开始</h3><p>真实痛点先存在，新锤子才有用武之地。</p></div>
+    </div>
+  </div><div class="footer">核心判断</div><div class="page-num">03 / 18</div><div class="progress" style="width:16.67%"></div>
+</section>
+
+<section class="slide" data-screen-label="04 为什么你觉得 AI 不好用">
+  <div class="kicker">Pain</div><h2 class="slide-title">为什么你觉得 AI 不好用？</h2>
+  <div class="slide-subtitle">不是你笨，也不是 AI 完全没用，而是期待和使用方式错位</div>
+  <div class="body">
+    <div class="grid cols3">
+      <div class="card rose"><h3>期望错位</h3><p>把通用 AI 当万能答案机，期待一句话直接交付成品。</p></div>
+      <div class="card gold"><h3>磨合不足</h3><p>抛一句话，不满意就换工具；连完整迭代都没跑完。</p></div>
+      <div class="card violet"><h3>场景错配</h3><p>先想“我能问它什么”，而不是先找反复刺痛的工作问题。</p></div>
+    </div>
+    <div class="callout"><strong>关键句：</strong>好用的新同事是带出来的，不是招来的；好用的 AI 也是驯化出来的，不是换来的。</div>
+  </div><div class="footer">为什么不好用</div><div class="page-num">04 / 18</div><div class="progress" style="width:22.22%"></div>
+</section>
+
+<section class="slide" data-screen-label="05 AI 为什么让你更累">
+  <div class="kicker">Cognitive Load</div><h2 class="slide-title">AI 省掉执行时间，但新增判断负荷</h2>
+  <div class="slide-subtitle">人的责任没有消失，只是位置变了</div>
+  <div class="body">
+    <div class="flow">
+      <div class="node"><div class="num">PAST</div><h3>过去累在亲手做</h3><p>自己写、自己查、自己整理、自己搬运。</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="num">NOW</div><h3>现在累在连续判断</h3><p>判断方向、质量、边界、风险、是否可用。</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="num">SHIFT</div><h3>责任前后迁移</h3><p>前移到目标定义，后移到结果验收。</p></div>
+    </div>
+    <div class="big-quote" style="font-size:25px">AI 没有让人天然更轻松，它只是把工作从执行迁移到了判断。</div>
+  </div><div class="footer">判断负荷</div><div class="page-num">05 / 18</div><div class="progress" style="width:27.78%"></div>
+</section>
+
+<section class="slide section" data-screen-label="06 真正的钉子">
+  <div class="kicker">The Real Nail</div><h2 class="slide-title">真正的钉子：信息差、时间差、流程摩擦</h2>
+  <div class="body" style="justify-content:flex-start;margin-top:24px">
+    <div class="grid cols3">
+      <div class="card gold"><div class="stat">信息差</div><div class="stat-label">不知道信息在哪、事实散在群聊/文档/私聊/系统里。</div></div>
+      <div class="card teal"><div class="stat">时间差</div><div class="stat-label">等待确认、等待同步、等待转发，流程被人肉中继卡住。</div></div>
+      <div class="card violet"><div class="stat">流程摩擦</div><div class="stat-label">重复整理、格式不统一、同类风险反复漏。</div></div>
+    </div>
+    <div class="callout"><strong>判断：</strong>这些损耗不一定靠大模型回答一句话解决。很多时候，最终靠工具、流程、模板、规则系统和自动化解决。</div>
+  </div><div class="footer">组织损耗</div><div class="page-num">06 / 18</div><div class="progress" style="width:33.33%"></div>
+</section>
+
+<section class="slide" data-screen-label="07 新变化是造工具门槛下降">
+  <div class="kicker">Change</div><h2 class="slide-title">AI 的真正变化：降低“造工具”的门槛</h2>
+  <div class="slide-subtitle">很多过去只能忍掉的小痛点，现在值得重新看一遍</div>
+  <div class="body">
+    <div class="split">
+      <div class="card rose"><h3>过去的两种选择</h3><ul class="clean"><li><strong>找现成工具</strong>：经常不贴合自己的业务。</li><li><strong>排研发定制</strong>：投入大、排期贵、沟通成本高。</li></ul></div>
+      <div class="card teal"><h3>现在多了一条路</h3><ul class="clean"><li>AI 追问痛点</li><li>AI 拆流程、补需求</li><li>AI 写脚本、搭表格、做网页小工具</li><li>AI 生成 Checklist、模板、SOP</li></ul></div>
+    </div>
+    <div class="big-quote" style="font-size:25px">只要一线同学能把痛点说清楚，就有机会通过 AI 和 Vibe Coding 把工具做出来。</div>
+  </div><div class="footer">造工具门槛</div><div class="page-num">07 / 18</div><div class="progress" style="width:38.89%"></div>
+</section>
+
+<section class="slide" data-screen-label="08 产品岗钉子清单">
+  <div class="kicker">Checklist</div><h2 class="slide-title">产品岗最常见的低效痛点</h2>
+  <div class="slide-subtitle">现场可以让听众对照：哪颗钉子正在扎着我？</div>
+  <div class="body">
+    <div class="grid cols2">
+      <div class="card gold"><ul class="clean"><li>每周重复整理数据、周报、日报</li><li>会议纪要没人转成行动项</li><li>需求文档格式总是不统一</li><li>评审问题反复漏同类风险</li><li>用户反馈散在群聊、表格、文档里</li></ul></div>
+      <div class="card teal"><ul class="clean"><li>竞品资料难沉淀成可复用结构</li><li>流程靠人提醒，没人提醒就断</li><li>信息靠私聊传递，换个人就断档</li><li>新人不知道去哪找标准、模板、案例</li><li>每次从零问、从零写、从零整理</li></ul></div>
+    </div>
+  </div><div class="footer">找钉子</div><div class="page-num">08 / 18</div><div class="progress" style="width:44.44%"></div>
+</section>
+
+<section class="slide section" data-screen-label="09 两类硅基能力">
+  <div class="kicker">Two Silicon Capabilities</div><h2 class="slide-title">两类硅基能力：确定性硅基 × 概率性硅基</h2>
+  <div class="body" style="justify-content:flex-start;margin-top:18px">
+    <div class="visual-map"><div class="connector"></div><div class="circle c-human">人<br/><span style="font-size:18px;color:var(--sub);font-family:'Noto Sans SC'">目标 / 标准 / 责任</span></div><div class="circle c-prob">概率性硅基<br/><span style="font-size:18px;color:var(--sub);font-family:'Noto Sans SC'">理解 / 追问 / 生成</span></div><div class="circle c-det">确定性硅基<br/><span style="font-size:18px;color:var(--sub);font-family:'Noto Sans SC'">稳定 / 流转 / 校验</span></div></div>
+    <div class="big-quote" style="font-size:25px">AI 不一定直接解决组织损耗，但 AI 可以帮你制造解决损耗的工具。</div>
+  </div><div class="footer">两类硅基</div><div class="page-num">09 / 18</div><div class="progress" style="width:50%"></div>
+</section>
+
+<section class="slide" data-screen-label="10 确定性与概率性分工">
+  <div class="kicker">Division</div><h2 class="slide-title">确定性硅基压低损耗，概率性硅基扩大半径</h2>
+  <div class="body">
+    <table class="table"><thead><tr><th>角色</th><th>负责什么</th><th>不负责什么</th></tr></thead><tbody>
+      <tr><td>人</td><td>目标、价值、标准、取舍、验收、责任</td><td>不该长期做人肉中继和重复搬运</td></tr>
+      <tr><td>概率性硅基</td><td>理解、追问、生成、整理、挑战、扩展视角</td><td>不替人做最终判断</td></tr>
+      <tr><td>确定性硅基</td><td>稳定执行、自动流转、提醒、校验、沉淀</td><td>不处理模糊取舍和价值判断</td></tr>
+    </tbody></table>
+    <div class="callout"><strong>一句话：</strong>模糊探索交给概率性硅基，稳定事实和执行交给确定性工具，人守住目标、标准和责任。</div>
+  </div><div class="footer">三者分工</div><div class="page-num">10 / 18</div><div class="progress" style="width:55.56%"></div>
+</section>
+
+<section class="slide" data-screen-label="11 Vibe Coding">
+  <div class="kicker">Vibe Coding</div><h2 class="slide-title">Vibe Coding 不是人人都要变程序员</h2>
+  <div class="slide-subtitle">它真正的意义是：让懂业务痛点的人，第一次可以直接参与制造工具</div>
+  <div class="body">
+    <div class="split-37">
+      <div class="card violet"><h3>不是</h3><ul class="clean"><li>不是炫技</li><li>不是替代研发</li><li>不是每个人都去写复杂工程</li><li>不是没想清楚就让 AI 瞎做</li></ul></div>
+      <div class="card teal"><h3>而是</h3><ul class="clean"><li>把“我知道这里很痛”推进到“我能做出一个小工具试试”。</li><li>让 AI 帮你追问需求、拆流程、生成原型、沉淀模板。</li><li>让业务一线不再只能等工具、等平台、等排期。</li></ul></div>
+    </div>
+    <div class="big-quote" style="font-size:26px">Vibe Coding 不是让产品变程序员，而是让最懂钉子的人，也能参与造锤子。</div>
+  </div><div class="footer">Vibe Coding</div><div class="page-num">11 / 18</div><div class="progress" style="width:61.11%"></div>
+</section>
+
+<section class="slide" data-screen-label="12 从痛点到工具六步">
+  <div class="kicker">Method</div><h2 class="slide-title">从痛点到工具的六步</h2>
+  <div class="slide-subtitle">不要直接让 AI 写方案，先让它补齐缺失信息</div>
+  <div class="body">
+    <div class="timeline">
+      <div class="step"><div class="n">1</div><h3>找钉子</h3><p>哪件事反复痛、每周重复、靠人肉同步？</p></div>
+      <div class="step"><div class="n">2</div><h3>讲痛点</h3><p>谁在何时遇到什么问题？错了会怎样？</p></div>
+      <div class="step"><div class="n">3</div><h3>让 AI 追问</h3><p>先补上下文，不急着写代码或方案。</p></div>
+      <div class="step"><div class="n">4</div><h3>形成流程</h3><p>哪些步骤规则化？哪些判断必须人做？</p></div>
+      <div class="step"><div class="n">5</div><h3>做成工具</h3><p>提示词、Checklist、表格、小网页、脚本。</p></div>
+      <div class="step"><div class="n">6</div><h3>复用迭代</h3><p>跑一次不算提效，下次复用才是提效。</p></div>
+    </div>
+  </div><div class="footer">六步法</div><div class="page-num">12 / 18</div><div class="progress" style="width:66.67%"></div>
+</section>
+
+<section class="slide" data-screen-label="13 现场演示案例">
+  <div class="kicker">Demo Options</div><h2 class="slide-title">现场可以演示的三个小案例</h2>
+  <div class="slide-subtitle">选一个真实案例跑，不要只讲概念</div>
+  <div class="body">
+    <div class="grid cols3">
+      <div class="card gold"><h3>会议纪要 → 行动项工具</h3><p>输入会议纪要，输出“谁 / 什么时间 / 做什么 / 到什么程度”。</p></div>
+      <div class="card teal"><h3>方案评审 → Checklist 生成器</h3><p>从用户、研发、测试、运营、制作人五个视角生成评审问题。</p></div>
+      <div class="card violet"><h3>周报素材 → 汇报草稿</h3><p>把任务、会议、待办压成给上级看的结论、风险、下周重点。</p></div>
+    </div>
+    <div class="callout"><strong>演示重点：</strong>展示“痛点 → AI 追问 → 流程化 → 可复用产物”，而不是展示某个工具多神。</div>
+  </div><div class="footer">演示案例</div><div class="page-num">13 / 18</div><div class="progress" style="width:72.22%"></div>
+</section>
+
+<section class="slide" data-screen-label="14 如何驯化自己的伙伴">
+  <div class="kicker">Taming</div><h2 class="slide-title">如何驯化自己的专属硅基伙伴</h2>
+  <div class="slide-subtitle">从“让 AI 写”升级到“让 AI 追问、质检、沉淀”</div>
+  <div class="body">
+    <div class="grid cols3">
+      <div class="card gold"><h3>角色</h3><p>资料整理员、方案挑战者、表达润色员、流程检查员、需求追问员。</p></div>
+      <div class="card teal"><h3>记忆</h3><p>把稳定偏好和项目背景沉下来：格式、黑话、标准、禁区。</p></div>
+      <div class="card violet"><h3>工作流</h3><p>读材料 → 提炼观点 → 诊断结构 → 生成提纲 → 质检 → 行动项。</p></div>
+    </div>
+    <div class="big-quote" style="font-size:26px">不要只让 AI 给答案，要让 AI 帮你暴露盲区。</div>
+  </div><div class="footer">驯化三件套</div><div class="page-num">14 / 18</div><div class="progress" style="width:77.78%"></div>
+</section>
+
+<section class="slide" data-screen-label="15 我们自己的工作里 AI 擅长什么">
+  <div class="kicker">Practical Use</div><h2 class="slide-title">结合我们自己的工作：AI 擅长什么？</h2>
+  <div class="slide-subtitle">不是替人做最终决定，而是把中间产物变得可见、可追问、可复用</div>
+  <div class="body">
+    <div class="grid cols2">
+      <div class="card gold"><h3>把散落信息压缩成判断材料</h3><p>PM 系统、钉钉群、会议纪要、需求文档、周报日报、候选人材料。</p></div>
+      <div class="card teal"><h3>把空白页变成 60 分初稿</h3><p>需求文档、复盘提纲、汇报材料、面试评价、方案评审意见。</p></div>
+      <div class="card violet"><h3>穷举、反问、找盲区</h3><p>用户、研发、测试、运营、制作人多视角挑战方案。</p></div>
+      <div class="card blue"><h3>把一次经验沉淀成流程</h3><p>Skill / SOP / 模板 / Checklist / 工作流，下一次不用重来。</p></div>
+    </div>
+  </div><div class="footer">AI 擅长什么</div><div class="page-num">15 / 18</div><div class="progress" style="width:83.33%"></div>
+</section>
+
+<section class="slide" data-screen-label="16 AI 不擅长什么">
+  <div class="kicker">Boundary</div><h2 class="slide-title">AI 不擅长：替人做价值判断和责任判断</h2>
+  <div class="slide-subtitle">越贴近我们的工作，越不能神化 AI</div>
+  <div class="body">
+    <div class="grid cols2">
+      <div class="card rose"><h3>不能替人负责</h3><ul class="clean"><li>不能替制作人决定版本取舍</li><li>不能替管理者判断人怎么培养</li><li>不能替负责人承担上线风险</li></ul></div>
+      <div class="card gold"><h3>不能当事实数据源</h3><ul class="clean"><li>排期要看 PM 系统</li><li>日程、待办、文档状态要查系统</li><li>代码脚本要跑测试</li><li>人事评价要回到事实证据</li></ul></div>
+    </div>
+    <div class="callout"><strong>边界：</strong>AI 可以帮你想得更全，但不能替你负责。涉及事实、数字、排期、权限和执行结果，必须回到系统校验。</div>
+  </div><div class="footer">边界</div><div class="page-num">16 / 18</div><div class="progress" style="width:88.89%"></div>
+</section>
+
+<section class="slide" data-screen-label="17 今天下班前完成一轮驯化">
+  <div class="kicker">Action</div><h2 class="slide-title">行动指南：今天下班前完成一轮驯化</h2>
+  <div class="slide-subtitle">选一个 30 分钟以上、以后还会重复出现的真实任务</div>
+  <div class="body">
+    <div class="split">
+      <div class="card teal"><h3>最小行动</h3><ul class="clean"><li>写下它痛在哪里</li><li>让 AI 先问 3-5 个关键问题</li><li>判断适合模板、Checklist、小工具还是系统</li><li>出第一版产物，至少反馈两轮</li><li>把有效提示词或工具雏形存下来，明天复用一次</li></ul></div>
+      <div class="prompt">我有一个反复出现的工作痛点：
+【描述场景】
+
+现在的做法是：
+【谁在什么时候，用什么方式处理】
+
+请先不要直接给方案。
+先问我 5 个关键问题，帮我判断真正的钉子是什么、哪些可规则化、第一版最小可用方案是什么。</div>
+    </div>
+  </div><div class="footer">行动指南</div><div class="page-num">17 / 18</div><div class="progress" style="width:94.44%"></div>
+</section>
+
+<section class="slide section" data-screen-label="18 结尾">
+  <div class="kicker">Closing</div><h2 class="slide-title">别从“学 AI 工具”开始</h2>
+  <div class="body" style="justify-content:flex-start;margin-top:18px">
+    <div class="big-quote">从<strong>找一颗真实钉子</strong>，训练一个能帮你解决它的硅基伙伴开始。</div>
+    <div class="grid cols2" style="margin-top:8px">
+      <div class="card gold"><h3>AI 是放大器，不是灵魂</h3><p>不要把思考外包给 AI。我们训练硅基伙伴，不是为了让它替我们思考，而是为了把人从重复劳动里解放出来。</p></div>
+      <div class="card teal"><h3>人的价值</h3><p>找到真问题，定义好标准，做出取舍，并把一次解决变成可复用生产力。</p></div>
+    </div>
+    <div class="callout"><strong>最终收束：</strong>概率性硅基负责理解、生成、追问和辅助判断；确定性硅基负责稳定执行、自动流转和降低损耗。判断、选择和创造，仍然是人的责任。</div>
+  </div><div class="footer">收束</div><div class="page-num">18 / 18</div><div class="progress" style="width:100%"></div>
+</section>
+
+</div>
+<div class="edit-panel" id="editPanel">
+  <div class="edit-status"><strong>可编辑互动版</strong><br><span id="saveStatus">准备就绪</span></div>
+  <div class="row"><button class="primary" onclick="toggleEditMode()" id="editModeBtn">关闭编辑</button><button onclick="manualSave()">手动保存</button></div>
+  <div class="row"><button onclick="downloadCurrentHtml()">下载 HTML</button><button onclick="saveAsLocalFile()">另存文件</button></div>
+  <div class="row"><button onclick="window.print()">打印 PDF</button><button class="warn" onclick="resetEdits()">重置修改</button></div>
+  <div class="edit-hint">点页面文字即可修改；浏览器会自动保存。改完建议点“下载 HTML”留一份实体文件。</div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="controls"><button onclick="prevSlide()">上一页</button><button onclick="nextSlide()">下一页</button><button onclick="window.print()">打印 PDF</button><button onclick="fitToWindow()">适配窗口</button></div>
+<script>
+const STORAGE_KEY = 'silicon_partner_deck_editable_v1';
+const PAGE_KEY = 'silicon_partner_deck_page_editable_v1';
+let current = Number(localStorage.getItem(PAGE_KEY) || 0);
+let editMode = localStorage.getItem('silicon_partner_edit_mode') !== 'off';
+let saveTimer = null;
+let fileHandle = null;
+
+function getSlides(){ return [...document.querySelectorAll('.slide')]; }
+function getDeck(){ return document.getElementById('deck'); }
+
+function toast(message){
+  const el = document.getElementById('toast');
+  if(!el) return;
+  el.textContent = message;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(()=>el.classList.remove('show'), 1800);
+}
+function setStatus(message){
+  const el = document.getElementById('saveStatus');
+  if(el) el.textContent = message;
+}
+function nowText(){
+  const d = new Date();
+  return d.toLocaleTimeString('zh-CN', {hour12:false});
+}
+
+function markEditable(){
+  const selectors = [
+    '.kicker','.slide-title','.slide-subtitle','.big-quote','.callout',
+    '.card h3','.card p','.card .label','.card li','.stat','.stat-label',
+    '.node .num','.node h3','.node p','.step h3','.step p','.circle',
+    '.prompt','.cover .eyebrow','.cover h1','.cover .subtitle','.cover .meta',
+    '.table th','.table td','.footer'
+  ].join(',');
+  document.querySelectorAll(selectors).forEach((el, idx)=>{
+    if(el.closest('.controls') || el.closest('.edit-panel')) return;
+    el.classList.add('editable');
+    el.setAttribute('contenteditable', editMode ? 'true' : 'false');
+    el.setAttribute('spellcheck','false');
+    if(!el.dataset.editId) el.dataset.editId = 'e' + idx;
+  });
+}
+
+function applyEditMode(){
+  document.body.classList.toggle('edit-mode', editMode);
+  document.querySelectorAll('.editable').forEach(el=>el.setAttribute('contenteditable', editMode ? 'true' : 'false'));
+  const btn = document.getElementById('editModeBtn');
+  if(btn) btn.textContent = editMode ? '关闭编辑' : '开启编辑';
+  localStorage.setItem('silicon_partner_edit_mode', editMode ? 'on' : 'off');
+}
+function toggleEditMode(){ editMode = !editMode; applyEditMode(); toast(editMode ? '编辑模式已开启' : '编辑模式已关闭'); }
+
+function cleanDeckClone(){
+  const clone = getDeck().cloneNode(true);
+  clone.querySelectorAll('[contenteditable]').forEach(el=>{
+    el.removeAttribute('contenteditable');
+    el.removeAttribute('spellcheck');
+  });
+  clone.querySelectorAll('.editable').forEach(el=>el.classList.remove('editable'));
+  return clone.innerHTML;
+}
+function saveToLocalStorage(silent=false){
+  const payload = {
+    savedAt: new Date().toISOString(),
+    deckHtml: getDeck().innerHTML
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  setStatus('已自动保存 ' + nowText());
+  if(!silent) toast('已保存到浏览器');
+}
+function scheduleSave(){
+  setStatus('正在编辑，准备自动保存…');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>saveToLocalStorage(true), 450);
+}
+function manualSave(){ saveToLocalStorage(false); }
+
+function restoreSaved(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw) return false;
+  try{
+    const payload = JSON.parse(raw);
+    if(payload && payload.deckHtml){
+      getDeck().innerHTML = payload.deckHtml;
+      setStatus('已恢复上次修改 ' + new Date(payload.savedAt).toLocaleString('zh-CN'));
+      return true;
+    }
+  }catch(e){ console.warn('restore failed', e); }
+  return false;
+}
+
+function resetEdits(){
+  if(!confirm('确定要清空浏览器里保存的修改，恢复到这个 HTML 文件内置版本吗？')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  toast('已清空修改，正在刷新');
+  setTimeout(()=>location.reload(), 350);
+}
+
+function buildStandaloneHtml(){
+  manualSave();
+  const doc = document.documentElement.cloneNode(true);
+  doc.querySelectorAll('.toast').forEach(el=>el.classList.remove('show'));
+  doc.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
+  doc.querySelectorAll('.editable').forEach(el=>el.classList.remove('editable'));
+  doc.querySelectorAll('#saveStatus').forEach(el=>el.textContent='此文件已内嵌保存时的最新内容');
+  doc.querySelectorAll('body').forEach(el=>el.classList.remove('edit-mode'));
+  return '<!DOCTYPE html>\n' + doc.outerHTML;
+}
+function downloadCurrentHtml(){
+  const html = buildStandaloneHtml();
+  const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  a.href = URL.createObjectURL(blob);
+  a.download = '驯化野生硅基伙伴_可编辑互动版_' + ts + '.html';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();}, 500);
+  toast('已下载当前 HTML');
+}
+async function saveAsLocalFile(){
+  const html = buildStandaloneHtml();
+  if(!window.showSaveFilePicker){
+    toast('当前浏览器不支持直接另存，已改为下载');
+    downloadCurrentHtml();
+    return;
+  }
+  try{
+    fileHandle = await window.showSaveFilePicker({
+      suggestedName: '驯化野生硅基伙伴_可编辑互动版.html',
+      types: [{description:'HTML 文件', accept:{'text/html':['.html']}}]
+    });
+    const writable = await fileHandle.createWritable();
+    await writable.write(html);
+    await writable.close();
+    toast('已保存到本地文件');
+    setStatus('已保存到本地文件 ' + nowText());
+  }catch(e){
+    if(e && e.name === 'AbortError') return;
+    console.error(e);
+    toast('另存失败，建议用下载 HTML');
+  }
+}
+
+function go(i){
+  const slides = getSlides();
+  current = Math.max(0, Math.min(slides.length-1, i));
+  localStorage.setItem(PAGE_KEY, String(current));
+  slides[current].scrollIntoView({behavior:'smooth', block:'center'});
+}
+function nextSlide(){ go(current+1); }
+function prevSlide(){ go(current-1); }
+function isEditingText(){
+  const ae = document.activeElement;
+  return ae && (ae.isContentEditable || ['INPUT','TEXTAREA'].includes(ae.tagName));
+}
+document.addEventListener('keydown', e=>{
+  if((e.ctrlKey || e.metaKey) && e.key.toLowerCase()==='s'){
+    e.preventDefault(); manualSave(); return;
+  }
+  if(isEditingText()) return;
+  if(['ArrowRight','PageDown',' '].includes(e.key)){ e.preventDefault(); nextSlide(); }
+  if(['ArrowLeft','PageUp'].includes(e.key)){ e.preventDefault(); prevSlide(); }
+  if(e.key==='Home') go(0);
+  if(e.key==='End') go(getSlides().length-1);
+});
+
+document.addEventListener('input', e=>{
+  if(e.target && e.target.closest && e.target.closest('.editable')) scheduleSave();
+});
+document.addEventListener('paste', e=>{
+  if(!(e.target && e.target.closest && e.target.closest('.editable'))) return;
+  e.preventDefault();
+  const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, text);
+});
+
+function fitToWindow(){
+  const slides = getSlides();
+  const scale = Math.min((window.innerWidth-24)/1280, (window.innerHeight-96)/720, 1);
+  slides.forEach(s=>{
+    s.style.transform = `scale(${scale})`;
+    s.style.transformOrigin = 'top center';
+    s.style.marginBottom = `${22-(720*(1-scale))}px`;
+  });
+}
+window.addEventListener('load', ()=>{
+  restoreSaved();
+  markEditable();
+  applyEditMode();
+  fitToWindow();
+  setTimeout(()=>go(current),80);
+  if(!localStorage.getItem(STORAGE_KEY)) setStatus('准备就绪：点击文字即可修改');
+});
+window.addEventListener('resize', fitToWindow);
+window.addEventListener('beforeunload', ()=>saveToLocalStorage(true));
+</script>
+</body>
+</html>
