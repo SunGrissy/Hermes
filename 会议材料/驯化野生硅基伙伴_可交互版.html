@@ -66,7 +66,7 @@
     .demoScreen{border:1px solid var(--border);border-radius:22px;background:#0b0c0e;box-shadow:var(--shadow);overflow:hidden;margin-top:18px}.demoHead{height:42px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(255,255,255,.025)}.traffic{width:10px;height:10px;border-radius:50%;background:#ef4444}.traffic:nth-child(2){background:#f59e0b}.traffic:nth-child(3){background:#10b981}.demoBody{padding:20px}.terminal{font-family:'JetBrains Mono',monospace;color:#b8c0cc;font-size:13px;line-height:1.65;white-space:pre-wrap}.terminal .cmd{color:#828fff}.terminal .ok{color:#10b981}
     .template{border:1px solid var(--border);border-radius:18px;background:rgba(255,255,255,.03);padding:18px;position:relative}.template pre{white-space:pre-wrap;margin:0;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65}.copyBtn{position:absolute;right:14px;top:14px;border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--muted);border-radius:9px;padding:7px 10px;cursor:pointer;font-size:12px}
     .controls{position:absolute;right:24px;bottom:22px;display:flex;gap:10px;z-index:30}.round{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:rgba(15,16,17,.78);backdrop-filter:blur(16px);color:var(--text);cursor:pointer}.round:hover{background:rgba(113,112,255,.22);border-color:rgba(113,112,255,.4)}
-    .overview{position:absolute;inset:0;background:rgba(8,9,10,.96);z-index:50;display:none;padding:34px;overflow:auto}.overview.open{display:block}.overviewGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.thumb{border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.03);padding:16px;min-height:130px;cursor:pointer}.thumb:hover{border-color:rgba(113,112,255,.45);background:rgba(113,112,255,.10)}.thumb span{font-family:'JetBrains Mono',monospace;color:var(--accent2);font-size:11px}.thumb b{display:block;margin-top:10px;font-size:17px;line-height:1.25}.thumb p{color:var(--sub);font-size:13px;line-height:1.45}
+    .overview{position:absolute;inset:0;background:rgba(8,9,10,.96);z-index:50;display:none;padding:34px;overflow:auto}.overview.open{display:block}.overviewGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.thumb{border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.03);padding:16px;min-height:130px;cursor:pointer}.thumb:hover{border-color:rgba(113,112,255,.45);background:rgba(113,112,255,.10)}.thumb span{font-family:'JetBrains Mono',monospace;color:var(--accent2);font-size:11px}.thumb b{display:block;margin-top:10px;font-size:17px;line-height:1.25}.thumb p{color:var(--sub);font-size:13px;line-height:1.45}.thumb[draggable="true"]{cursor:grab}.thumb.dragging{opacity:.45;border-color:rgba(16,185,129,.55)}.thumb.drop-target{outline:2px solid rgba(113,112,255,.75);outline-offset:3px}.slideManage{display:flex;gap:8px;margin-top:12px}.slideManage button{border:1px solid var(--border);background:rgba(255,255,255,.045);color:var(--muted);border-radius:999px;padding:6px 9px;cursor:pointer;font-size:12px}.slideManage button:hover{border-color:rgba(113,112,255,.45);color:var(--text)}
     .editPanel{position:fixed;right:18px;top:72px;z-index:80;width:270px;border:1px solid rgba(113,112,255,.28);border-radius:18px;background:rgba(15,16,17,.9);backdrop-filter:blur(18px);box-shadow:var(--shadow);padding:13px;display:none;color:var(--muted);font-size:12px}.editPanel.open{display:block}.editPanel h4{margin:0 0 5px;color:var(--text);font-size:14px;font-weight:590}.editPanel p{margin:0 0 10px;line-height:1.45;color:var(--sub)}.editPanel .row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.editPanel button{border:1px solid var(--border);background:rgba(255,255,255,.045);color:var(--muted);border-radius:999px;padding:8px 10px;cursor:pointer;font-size:12px}.editPanel button:hover{border-color:rgba(113,112,255,.45);color:var(--text);background:rgba(113,112,255,.12)}.editPanel button.primary{background:rgba(16,185,129,.12);border-color:rgba(16,185,129,.35);color:#9ff3d0}.editPanel button.warn{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.32);color:#fca5a5}.editStatus{min-height:18px;color:var(--sub);line-height:1.45}.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-10px);opacity:0;z-index:100;border:1px solid rgba(16,185,129,.34);background:rgba(15,16,17,.92);color:var(--text);border-radius:999px;padding:9px 15px;box-shadow:var(--shadow);font-size:13px;pointer-events:none;transition:.22s ease}.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}body.edit-mode .editable{outline:1px dashed rgba(16,185,129,.58);outline-offset:3px;border-radius:6px;cursor:text}body.edit-mode .editable:hover{outline-color:rgba(130,143,255,.9);background:rgba(113,112,255,.06)}body.edit-mode .editable:focus{outline:2px solid rgba(16,185,129,.95);background:rgba(16,185,129,.08);box-shadow:0 0 0 4px rgba(16,185,129,.12)}body:not(.edit-mode) .editable{cursor:default}
     .mobileMenu{display:none}
     mark{background:rgba(113,112,255,.35);color:#fff;border-radius:4px;padding:0 2px}
@@ -265,9 +265,10 @@
         <div class="controls"><button class="round" onclick="prevSlide()">←</button><button class="round" onclick="nextSlide()">→</button></div>
         <div class="editPanel" id="editPanel">
           <h4>互动修改模式</h4>
-          <p>打开后可直接改标题、正文、卡片和模板。内容自动保存在本机浏览器。</p>
+          <p>打开后可直接改标题、正文、卡片、选项和模板。内容自动保存在本机浏览器。</p>
           <div class="editStatus" id="editStatus">未开启编辑。</div>
           <div class="row"><button class="primary" onclick="toggleEditMode()" id="editToggleBtn">开启编辑</button><button onclick="saveEdits()">保存</button></div>
+          <div class="row"><button onclick="insertSlideAfter()">插入页</button><button class="warn" onclick="deleteCurrentSlide()">删除页</button></div>
           <div class="row"><button onclick="exportEdits()">导出 JSON</button><button onclick="downloadEditedHtml()">导出 HTML</button></div>
           <div class="row"><button onclick="importEdits()">导入 JSON</button><button class="warn" onclick="resetEdits()">重置</button></div>
         </div>
@@ -277,7 +278,7 @@
     </main>
   </div>
   <script>
-    const slides = [...document.querySelectorAll('.slide')];
+    let slides = [...document.querySelectorAll('.slide')];
     const deck = document.getElementById('slides');
     const nav = document.getElementById('nav');
     const progressBar = document.getElementById('progressBar');
@@ -289,42 +290,115 @@
     const editToggleBtn = document.getElementById('editToggleBtn');
     const toast = document.getElementById('toast');
     const STORAGE_KEY = 'tamed-silicon-deck-edits-v1';
+    const DECK_KEY = 'tamed-silicon-deck-structure-v1';
     let index = Number(localStorage.getItem('tamed-silicon-deck-index') || 0);
     let notesOn = false;
     let editMode = false;
     let editableNodes = [];
+    let navBtns = [];
+    let draggedSlideIndex = null;
 
-    slides.forEach((s,i)=>{
-      const b=document.createElement('button'); b.className='navBtn'; b.onclick=()=>goToSlide(i);
-      b.innerHTML=`<span class="navNo">${String(i+1).padStart(2,'0')}</span><span>${s.dataset.title}</span>`; nav.appendChild(b);
-      const t=document.createElement('div'); t.className='thumb'; t.onclick=()=>{toggleOverview(false);goToSlide(i)};
-      t.innerHTML=`<span>${String(i+1).padStart(2,'0')} · ${s.dataset.section}</span><b>${s.dataset.title}</b><p>${s.innerText.replace(/\s+/g,' ').slice(0,76)}...</p>`; overviewGrid.appendChild(t);
-    });
-    const navBtns=[...document.querySelectorAll('.navBtn')];
+    function buildNavAndOverview(){
+      slides = [...document.querySelectorAll('.slide')];
+      nav.innerHTML='';
+      slides.forEach((s,i)=>{
+        const b=document.createElement('button'); b.className='navBtn'; b.onclick=()=>goToSlide(i);
+        b.innerHTML=`<span class="navNo">${String(i+1).padStart(2,'0')}</span><span>${s.dataset.title||'未命名页面'}</span>`; nav.appendChild(b);
+      });
+      navBtns=[...document.querySelectorAll('.navBtn')];
+      refreshNavAndOverview();
+    }
 
-    function goToSlide(i){ index=Math.max(0,Math.min(slides.length-1,i)); localStorage.setItem('tamed-silicon-deck-index', String(index)); deck.style.transform=`translateX(${-index*100}%)`; update(); document.getElementById('sidebar').classList.remove('open'); }
-    function update(){ navBtns.forEach((b,i)=>b.classList.toggle('active',i===index)); progressBar.style.width=((index+1)/slides.length*100)+'%'; slideMeta.textContent=`${String(index+1).padStart(2,'0')} / ${slides.length}`; sectionMeta.textContent=slides[index].dataset.section; location.hash='slide-'+(index+1); updateEditStatus(); }
+    function makeThumb(s,i){
+      const t=document.createElement('div'); t.className='thumb'; t.draggable=true; t.dataset.index=String(i);
+      t.onclick=(e)=>{ if(e.target.closest('.slideManage')) return; toggleOverview(false); goToSlide(i); };
+      t.addEventListener('dragstart',()=>{ draggedSlideIndex=i; t.classList.add('dragging'); });
+      t.addEventListener('dragend',()=>{ draggedSlideIndex=null; t.classList.remove('dragging'); document.querySelectorAll('.thumb').forEach(x=>x.classList.remove('drop-target')); });
+      t.addEventListener('dragover',e=>{ e.preventDefault(); t.classList.add('drop-target'); });
+      t.addEventListener('dragleave',()=>t.classList.remove('drop-target'));
+      t.addEventListener('drop',e=>{ e.preventDefault(); t.classList.remove('drop-target'); reorderSlide(draggedSlideIndex,i); });
+      t.innerHTML=`<span>${String(i+1).padStart(2,'0')} · ${s.dataset.section||'Section'}</span><b>${s.dataset.title||'未命名页面'}</b><p>${s.innerText.replace(/\s+/g,' ').slice(0,76)}...</p><div class="slideManage"><button type="button" onclick="event.stopPropagation(); insertSlideAfter(${i})">插入到后面</button><button type="button" onclick="event.stopPropagation(); deleteSlide(${i})">删除</button></div>`;
+      return t;
+    }
+
+    function createBlankSlide(){
+      const slide=document.createElement('article');
+      slide.className='slide'; slide.dataset.title='新增页面'; slide.dataset.section='Draft';
+      slide.innerHTML='<div class="slideInner"><div class="eyebrow">Draft</div><h2>新增页面</h2><p class="lead">点“开启编辑”后，直接改这里的标题和正文。</p><div class="grid two"><div class="card"><h4>要表达什么？</h4><p>写这页的核心观点。</p></div><div class="card"><h4>听众要带走什么？</h4><p>写这页的行动或判断标准。</p></div></div></div>';
+      return slide;
+    }
+    function rebuildDeckState(targetIndex=index){
+      slides=[...document.querySelectorAll('.slide')];
+      slides.forEach(updateSlideMetaFromContent);
+      buildNavAndOverview();
+      prepareEditableNodes();
+      bindInteractiveControls();
+      saveEdits(true);
+      goToSlide(Math.max(0,Math.min(slides.length-1,targetIndex)));
+    }
+    function insertSlideAfter(i=index){
+      slides=[...document.querySelectorAll('.slide')];
+      const at=Number.isInteger(i)?i:index;
+      const slide=createBlankSlide();
+      const anchor=slides[at];
+      if(anchor?.nextSibling) deck.insertBefore(slide,anchor.nextSibling); else deck.appendChild(slide);
+      rebuildDeckState(at+1);
+      toggleEditMode(true);
+      showToast('已插入新增页面');
+    }
+    function deleteCurrentSlide(){ deleteSlide(index); }
+    function deleteSlide(i=index){
+      slides=[...document.querySelectorAll('.slide')];
+      if(slides.length<=1){ alert('至少保留 1 页。'); return; }
+      const at=Math.max(0,Math.min(slides.length-1,i));
+      if(!confirm(`确认删除第 ${at+1} 页：${slides[at].dataset.title||'未命名页面'}？`)) return;
+      slides[at].remove();
+      rebuildDeckState(Math.min(at,slides.length-2));
+      showToast('已删除页面');
+    }
+    function reorderSlide(from,to){
+      slides=[...document.querySelectorAll('.slide')];
+      if(from===null || from===undefined || from===to) return;
+      from=Math.max(0,Math.min(slides.length-1,Number(from))); to=Math.max(0,Math.min(slides.length-1,Number(to)));
+      const moving=slides[from]; const target=slides[to];
+      if(!moving || !target || moving===target) return;
+      deck.insertBefore(moving, from<to ? target.nextSibling : target);
+      rebuildDeckState(to);
+      showToast('页面顺序已更新');
+    }
+
+    function goToSlide(i){ slides=[...document.querySelectorAll('.slide')]; index=Math.max(0,Math.min(slides.length-1,i)); localStorage.setItem('tamed-silicon-deck-index', String(index)); deck.style.transform=`translateX(${-index*100}%)`; update(); document.getElementById('sidebar').classList.remove('open'); }
+    function update(){ slides=[...document.querySelectorAll('.slide')]; navBtns.forEach((b,i)=>b.classList.toggle('active',i===index)); progressBar.style.width=((index+1)/slides.length*100)+'%'; slideMeta.textContent=`${String(index+1).padStart(2,'0')} / ${slides.length}`; sectionMeta.textContent=slides[index]?.dataset.section||''; location.hash='slide-'+(index+1); updateEditStatus(); }
     function nextSlide(){goToSlide(index+1)} function prevSlide(){goToSlide(index-1)}
     function toggleOverview(force){ const el=document.getElementById('overview'); el.classList.toggle('open', typeof force==='boolean'?force:!el.classList.contains('open')); }
     function toggleNotes(){ notesOn=!notesOn; alert(notesOn?'讲稿提示：按当前结构讲，重点是共鸣、分工和行动，不要陷入工具教学。':'讲稿提示已关闭'); }
     function toggleEditPanel(force){ editPanel.classList.toggle('open', typeof force==='boolean'?force:!editPanel.classList.contains('open')); updateEditStatus(); }
     function showToast(msg){ toast.textContent=msg; toast.classList.add('show'); clearTimeout(showToast.timer); showToast.timer=setTimeout(()=>toast.classList.remove('show'),1800); }
     function prepareEditableNodes(){
-      const selector='.slide h2,.slide h3,.slide h4,.slide p,.slide .quote,.slide .lead,.slide .pill,.slide .tag,.slide strong,.slide li,.slide b,.slide span:not(.navNo):not(.kbd),.slide pre,.slide .terminal,.slide .resultBox';
-      editableNodes=[...document.querySelectorAll(selector)].filter(el=>!el.closest('.controls,.overview,.editPanel') && el.children.length===0);
-      editableNodes.forEach((el,i)=>{ el.classList.add('editable'); el.dataset.editId=el.dataset.editId||`edit-${i}`; el.addEventListener('input',()=>{saveEdits(true); refreshNavAndOverview();}); });
+      editableNodes.forEach(el=>el.replaceWith(el.cloneNode(true)));
+      const selector='.slide h2,.slide h3,.slide h4,.slide p,.slide .quote,.slide .lead,.slide .pill,.slide .tag,.slide strong,.slide li,.slide b,.slide pre,.slide .terminal,.slide .resultBox,.slide .checkItem';
+      editableNodes=[...document.querySelectorAll(selector)].filter(el=>!el.closest('.controls,.overview,.editPanel') && !el.matches('.terminal span,.checkItem input'));
+      editableNodes.forEach((el,i)=>{
+        el.classList.add('editable');
+        el.dataset.editId=el.dataset.editId||`edit-${i}`;
+        el.contentEditable=editMode?'true':'false';
+        el.addEventListener('input',()=>{ updateSlideMetaFromContent(el.closest('.slide')); saveEdits(true); refreshNavAndOverview(); });
+      });
     }
+    function updateSlideMetaFromContent(slide){ if(!slide) return; const title=slide.querySelector('h2')?.innerText.trim(); const section=slide.querySelector('.eyebrow')?.innerText.trim(); if(title) slide.dataset.title=title.slice(0,32); if(section) slide.dataset.section=section.slice(0,24); }
     function toggleEditMode(force){ editMode=typeof force==='boolean'?force:!editMode; document.body.classList.toggle('edit-mode',editMode); editableNodes.forEach(el=>el.contentEditable=editMode?'true':'false'); editToggleBtn.textContent=editMode?'关闭编辑':'开启编辑'; if(editMode) toggleEditPanel(true); updateEditStatus(); showToast(editMode?'已开启编辑，可直接点文字修改':'已关闭编辑'); }
     function collectEdits(){ const data={savedAt:new Date().toISOString(),items:{}}; editableNodes.forEach(el=>{ data.items[el.dataset.editId]=el.innerHTML; }); return data; }
-    function saveEdits(silent=false){ localStorage.setItem(STORAGE_KEY,JSON.stringify(collectEdits())); updateEditStatus(); if(!silent) showToast('已保存到本机浏览器'); }
-    function loadEdits(){ try{ const data=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'); if(!data?.items) return; editableNodes.forEach(el=>{ if(Object.prototype.hasOwnProperty.call(data.items,el.dataset.editId)) el.innerHTML=data.items[el.dataset.editId]; }); refreshNavAndOverview(); updateEditStatus(data.savedAt); }catch(err){ console.warn('Load edits failed',err); } }
+    function saveDeckStructure(){ localStorage.setItem(DECK_KEY, deck.innerHTML); }
+    function saveEdits(silent=false){ saveDeckStructure(); localStorage.setItem(STORAGE_KEY,JSON.stringify(collectEdits())); updateEditStatus(); if(!silent) showToast('已保存到本机浏览器'); }
+    function loadDeckStructure(){ const html=localStorage.getItem(DECK_KEY); if(!html) return; deck.innerHTML=html; slides=[...document.querySelectorAll('.slide')]; }
+    function loadEdits(){ try{ const data=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null'); if(!data?.items) return; editableNodes.forEach(el=>{ if(Object.prototype.hasOwnProperty.call(data.items,el.dataset.editId)) el.innerHTML=data.items[el.dataset.editId]; }); slides.forEach(updateSlideMetaFromContent); refreshNavAndOverview(); updateEditStatus(data.savedAt); }catch(err){ console.warn('Load edits failed',err); } }
     function updateEditStatus(savedAt){ const raw=localStorage.getItem(STORAGE_KEY); let when=savedAt; if(!when && raw){ try{ when=JSON.parse(raw).savedAt; }catch(err){ when=''; } } editStatus.textContent=`${editMode?'编辑中':'未编辑'} · 第 ${index+1}/${slides.length} 页${when?' · 已保存 '+new Date(when).toLocaleString():''}`; }
     function downloadFile(name,type,content){ const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url); }
-    function exportEdits(){ saveEdits(true); downloadFile('驯化野生硅基伙伴_编辑内容.json','application/json;charset=utf-8',JSON.stringify(collectEdits(),null,2)); showToast('已导出 JSON'); }
-    function downloadEditedHtml(){ saveEdits(true); const clone=document.documentElement.cloneNode(true); clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable')); clone.querySelector('body')?.classList.remove('edit-mode'); downloadFile('驯化野生硅基伙伴_已编辑版.html','text/html;charset=utf-8','<!DOCTYPE html>\n'+clone.outerHTML); showToast('已导出 HTML'); }
-    function importEdits(){ const input=document.createElement('input'); input.type='file'; input.accept='application/json'; input.onchange=()=>{ const file=input.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{ try{ const data=JSON.parse(reader.result); if(!data.items) throw new Error('missing items'); localStorage.setItem(STORAGE_KEY,JSON.stringify(data)); loadEdits(); showToast('已导入编辑内容'); }catch(err){ alert('导入失败：JSON 格式不对'); } }; reader.readAsText(file); }; input.click(); }
-    function resetEdits(){ if(!confirm('确认清空本机保存的编辑内容？页面会恢复到原始 HTML。')) return; localStorage.removeItem(STORAGE_KEY); location.reload(); }
-    function refreshNavAndOverview(){ navBtns.forEach((b,i)=>{ b.querySelector('span:last-child').textContent=slides[i].dataset.title; }); overviewGrid.innerHTML=''; slides.forEach((s,i)=>{ const t=document.createElement('div'); t.className='thumb'; t.onclick=()=>{toggleOverview(false);goToSlide(i)}; t.innerHTML=`<span>${String(i+1).padStart(2,'0')} · ${s.dataset.section}</span><b>${s.dataset.title}</b><p>${s.innerText.replace(/\s+/g,' ').slice(0,76)}...</p>`; overviewGrid.appendChild(t); }); }
+    function exportEdits(){ saveEdits(true); downloadFile('驯化野生硅基伙伴_编辑内容.json','application/json;charset=utf-8',JSON.stringify({structure:deck.innerHTML,edits:collectEdits()},null,2)); showToast('已导出 JSON'); }
+    function downloadEditedHtml(){ saveEdits(true); const clone=document.documentElement.cloneNode(true); clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable')); clone.querySelectorAll('.editable').forEach(el=>el.classList.remove('editable')); clone.querySelector('body')?.classList.remove('edit-mode'); downloadFile('驯化野生硅基伙伴_已编辑版.html','text/html;charset=utf-8','<!DOCTYPE html>\n'+clone.outerHTML); showToast('已导出 HTML'); }
+    function importEdits(){ const input=document.createElement('input'); input.type='file'; input.accept='application/json'; input.onchange=()=>{ const file=input.files?.[0]; if(!file) return; const reader=new FileReader(); reader.onload=()=>{ try{ const data=JSON.parse(reader.result); const edits=data.edits||data; if(data.structure){ localStorage.setItem(DECK_KEY,data.structure); deck.innerHTML=data.structure; } if(!edits.items) throw new Error('missing items'); localStorage.setItem(STORAGE_KEY,JSON.stringify(edits)); slides=[...document.querySelectorAll('.slide')]; buildNavAndOverview(); prepareEditableNodes(); loadEdits(); goToSlide(index); showToast('已导入编辑内容'); }catch(err){ alert('导入失败：JSON 格式不对'); } }; reader.readAsText(file); }; input.click(); }
+    function resetEdits(){ if(!confirm('确认清空本机保存的编辑内容和页面增删改？页面会恢复到原始 HTML。')) return; localStorage.removeItem(STORAGE_KEY); localStorage.removeItem(DECK_KEY); location.reload(); }
+    function refreshNavAndOverview(){ slides=[...document.querySelectorAll('.slide')]; navBtns.forEach((b,i)=>{ if(slides[i]) b.querySelector('span:last-child').textContent=slides[i].dataset.title||'未命名页面'; }); overviewGrid.innerHTML=''; slides.forEach((s,i)=>overviewGrid.appendChild(makeThumb(s,i))); }
 
     document.addEventListener('keydown',e=>{
       if(e.target.isContentEditable) return;
@@ -337,14 +411,19 @@
     });
 
     function openTab(evt,id){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tabPanel').forEach(p=>p.classList.remove('active')); evt.currentTarget.classList.add('active'); document.getElementById(id).classList.add('active'); }
-    document.querySelectorAll('#steps .step').forEach(step=>step.addEventListener('click',()=>{document.querySelectorAll('#steps .step').forEach(s=>s.classList.remove('active'));step.classList.add('active')}));
-    document.querySelectorAll('#painList input').forEach(input=>input.addEventListener('change',()=>{ const n=document.querySelectorAll('#painList input:checked').length; const result=document.getElementById('painResult'); let msg='建议先选一个“30 分钟以上、以后还会重复”的真实任务。'; if(n>=3) msg='这里面已经有很强的自动化/工作流机会：先挑一个高频、高摩擦、低风险的点跑第一轮。'; if(n>=6) msg='这不是单点提效，是一组信息流转问题。适合先做模板/Checklist，再升级成小工具或系统。'; result.textContent=`已选择 ${n} 颗钉子。${msg}`; }));
+    function bindInteractiveControls(){
+      document.querySelectorAll('#steps .step').forEach(step=>step.addEventListener('click',()=>{document.querySelectorAll('#steps .step').forEach(s=>s.classList.remove('active'));step.classList.add('active')}));
+      document.querySelectorAll('#painList input').forEach(input=>input.addEventListener('change',()=>{ const n=document.querySelectorAll('#painList input:checked').length; const result=document.getElementById('painResult'); if(!result) return; let msg='建议先选一个“30 分钟以上、以后还会重复”的真实任务。'; if(n>=3) msg='这里面已经有很强的自动化/工作流机会：先挑一个高频、高摩擦、低风险、能反复复用的点跑第一轮。'; if(n>=6) msg='这不是单点提效，是一组信息流转问题。适合先做模板/Checklist，再升级成小工具或系统。'; result.textContent=`已选择 ${n} 颗钉子。${msg}`; }));
+    }
     function copyTemplate(){ const txt=document.getElementById('promptTpl').innerText; navigator.clipboard?.writeText(txt).then(()=>alert('已复制提示词模板')).catch(()=>alert(txt)); }
     function escapeRegExp(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
     function clearMarks(){ slides.forEach(s=>s.querySelectorAll('mark').forEach(m=>m.replaceWith(document.createTextNode(m.textContent)))); }
     function searchSlides(q){ clearMarks(); q=q.trim(); if(!q){navBtns.forEach(b=>b.style.display='grid'); return;} const re=new RegExp(escapeRegExp(q),'gi'); let first=-1; slides.forEach((s,i)=>{ const hit=s.innerText.toLowerCase().includes(q.toLowerCase()); navBtns[i].style.display=hit?'grid':'none'; if(hit&&first<0) first=i; if(hit){ highlightNode(s,re); }}); if(first>=0) goToSlide(first); }
     function highlightNode(root,re){ const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.parentElement && !['SCRIPT','STYLE','MARK'].includes(n.parentElement.tagName)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT}); const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode); nodes.forEach(n=>{ if(!re.test(n.nodeValue)) return; re.lastIndex=0; const frag=document.createDocumentFragment(); let last=0; n.nodeValue.replace(re,(m,off)=>{ frag.appendChild(document.createTextNode(n.nodeValue.slice(last,off))); const mark=document.createElement('mark'); mark.textContent=m; frag.appendChild(mark); last=off+m.length; }); frag.appendChild(document.createTextNode(n.nodeValue.slice(last))); n.replaceWith(frag); }); }
+    loadDeckStructure();
+    buildNavAndOverview();
     prepareEditableNodes();
+    bindInteractiveControls();
     loadEdits();
     const start=location.hash.match(/slide-(\d+)/); if(start) index=Math.max(0,Math.min(slides.length-1,Number(start[1])-1)); goToSlide(index);
   </script>
