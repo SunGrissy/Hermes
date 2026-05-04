@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>驯化野生硅基伙伴｜新手训练营</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg:#08090a; --panel:#0f1011; --surface:#191a1b; --surface2:#202126;
+      --text:#f7f8f8; --muted:#d0d6e0; --sub:#8a8f98; --ghost:#62666d;
+      --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.05);
+      --accent:#7170ff; --accent2:#828fff; --brand:#5e6ad2; --green:#10b981;
+      --warning:#f59e0b; --danger:#ef4444;
+      --shadow:0 20px 80px rgba(0,0,0,.45);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:radial-gradient(circle at 18% 8%,rgba(113,112,255,.16),transparent 34%),radial-gradient(circle at 82% 4%,rgba(16,185,129,.08),transparent 30%),var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-feature-settings:"cv01","ss03";overflow:hidden}
+    button,input,textarea{font:inherit}
+    .app{display:grid;grid-template-columns:280px 1fr;height:100vh;min-height:0}
+    .sidebar{border-right:1px solid var(--border2);background:rgba(15,16,17,.82);backdrop-filter:blur(18px);padding:22px 18px;display:flex;flex-direction:column;gap:18px;min-height:0;z-index:20}
+    .brand{display:flex;gap:12px;align-items:center;padding:8px 6px 14px;border-bottom:1px solid var(--border2)}
+    .logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#2dd4bf);box-shadow:0 0 32px rgba(113,112,255,.35);display:grid;place-items:center;font-weight:600}
+    .brand h1{font-size:15px;line-height:1.25;margin:0;font-weight:590;letter-spacing:-.15px}
+    .brand p{margin:4px 0 0;color:var(--sub);font-size:12px}
+    .progressBox{padding:12px;border:1px solid var(--border);border-radius:14px;background:rgba(255,255,255,.025)}
+    .meta{display:flex;justify-content:space-between;color:var(--sub);font-size:12px;margin-bottom:9px}
+    .bar{height:7px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden}
+    .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--brand),var(--green));border-radius:99px;transition:.25s ease}
+    nav{overflow:auto;padding-right:2px;display:flex;flex-direction:column;gap:6px}
+    .navBtn{width:100%;text-align:left;border:1px solid transparent;background:transparent;color:var(--sub);border-radius:10px;padding:10px 10px;cursor:pointer;font-size:13px;line-height:1.35;display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start}
+    .navBtn:hover{background:rgba(255,255,255,.04);color:var(--muted);border-color:var(--border2)}
+    .navBtn.active{background:rgba(113,112,255,.14);color:var(--text);border-color:rgba(113,112,255,.32)}
+    .navNo{font-family:'JetBrains Mono',monospace;color:var(--ghost);font-size:11px;margin-top:1px}
+    .navBtn.active .navNo{color:var(--accent2)}
+    .tools{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .toolBtn,.primaryBtn{border:1px solid var(--border);background:rgba(255,255,255,.035);color:var(--muted);border-radius:10px;padding:10px 12px;cursor:pointer;font-size:12px;font-weight:510}
+    .toolBtn:hover,.primaryBtn:hover{background:rgba(255,255,255,.065);color:var(--text)}
+    .primaryBtn{background:var(--brand);color:#fff;border-color:rgba(255,255,255,.12)}
+    main{height:100vh;min-width:0;position:relative;display:flex;flex-direction:column}
+    .topbar{height:58px;border-bottom:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:rgba(8,9,10,.55);backdrop-filter:blur(18px);z-index:10}
+    .crumb{font-size:13px;color:var(--sub)} .crumb b{color:var(--text);font-weight:510}
+    .kbd{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ghost);border:1px solid var(--border);border-radius:6px;padding:3px 6px;background:rgba(255,255,255,.025)}
+    .search{display:flex;align-items:center;gap:8px;border:1px solid var(--border);background:rgba(255,255,255,.025);border-radius:12px;padding:8px 11px;min-width:280px}
+    .search input{background:transparent;border:0;outline:0;color:var(--text);width:100%;font-size:13px}.search span{color:var(--ghost)}
+    .stage{position:relative;flex:1;min-height:0;overflow:hidden}
+    .slides{height:100%;display:flex;transition:transform .42s cubic-bezier(.2,.8,.2,1)}
+    .slide{min-width:100%;height:100%;overflow:auto;padding:54px clamp(30px,5vw,74px) 82px;scrollbar-color:rgba(255,255,255,.18) transparent}
+    .slideInner{max-width:1120px;margin:0 auto;min-height:calc(100vh - 210px);display:flex;flex-direction:column;justify-content:center}
+    .eyebrow{font-family:'JetBrains Mono',monospace;color:var(--accent2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px}
+    h2{font-size:clamp(36px,5.5vw,72px);line-height:.98;letter-spacing:-1.4px;margin:0 0 20px;font-weight:510;max-width:980px}
+    h3{font-size:clamp(24px,3vw,40px);line-height:1.05;letter-spacing:-.8px;margin:0 0 16px;font-weight:510}
+    .lead{font-size:clamp(18px,2vw,24px);line-height:1.55;color:var(--muted);max-width:900px;margin:0 0 30px}.muted{color:var(--sub)}
+    .heroTitle{font-size:clamp(44px,8vw,92px);max-width:1000px}.heroSub{font-size:clamp(18px,2.2vw,26px);color:var(--muted);line-height:1.55;max-width:860px}
+    .pillRow{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0}.pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:rgba(255,255,255,.025);border-radius:999px;padding:8px 12px;color:var(--muted);font-size:13px}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 15px var(--green)}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.grid.two{grid-template-columns:repeat(2,1fr)}.grid.four{grid-template-columns:repeat(4,1fr)}
+    .card{border:1px solid var(--border);border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.018));padding:20px;box-shadow:0 0 0 1px rgba(0,0,0,.18);position:relative;overflow:hidden}.card:hover{border-color:rgba(113,112,255,.32);background:linear-gradient(180deg,rgba(113,112,255,.08),rgba(255,255,255,.018))}
+    .card h4{font-size:18px;margin:0 0 10px;font-weight:590;letter-spacing:-.2px}.card p,.card li{color:var(--sub);font-size:15px;line-height:1.58}.card ul{padding-left:18px;margin:10px 0 0}.card .tag{font-family:'JetBrains Mono',monospace;color:var(--accent2);font-size:11px;margin-bottom:14px}
+    .quote{font-size:clamp(28px,4.3vw,56px);line-height:1.08;letter-spacing:-1px;border-left:3px solid var(--accent);padding-left:24px;margin:24px 0;color:var(--text);max-width:960px}.quote small{display:block;margin-top:18px;color:var(--sub);font-size:17px;line-height:1.55;letter-spacing:0}
+    .compare{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:24px}.roleCard{border:1px solid var(--border);border-radius:18px;padding:18px;background:rgba(255,255,255,.025)}.roleCard h4{margin:0 0 14px;font-size:20px}.roleCard strong{display:block;color:var(--muted);font-size:13px;margin:12px 0 6px}.roleCard p{margin:0;color:var(--sub);font-size:14px;line-height:1.55}.roleCard.human{border-color:rgba(113,112,255,.32)}.roleCard.prob{border-color:rgba(16,185,129,.28)}.roleCard.det{border-color:rgba(245,158,11,.28)}
+    .steps{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:26px}.step{border:1px solid var(--border);border-radius:14px;padding:14px;background:rgba(255,255,255,.025);cursor:pointer;min-height:138px;transition:.2s}.step:hover,.step.active{transform:translateY(-4px);border-color:rgba(113,112,255,.42);background:rgba(113,112,255,.12)}.stepNo{font-family:'JetBrains Mono',monospace;color:var(--accent2);font-size:12px}.step b{display:block;margin:10px 0 8px}.step span{color:var(--sub);font-size:13px;line-height:1.45}
+    .painList{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px}.checkItem{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:12px;background:rgba(255,255,255,.025);padding:12px;cursor:pointer;color:var(--muted);font-size:14px}.checkItem input{accent-color:var(--accent);margin-top:2px}.resultBox{margin-top:18px;border:1px solid rgba(16,185,129,.28);background:rgba(16,185,129,.08);border-radius:16px;padding:16px;color:var(--muted);line-height:1.55}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 14px}.tab{border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,.025);color:var(--sub);padding:9px 13px;cursor:pointer;font-size:13px}.tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}.tabPanel{display:none}.tabPanel.active{display:block}
+    .demoScreen{border:1px solid var(--border);border-radius:22px;background:#0b0c0e;box-shadow:var(--shadow);overflow:hidden;margin-top:18px}.demoHead{height:42px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:7px;padding:0 16px;background:rgba(255,255,255,.025)}.traffic{width:10px;height:10px;border-radius:50%;background:#ef4444}.traffic:nth-child(2){background:#f59e0b}.traffic:nth-child(3){background:#10b981}.demoBody{padding:20px}.terminal{font-family:'JetBrains Mono',monospace;color:#b8c0cc;font-size:13px;line-height:1.65;white-space:pre-wrap}.terminal .cmd{color:#828fff}.terminal .ok{color:#10b981}
+    .template{border:1px solid var(--border);border-radius:18px;background:rgba(255,255,255,.03);padding:18px;position:relative}.template pre{white-space:pre-wrap;margin:0;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.65}.copyBtn{position:absolute;right:14px;top:14px;border:1px solid var(--border);background:rgba(255,255,255,.05);color:var(--muted);border-radius:9px;padding:7px 10px;cursor:pointer;font-size:12px}
+    .controls{position:absolute;right:24px;bottom:22px;display:flex;gap:10px;z-index:30}.round{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:rgba(15,16,17,.78);backdrop-filter:blur(16px);color:var(--text);cursor:pointer}.round:hover{background:rgba(113,112,255,.22);border-color:rgba(113,112,255,.4)}
+    .overview{position:absolute;inset:0;background:rgba(8,9,10,.96);z-index:50;display:none;padding:34px;overflow:auto}.overview.open{display:block}.overviewGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}.thumb{border:1px solid var(--border);border-radius:16px;background:rgba(255,255,255,.03);padding:16px;min-height:130px;cursor:pointer}.thumb:hover{border-color:rgba(113,112,255,.45);background:rgba(113,112,255,.10)}.thumb span{font-family:'JetBrains Mono',monospace;color:var(--accent2);font-size:11px}.thumb b{display:block;margin-top:10px;font-size:17px;line-height:1.25}.thumb p{color:var(--sub);font-size:13px;line-height:1.45}
+    .mobileMenu{display:none}
+    mark{background:rgba(113,112,255,.35);color:#fff;border-radius:4px;padding:0 2px}
+    @media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{position:absolute;inset:58px auto 0 0;width:290px;transform:translateX(-105%);transition:.25s;box-shadow:var(--shadow)}.sidebar.open{transform:none}.mobileMenu{display:inline-flex}.search{min-width:160px}.slide{padding:38px 22px 80px}.grid,.grid.two,.grid.four,.compare,.painList{grid-template-columns:1fr}.steps{grid-template-columns:repeat(2,1fr)}.topbar{padding:0 12px}.heroTitle{font-size:44px}}
+    @media print{html,body{height:auto;overflow:auto;background:#fff;color:#111}.app{display:block;height:auto}.sidebar,.topbar,.controls,.overview{display:none!important}.stage{overflow:visible}.slides{display:block;transform:none!important}.slide{page-break-after:always;height:auto;min-height:100vh;overflow:visible;color:#111}.card,.roleCard,.template,.demoScreen{border:1px solid #ddd;background:#fff;color:#111}.lead,.muted,.card p,.card li,.roleCard p{color:#333}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="logo">AI</div><div><h1>驯化野生硅基伙伴</h1><p>新手训练营｜Product Team</p></div></div>
+      <div class="progressBox"><div class="meta"><span id="slideMeta">01 / 18</span><span id="sectionMeta">Opening</span></div><div class="bar"><i id="progressBar"></i></div></div>
+      <nav id="nav"></nav>
+      <div class="tools"><button class="toolBtn" onclick="toggleOverview()">总览</button><button class="toolBtn" onclick="window.print()">打印/PDF</button><button class="toolBtn" onclick="toggleNotes()">讲稿提示</button><button class="primaryBtn" onclick="goToSlide(slides.length-1)">行动页</button></div>
+    </aside>
+    <main>
+      <div class="topbar">
+        <button class="toolBtn mobileMenu" onclick="document.getElementById('sidebar').classList.toggle('open')">目录</button>
+        <div class="crumb"><b>核心结构：</b>共鸣 → 驯化 → 分工 → 造工具 → 行动</div>
+        <div class="search"><span>⌕</span><input id="searchInput" placeholder="搜索：钉子 / Memory / 边界 / 行动" oninput="searchSlides(this.value)"><span class="kbd">/</span></div>
+      </div>
+      <section class="stage">
+        <div class="slides" id="slides">
+          <article class="slide" data-title="封面" data-section="Opening"><div class="slideInner">
+            <div class="eyebrow">AI Practical Sharing / Product Team</div>
+            <h2 class="heroTitle">驯化野生硅基伙伴</h2>
+            <p class="heroSub">不是学一个 AI 工具，而是训练一个能理解你、追问你、质检你、沉淀你的专属协作伙伴。</p>
+            <div class="pillRow"><span class="pill"><i class="dot"></i>新手训练营</span><span class="pill">分享人：孙懿（猫姐）</span><span class="pill">文稿整理：满满</span></div>
+          </div></article>
+
+          <article class="slide" data-title="今天解决的四个问题" data-section="Opening"><div class="slideInner">
+            <div class="eyebrow">Why this sharing</div><h2>未来已来，但好像也没那么美好？</h2>
+            <div class="grid four">
+              <div class="card"><div class="tag">Question 01</div><h4>我的 AI 怎么不好用？</h4><p>为什么你的 AI、我的 AI，好像不是一个东西。</p></div>
+              <div class="card"><div class="tag">Question 02</div><h4>AI 都做了，我做啥？</h4><p>人的价值不是消失，而是换了位置。</p></div>
+              <div class="card"><div class="tag">Question 03</div><h4>发展太快，不如等等？</h4><p>该熟悉的不是某个工具，而是协作接口。</p></div>
+              <div class="card"><div class="tag">Question 04</div><h4>为什么越用越累？</h4><p>AI 省掉执行时间，但新增判断负荷。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="核心判断" data-section="Opening"><div class="slideInner">
+            <div class="eyebrow">Core thesis</div><h2>AI 不好用，很多时候不是工具问题。</h2>
+            <div class="quote">问题在于：你有没有给它成为伙伴的条件。<small>好用的新同事是传帮带磨合出来的；好用的 AI 是驯化出来的。</small></div>
+          </div></article>
+
+          <article class="slide" data-title="像不像实习生" data-section="共鸣"><div class="slideInner">
+            <div class="eyebrow">Question 01</div><h2>像不像刚入职的实习生？</h2>
+            <div class="grid">
+              <div class="card"><h4>说得没错，但也没用</h4><p>通用判断很多，业务判断很少。听起来合理，拿去就露馅。</p></div>
+              <div class="card"><h4>产出的文档没法看</h4><p>不是它不会写，而是它不知道你的标准、语境和禁区。</p></div>
+              <div class="card"><h4>还不如我自己做得快</h4><p>因为你只让它交付结果，没有让它补齐上下文、追问和迭代。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="三类错位" data-section="共鸣"><div class="slideInner">
+            <div class="eyebrow">Diagnosis</div><h2>问题通常出在三类错位</h2>
+            <div class="grid">
+              <div class="card"><h4>期望错位</h4><p>把通用 AI 当万能答案机，期待一句话直接交付成品。</p></div>
+              <div class="card"><h4>磨合不足</h4><p>抛一句话，不满意就淘汰，没有跑通过完整迭代。</p></div>
+              <div class="card"><h4>场景错配</h4><p>拿着锤子找钉子，而不是从真实反复疼痛的工作切入。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="重新认识硅基伙伴" data-section="驯化"><div class="slideInner">
+            <div class="eyebrow">Taming model</div><h2>重新认识硅基伙伴</h2>
+            <p class="lead">从“让 AI 写”升级到“让 AI 追问、质检、沉淀”。不要只让 AI 给答案，要让 AI 帮你暴露盲区。</p>
+            <div class="grid">
+              <div class="card"><h4>LLM</h4><p>负责理解、生成、改写、扩展，但天然不拥有你的业务事实。</p></div>
+              <div class="card"><h4>Memory</h4><p>把稳定偏好、项目背景、黑话、标准、禁区沉下来。</p></div>
+              <div class="card"><h4>Skill / Workflow</h4><p>把一次有效协作变成可复用流程，下一次不用从零开始。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="驯化公式" data-section="驯化"><div class="slideInner">
+            <div class="eyebrow">Taming</div><h2>一个 AI 伙伴 = 角色 + 记忆 + 工作流</h2>
+            <div class="grid">
+              <div class="card"><h4>角色</h4><p>资料整理员、方案挑战者、表达润色员、流程检查员、需求追问员。</p></div>
+              <div class="card"><h4>记忆</h4><p>稳定偏好和项目背景：格式、黑话、标准、禁区。</p></div>
+              <div class="card"><h4>工作流</h4><p>读材料 → 提炼观点 → 诊断结构 → 生成提纲 → 质检 → 行动项。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="人和AI怎么分工" data-section="分工"><div class="slideInner">
+            <div class="eyebrow">Division</div><h2>确定性硅基压低损耗，概率性硅基扩大半径</h2>
+            <div class="compare">
+              <div class="roleCard human"><h4>人</h4><strong>负责</strong><p>目标、价值、标准、取舍、验收、责任。</p><strong>不负责</strong><p>长期做人肉中继和重复搬运。</p></div>
+              <div class="roleCard prob"><h4>概率性硅基</h4><strong>负责</strong><p>理解、追问、生成、整理、挑战、扩展视角。</p><strong>不负责</strong><p>替人做最终判断。</p></div>
+              <div class="roleCard det"><h4>确定性硅基</h4><strong>负责</strong><p>稳定执行、自动流转、提醒、校验、沉淀。</p><strong>不负责</strong><p>处理模糊取舍和价值判断。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="新的团队" data-section="分工"><div class="slideInner">
+            <div class="eyebrow">AI Native Team</div><h2>未来的最小生产单元是“人 + AI”</h2>
+            <div class="grid">
+              <div class="card"><h4>0 损耗</h4><p>信息自动流转，减少等待确认、等待同步、等待转发。</p></div>
+              <div class="card"><h4>边际成本趋近于 0</h4><p>成功跑通一次的流程，可以低成本复刻。</p></div>
+              <div class="card"><h4>碳硅分流</h4><p>确定的事务性工作交给工具，有限脑力投入创造和判断。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="人的价值迁移" data-section="分工"><div class="slideInner">
+            <div class="eyebrow">Human value</div><h2>人的价值不是写出文档这个动作</h2>
+            <div class="quote">而是“能把诉求讲清楚”背后的思考。<small>提供目标：要解决什么问题？要实现什么体验？<br>提供标准：怎么算做对、怎么算做好？<br>做决策：什么值得？什么不值得？</small></div>
+          </div></article>
+
+          <article class="slide" data-title="不要等终极版" data-section="造工具"><div class="slideInner">
+            <div class="eyebrow">Change</div><h2>AI 最大的变化：降低“造工具”的门槛</h2>
+            <p class="lead">它真正的意义是：让懂业务痛点的人，第一次可以直接参与制造工具。</p>
+            <div class="quote">Vibe Coding 不是让产品变程序员，而是让最懂钉子的人，也能参与造锤子。</div>
+          </div></article>
+
+          <article class="slide" data-title="找钉子检查器" data-section="互动"><div class="slideInner">
+            <div class="eyebrow">Interactive checklist</div><h2>哪颗钉子正在扎着我？</h2>
+            <p class="lead">现场让听众勾选。勾选越多，越适合把它变成 AI 工作流或小工具。</p>
+            <div class="painList" id="painList">
+              <label class="checkItem"><input type="checkbox">每周重复整理数据、周报、日报</label>
+              <label class="checkItem"><input type="checkbox">会议纪要没人转成行动项</label>
+              <label class="checkItem"><input type="checkbox">需求文档格式总是不统一</label>
+              <label class="checkItem"><input type="checkbox">评审问题反复漏同类风险</label>
+              <label class="checkItem"><input type="checkbox">用户反馈散在群聊、表格、文档里</label>
+              <label class="checkItem"><input type="checkbox">新人不知道去哪找标准、模板、案例</label>
+              <label class="checkItem"><input type="checkbox">流程靠人提醒，没人提醒就断</label>
+              <label class="checkItem"><input type="checkbox">每次从零问、从零写、从零整理</label>
+            </div>
+            <div class="resultBox" id="painResult">已选择 0 颗钉子。建议先选一个“30 分钟以上、以后还会重复”的真实任务。</div>
+          </div></article>
+
+          <article class="slide" data-title="三个演示案例" data-section="互动"><div class="slideInner">
+            <div class="eyebrow">Demo options</div><h2>现场演示：不要只讲概念，跑一个真实案例</h2>
+            <div class="tabs"><button class="tab active" onclick="openTab(event,'demo1')">TaskReminder</button><button class="tab" onclick="openTab(event,'demo2')">PM-System</button><button class="tab" onclick="openTab(event,'demo3')">制作人中控台</button></div>
+            <div id="demo1" class="tabPanel active"><div class="demoScreen"><div class="demoHead"><i class="traffic"></i><i class="traffic"></i><i class="traffic"></i></div><div class="demoBody"><div class="terminal"><span class="cmd">痛点：</span>很多事项靠人提醒，没人提醒就断。\n<span class="cmd">AI 追问：</span>提醒对象是谁？触发条件是什么？失败后谁兜底？\n<span class="ok">产物：</span>一句话生成任务提醒网页，下一次复用配置。</div></div></div></div>
+            <div id="demo2" class="tabPanel"><div class="demoScreen"><div class="demoHead"><i class="traffic"></i><i class="traffic"></i><i class="traffic"></i></div><div class="demoBody"><div class="terminal"><span class="cmd">痛点：</span>管线信息散在群聊、文档和口头同步里。\n<span class="cmd">AI 追问：</span>谁看？看什么？异常如何升级？\n<span class="ok">产物：</span>AI 帮忙设计一版管线管理系统结构。</div></div></div></div>
+            <div id="demo3" class="tabPanel"><div class="demoScreen"><div class="demoHead"><i class="traffic"></i><i class="traffic"></i><i class="traffic"></i></div><div class="demoBody"><div class="terminal"><span class="cmd">痛点：</span>制作人判断材料分散，靠临时追问拼图。\n<span class="cmd">AI 追问：</span>哪些信息是事实？哪些需要人判断？哪些可自动拉取？\n<span class="ok">产物：</span>多系统整合的信息汇总入口。</div></div></div></div>
+          </div></article>
+
+          <article class="slide" data-title="六步方法" data-section="方法"><div class="slideInner">
+            <div class="eyebrow">Method</div><h2>从痛点到工具的六步</h2>
+            <p class="lead">不要直接让 AI 写方案，先让它补齐缺失信息。</p>
+            <div class="steps" id="steps">
+              <div class="step active"><div class="stepNo">01</div><b>找钉子</b><span>哪件事反复痛、每周重复、靠人肉同步？</span></div>
+              <div class="step"><div class="stepNo">02</div><b>讲痛点</b><span>谁在何时遇到什么问题？错了会怎样？</span></div>
+              <div class="step"><div class="stepNo">03</div><b>让 AI 追问</b><span>先补上下文，不急着写代码或方案。</span></div>
+              <div class="step"><div class="stepNo">04</div><b>形成流程</b><span>哪些规则化？哪些判断必须人做？</span></div>
+              <div class="step"><div class="stepNo">05</div><b>做成工具</b><span>提示词、Checklist、表格、小网页、脚本。</span></div>
+              <div class="step"><div class="stepNo">06</div><b>复用迭代</b><span>跑一次不算提效，下次复用才是提效。</span></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="AI适合做什么" data-section="落地"><div class="slideInner">
+            <div class="eyebrow">Practical use</div><h2>现阶段 AI 可以快速发挥作用的事</h2>
+            <div class="grid two">
+              <div class="card"><h4>把散落信息压缩成判断材料</h4><p>PM 系统、钉钉群、会议纪要、需求文档、周报日报、候选人材料。</p></div>
+              <div class="card"><h4>把空白页变成 60 分初稿</h4><p>需求文档、复盘提纲、汇报材料、面试评价、方案评审意见。</p></div>
+              <div class="card"><h4>穷举、反问、找盲区</h4><p>用户、研发、测试、运营、制作人多视角挑战方案。</p></div>
+              <div class="card"><h4>把一次经验沉淀成流程</h4><p>Skill / SOP / 模板 / Checklist / 工作流，下一次不用重来。</p></div>
+            </div>
+          </div></article>
+
+          <article class="slide" data-title="边界" data-section="落地"><div class="slideInner">
+            <div class="eyebrow">Boundary</div><h2>越贴近真实工作，越不能神化 AI</h2>
+            <div class="grid two">
+              <div class="card"><h4>AI 不能替人负责</h4><ul><li>不能替制作人决定版本取舍</li><li>不能替管理者判断人怎么培养</li><li>不能替负责人承担上线风险</li></ul></div>
+              <div class="card"><h4>AI 不能当事实数据源</h4><ul><li>排期要看 PM 系统</li><li>日程、待办、文档状态要查系统</li><li>代码脚本要跑测试</li><li>人事评价要回到事实证据</li></ul></div>
+            </div>
+            <div class="quote">AI 可以帮你想得更全，但不能替你负责。</div>
+          </div></article>
+
+          <article class="slide" data-title="越用越累" data-section="落地"><div class="slideInner">
+            <div class="eyebrow">Workload shift</div><h2>AI 省掉执行时间，但新增判断负荷</h2>
+            <p class="lead">人的责任没有消失，只是位置变了。AI 没有让人天然更轻松，它只是把工作从执行迁移到了判断。</p>
+            <div class="quote">新生产力需要新生产关系：岗位边界、协作流程、信息流转都会被重构。</div>
+          </div></article>
+
+          <article class="slide" data-title="行动指南" data-section="Action"><div class="slideInner">
+            <div class="eyebrow">Action</div><h2>今天下班前完成一轮驯化</h2>
+            <p class="lead">选一个 30 分钟以上、以后还会重复出现的真实任务。出第一版产物，至少反馈两轮，明天复用一次。</p>
+            <div class="template"><button class="copyBtn" onclick="copyTemplate()">复制模板</button><pre id="promptTpl">我有一个反复出现的工作痛点：
+【描述场景】
+
+现在的做法是：
+【谁在什么时候，用什么方式处理】
+
+请先不要直接给方案。先问我 5 个关键问题，帮我判断：
+1. 真正的钉子是什么；
+2. 哪些步骤可以规则化；
+3. 哪些判断必须由人做；
+4. 第一版最小可用方案是什么；
+5. 成功跑通后如何沉淀为模板、Checklist、小工具或工作流。</pre></div>
+          </div></article>
+
+          <article class="slide" data-title="收束" data-section="Closing"><div class="slideInner">
+            <div class="eyebrow">Closing</div><h2>别从“学 AI 工具”开始</h2>
+            <div class="quote">从找一颗真实钉子，训练一个能帮你解决它的硅基伙伴开始。<small>AI 是放大器，不是灵魂。人的价值是找到真问题，定义好标准，做出取舍，并把一次解决变成可复用生产力。</small></div>
+          </div></article>
+        </div>
+        <div class="controls"><button class="round" onclick="prevSlide()">←</button><button class="round" onclick="nextSlide()">→</button></div>
+        <div class="overview" id="overview"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px"><h3>页面总览</h3><button class="toolBtn" onclick="toggleOverview()">关闭</button></div><div class="overviewGrid" id="overviewGrid"></div></div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const deck = document.getElementById('slides');
+    const nav = document.getElementById('nav');
+    const progressBar = document.getElementById('progressBar');
+    const slideMeta = document.getElementById('slideMeta');
+    const sectionMeta = document.getElementById('sectionMeta');
+    const overviewGrid = document.getElementById('overviewGrid');
+    let index = 0;
+    let notesOn = false;
+
+    slides.forEach((s,i)=>{
+      const b=document.createElement('button'); b.className='navBtn'; b.onclick=()=>goToSlide(i);
+      b.innerHTML=`<span class="navNo">${String(i+1).padStart(2,'0')}</span><span>${s.dataset.title}</span>`; nav.appendChild(b);
+      const t=document.createElement('div'); t.className='thumb'; t.onclick=()=>{toggleOverview(false);goToSlide(i)};
+      t.innerHTML=`<span>${String(i+1).padStart(2,'0')} · ${s.dataset.section}</span><b>${s.dataset.title}</b><p>${s.innerText.replace(/\s+/g,' ').slice(0,76)}...</p>`; overviewGrid.appendChild(t);
+    });
+    const navBtns=[...document.querySelectorAll('.navBtn')];
+
+    function goToSlide(i){ index=Math.max(0,Math.min(slides.length-1,i)); deck.style.transform=`translateX(${-index*100}%)`; update(); document.getElementById('sidebar').classList.remove('open'); }
+    function update(){ navBtns.forEach((b,i)=>b.classList.toggle('active',i===index)); progressBar.style.width=((index+1)/slides.length*100)+'%'; slideMeta.textContent=`${String(index+1).padStart(2,'0')} / ${slides.length}`; sectionMeta.textContent=slides[index].dataset.section; location.hash='slide-'+(index+1); }
+    function nextSlide(){goToSlide(index+1)} function prevSlide(){goToSlide(index-1)}
+    function toggleOverview(force){ const el=document.getElementById('overview'); el.classList.toggle('open', typeof force==='boolean'?force:!el.classList.contains('open')); }
+    function toggleNotes(){ notesOn=!notesOn; alert(notesOn?'讲稿提示：按当前结构讲，重点是共鸣、分工和行动，不要陷入工具教学。':'讲稿提示已关闭'); }
+
+    document.addEventListener('keydown',e=>{
+      if(e.key==='ArrowRight'||e.key==='PageDown') nextSlide();
+      if(e.key==='ArrowLeft'||e.key==='PageUp') prevSlide();
+      if(e.key==='Escape') toggleOverview(false);
+      if(e.key==='o') toggleOverview();
+      if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus();}
+    });
+
+    function openTab(evt,id){ document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); document.querySelectorAll('.tabPanel').forEach(p=>p.classList.remove('active')); evt.currentTarget.classList.add('active'); document.getElementById(id).classList.add('active'); }
+    document.querySelectorAll('#steps .step').forEach(step=>step.addEventListener('click',()=>{document.querySelectorAll('#steps .step').forEach(s=>s.classList.remove('active'));step.classList.add('active')}));
+    document.querySelectorAll('#painList input').forEach(input=>input.addEventListener('change',()=>{ const n=document.querySelectorAll('#painList input:checked').length; const result=document.getElementById('painResult'); let msg='建议先选一个“30 分钟以上、以后还会重复”的真实任务。'; if(n>=3) msg='这里面已经有很强的自动化/工作流机会：先挑一个高频、高摩擦、低风险的点跑第一轮。'; if(n>=6) msg='这不是单点提效，是一组信息流转问题。适合先做模板/Checklist，再升级成小工具或系统。'; result.textContent=`已选择 ${n} 颗钉子。${msg}`; }));
+    function copyTemplate(){ const txt=document.getElementById('promptTpl').innerText; navigator.clipboard?.writeText(txt).then(()=>alert('已复制提示词模板')).catch(()=>alert(txt)); }
+    function escapeRegExp(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+    function clearMarks(){ slides.forEach(s=>s.querySelectorAll('mark').forEach(m=>m.replaceWith(document.createTextNode(m.textContent)))); }
+    function searchSlides(q){ clearMarks(); q=q.trim(); if(!q){navBtns.forEach(b=>b.style.display='grid'); return;} const re=new RegExp(escapeRegExp(q),'gi'); let first=-1; slides.forEach((s,i)=>{ const hit=s.innerText.toLowerCase().includes(q.toLowerCase()); navBtns[i].style.display=hit?'grid':'none'; if(hit&&first<0) first=i; if(hit){ highlightNode(s,re); }}); if(first>=0) goToSlide(first); }
+    function highlightNode(root,re){ const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.parentElement && !['SCRIPT','STYLE','MARK'].includes(n.parentElement.tagName)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT}); const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode); nodes.forEach(n=>{ if(!re.test(n.nodeValue)) return; re.lastIndex=0; const frag=document.createDocumentFragment(); let last=0; n.nodeValue.replace(re,(m,off)=>{ frag.appendChild(document.createTextNode(n.nodeValue.slice(last,off))); const mark=document.createElement('mark'); mark.textContent=m; frag.appendChild(mark); last=off+m.length; }); frag.appendChild(document.createTextNode(n.nodeValue.slice(last))); n.replaceWith(frag); }); }
+    const start=location.hash.match(/slide-(\d+)/); if(start) index=Math.max(0,Math.min(slides.length-1,Number(start[1])-1)); goToSlide(index);
+  </script>
+</body>
+</html>
