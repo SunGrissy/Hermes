@@ -55,6 +55,8 @@
 - 项目根目录D:/MyAgents，Hermes配置在D:/hermes，OpenClaw配置在D:/OpenClaw
 - 钉钉桌面通知通过dingtalk-desktop daemon（端口19200）
 - 共享记忆中心：D:/MyAgents/shared-memory/
+- 小马(运维)已从 OpenClaw2 切换为 GenericAgent，运行在 D:/GenericAgent，钉钉机器人 dingpyoepw5vkoedesux
+- 旧 OpenClaw2 实例（D:/OpenClaw2，端口18790）已停用，待清理进程和文件
 
 ## 7. Agent 协作规约
 

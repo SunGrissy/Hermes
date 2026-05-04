@@ -1,0 +1,246 @@
+{
+  "errcode": 0,
+  "errorMsg": "ok",
+  "result": {
+    "cursor": 6944948236,
+    "hasMore": false,
+    "report_list": [
+      {
+        "content": [
+          {
+            "key": "本周OKR进展回顾（围绕季度OKR，按照3P原则Progress/Problem/Plan回顾）",
+            "sort": 0,
+            "type": 1,
+            "value": "核心PDAU（第14周 日均 0329～0405）\r\n[表格]\r\n[表格]\r\n**排除刷子号\r\n近期流水和PDAU规模都相对稳定，受缩量影响、投放归因用户的留存有所提升；付费率表现不太好（略高于去年同期）\r\n研发\r\n线上更新\r\n梦幻甜心（周五已开放）\r\nBoss-神君朱雀（未开放）\r\n天下第一争霸赛·朱雀\r\n后续版本\r\n0415（常规更新）\r\n集装箱盲盒\r\n毁灭之手\r\n五一版\r\n升炮及相关处理\r\n等级膨胀相关处理\r\n北方守护神\r\n十二生肖齐聚\r\n重新对齐Boss、庆典系列活动的定位、预期体验、新鲜度\r\n新增5月升炮活动\r\n五月、六月版本启动内容规划\r\n重点设计讨论\r\n等级膨胀修改的方案讨论和确认\r\n储备设计：\r\n锦标赛预期体验讨论\r\n讨论鲲的玩法优化方案\r\n后续资产和活动排期\r\n实验安排讨论\r\n数据工作\r\n分析诊断和预测\r\n炮倍\u0026等级膨胀\u0026超能引擎等级映射数据处理\r\n小米渠道异常登录dau排查\r\n单设备上曾有多个账号登录记录（\u003e10个）\r\n预估五一期间营销数据\r\n预测流水较3月日均涨幅20%左右，发行归因用户量级应在五一期间维持15%左右涨幅\r\n26 Q1数据复盘\r\n用户规模瓶颈\r\nQ1流水较25年更为稳定，春节后日常ARPU较春节前有显著增长\r\nV20以上收入贡献增加\r\n中V段付费率有所降低\r\n数据基建和实验\r\n回归 d4～d6 实验观测中\r\n付费v15准备上线\r\n实验平台需求待评审\r\n回流溺毙实验准备迁移\r\n营销相关\r\n沟通五一营销计划\r\n针对大中小R及玩法向用户进行了圈选\r\n本周需要进一步对齐素材、定向等具体方案\r\n人群包数据跟进\r\n0313周期内广点通-安卓归因设备上，有50%以上的付费回收来自于归因设备上登录的活跃账号（因此活跃流水下降直接影响了ROI）\r\nAI尝试\r\nSKILL\r\nios活动页文案和公众号内容设计\r\nBoss制作基础审核（OmniFlow）\r\niOS 提审材料生成器，通过Prompt库实现版本更新文案的标准化输出（Coze）\r\n描述-\u003e脚本-\u003e视频的连贯的动画生成（小云雀）\r\n策划案设计审核\r\n工具链\r\n时间戳日志清洗\u0026可视化工具，分析ios评分触发的趋势和每日分布情况\r\n利用banana生成视频后，利用ps自动化批量转序列帧，快速产出动画功能版资源\r\n创意内容\r\n玩法demo制作\r\nSeeddance 2.0的创意视频，做玩法和选题脑暴\r\n[视频]\r\nby 张颖\r\n[视频]\r\nby 赵宇驰"
+          },
+          {
+            "key": "本周其他工作进展",
+            "sort": 3,
+            "type": 1,
+            "value": "PmSystem 完成基础的前期设计跟踪功能\r\n优化 pipeline 推送消息机制，实现按角色 / 群 / 版本推送定制内容。\r\n和子骜讨论效率小组 Q1 成果，和下一阶段目标\r\n版本质量复盘"
+          },
+          {
+            "key": "需协调与帮助",
+            "sort": 5,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "专项工作本周总结（列举本周在自己所做的工作上的收获、创新或沉淀）",
+            "sort": 6,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "自我评价（5分制）",
+            "sort": 7,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "图片",
+            "sort": 8,
+            "type": 8,
+            "value": "[]"
+          },
+          {
+            "key": "附件",
+            "sort": 9,
+            "type": 9,
+            "value": "[]"
+          }
+        ],
+        "createTime": 1775470197000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [],
+        "modifiedTime": 1775527205000,
+        "report_id": "19d624539678eda0915af884802895a8",
+        "report_name": "孙懿的周报",
+        "report_template_name": "周报",
+        "templateId": "153363afcd787a1e1d8f6fc4e87b4cd0",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19d624539678eda0915af884802895a8%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "本周OKR进展回顾（围绕季度OKR，按照3P原则Progress/Problem/Plan回顾）",
+            "sort": 0,
+            "type": 1,
+            "value": "核心PDAU（第15周 日均 0406～0411）\r\n[表格]\r\n[表格]\r\n**排除刷子号\r\n近期流水和PDAU规模都相对稳定，本周付费率是今年以来的低谷，主要来自累充1W+的高价值用户的付费意愿下降。推测主因是开火消耗降低，可能和新Boss缺乏后劲有关，但仍有次因待归因（也许和测试中的ab实验有关，待验证）\r\n研发\r\n线上更新\r\n梦幻甜心（上周五开放）\r\n看流水和开火变化，感觉后劲不足，需要进一步数据验证\r\nBoss-神君朱雀（本周五开放）\r\n天下第一争霸赛·朱雀\r\n后续版本\r\n0415（常规更新）\r\n集装箱盲盒\r\n毁灭之手\r\n五一版\r\n升炮及相关处理\r\n等级膨胀相关处理\r\n北方守护神\r\n十二生肖齐聚\r\n重新对齐Boss、庆典系列活动的定位、预期体验、新鲜度\r\n新增5月升炮活动\r\n五月、六月版本启动内容规划\r\n重点设计讨论\r\n小猪Boss修改方案讨论\r\n毁灭之手Boss修改方案讨论\r\n数值体验相关事项讨论：\r\n绝杀令目标Boss--北方守护神加入目标\r\n五一版必要策略--确认范围\r\n技能充能速度--需要更慎重全局考虑\r\n吞噬体验调整--暂定低调方案\r\n五一版数值调整的方案讨论：影响范围评估、处理方案讨论和沟通\r\n五一版数值调整的舆情和风控风险沟通\r\n管线建设\r\n版本节点内容同步\r\n开始落地会议体系重构\r\n原周会拆分成基础数据会和管线周会\r\nPMO 脉搏会固化成为每周两次简要对齐会\r\n每周玩法和制作审核会，APM列席\r\n数据工作\r\n分析诊断和预测\r\nQ1数据复盘\r\nDAU与PDAU同比下滑10%-15%，用户规模持续收缩\r\n营收驱动由用户规模转向高价值用户付费强度，流水结构呈现“金字塔”趋势，V15及以上用户贡献超70%的Q1流水\r\n春节活动未能有效拉升新增与活跃，但通过运营优化实现了节后流水稳定\r\n定位3月付费率下滑的问题\r\nV0-5用户付费率下滑 ➡️ 新增\u0026回流用户量级/质量下滑的影响\r\nV5-15用户付费率下滑 ➡️ season_act_signin和pack_sq和 商店金币 礼包付费用户数减少\r\nboss倍率分布探究\r\n刷新次数\u0026捕获平均倍率相近的boss，其低分倍率分布占比越低，单位时间内吸金表现越好（即对用户吸引力更强）\r\n在捕获boss上，用户会更抵触极端的差体验 - 即捕获非常低的倍率\r\n新boss上线首周吸引力评估\r\n上线首周单次游场吸金来看 白虎\u003e直播女孩\u003e马戏团，但白虎的单次游场吸金衰退较快 ➡️ 可能与缺少对应的boss试炼活动有关，玩"
+          },
+          {
+            "key": "本周其他工作进展",
+            "sort": 3,
+            "type": 1,
+            "value": "【组织建设】\r\n产品侧 AI 实用分享大会 \u0026 Q2宣导\r\nH1绩效标准宣导会\r\n亚飞的阶段述职，澄清对齐玩法设计制作阶段的一些模糊点，提出下一阶段要求\r\n和振源交流一些AI改变协作关系的看法，给出行动建议\r\n北极星小组团建，宣导Q2目标\r\n拉了个碳基伙伴训练交流群，组织内分享SKILL，由笛笛创建了SKILL贡献表单\r\n【其他】\r\n调教TYGPT助理的日报SKILL，已完成\r\n打通钉钉和AIDER，暂时没啥实用场景\r\n接通本地Agent和日志易机器人，实现了4种自动提取日报的场景\r\n完成PMO晚报和管线晚报 推送内容的优化\r\n修复PmSystem的沉默旧页面唤醒后静默覆盖新数据的问题\r\n五一版数值调整的舆情和风控风险沟通\r\n沉淀了3份SKILL：\r\nHTML 演示文稿模板（html-slide-deck）\r\n向上汇报结构化方法（leadership-report-craft）\r\n与 Agent 协作做内容的方法（ai-content-collaboration）\r\n简历预审相关SKILL打包，分享给了思昊和HR"
+          },
+          {
+            "key": "需协调与帮助",
+            "sort": 5,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "专项工作本周总结（列举本周在自己所做的工作上的收获、创新或沉淀）",
+            "sort": 6,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "自我评价（5分制）",
+            "sort": 7,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "图片",
+            "sort": 8,
+            "type": 8,
+            "value": "[]"
+          },
+          {
+            "key": "附件",
+            "sort": 9,
+            "type": 9,
+            "value": "[]"
+          }
+        ],
+        "createTime": 1776008226000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1776008226000,
+        "report_id": "19d8256e358e5f19b41857c44529e0f7",
+        "report_name": "孙懿的周报",
+        "report_template_name": "周报",
+        "templateId": "153363afcd787a1e1d8f6fc4e87b4cd0",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19d8256e358e5f19b41857c44529e0f7%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "本周OKR进展回顾（围绕季度OKR，按照3P原则Progress/Problem/Plan回顾）",
+            "sort": 0,
+            "type": 1,
+            "value": "核心PDAU（第16周日均 0412～0418）\r\n[表格]\r\n[表格]\r\n**排除刷子号\r\n近期流水和PDAU规模环比略降，但同比去年趋势更稳定一些。\r\n新增uid量级同比去年下降40%，ltv1下降3.7%\r\n研发\r\n线上更新\r\nBoss-神君朱雀（上周五开放）\r\n天下第一争霸赛·朱雀\r\nBoss-集装箱盲盒（本周五开放）\r\nBoss-毁灭之手（下周五开放）\r\n五一版\r\n等级膨胀相关\r\n从尽量不影响原有数值设计的角度，重新修改了处理方案\r\n跟客服讨论对用户的告知口径：包在大版更中，提一句“数值调整”\r\n新增5月升炮活动\r\n新增签到抽本命守护神的活动\r\n重点设计讨论\r\n回流好打鱼策略在玩家群里有小范围讨论\r\n先把线上策略提高门槛再全量（30D且+CD）\r\n再开发30D以内的减配版\r\n交互优化讨论会议，明确了一批交互向优化任务\r\n小猪存钱罐 AB 结论分析：总体可全量\r\n但 2000~5000 段推荐档位可能过高，待进一步实验\r\n近期待上线 Boss \u0026 新玩法内容审核\r\n管线建设\r\n版本节点内容同步\r\n开始落地会议体系重构\r\n原周会拆分成基础数据会和管线周会\r\nPMO 脉搏会固化成为每周两次简要对齐会\r\n每周玩法和制作审核会，APM列席\r\n数据工作\r\n分析诊断和预测\r\n30日LTV倍数\r\n看今年2月数据，大部分渠道同比去年增幅显著\r\n也有部分渠道下滑（oppo_ad、huawei_ad下降，baidu_ios波动较大）[图片]\r\n新上线boss首周吸引力\r\n白虎 \u003e 朱雀 \u003e 直播女孩 \u003e 马戏团 ➡️ 白虎首周游场时长极速衰减\r\nboss吸引力（单次游场吸金）TOP3：朱雀 \u003e 直播女孩 \u003e 时光种子 ➡️ 这三个boss的游场时长相对较长\r\n数据基建和实验\r\n幸运金库下线影响（已停止后续排期）\r\n回归D4～D6体验优化（提高门槛且加CD后全量）\r\n小猪存钱罐机制优化（全量）\r\n酒馆下线影响（观测中）\r\n付费策略v15（观测中）\r\n完成研发日报自动化推送\r\n搭建项目组周数据html动态可视化看板\r\n借助koda创建skill对近一月整体设备崩溃率 \u0026 分日设备崩溃率进行分析\r\n营销\r\n关注近14日素材投放\r\n消耗TOP50素材：识别高效跑量型、精准转化型、高成本风险型、全能型 四大分类\r\nROI_7 TOP50素材：高 ROI 素材普遍“跑不动量“、CTR 是 ROI 型素材的隐藏优势\r\n完播率TOP50素材分析：CTR 1.00%（正常偏高），但 CVR 仅 1."
+          },
+          {
+            "key": "本周其他工作进展",
+            "sort": 3,
+            "type": 1,
+            "value": "优化2名战斗策划（还剩3人）\r\n复试通过一名社招数值策划，5月中入职\r\n一名社招交互设计师，待定\r\n启动新一轮阶段面谈，完成3人"
+          },
+          {
+            "key": "需协调与帮助",
+            "sort": 5,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "专项工作本周总结（列举本周在自己所做的工作上的收获、创新或沉淀）",
+            "sort": 6,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "自我评价（5分制）",
+            "sort": 7,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "图片",
+            "sort": 8,
+            "type": 8,
+            "value": "[]"
+          },
+          {
+            "key": "附件",
+            "sort": 9,
+            "type": 9,
+            "value": "[]"
+          }
+        ],
+        "createTime": 1776608063000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1776608063000,
+        "report_id": "19da617ad3277aa1f5c27194e3db510d",
+        "report_name": "孙懿的周报",
+        "report_template_name": "周报",
+        "templateId": "153363afcd787a1e1d8f6fc4e87b4cd0",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19da617ad3277aa1f5c27194e3db510d%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "本周OKR进展回顾（围绕季度OKR，按照3P原则Progress/Problem/Plan回顾）",
+            "sort": 0,
+            "type": 1,
+            "value": "UE4捕鱼周数据简报\r\n本周(04-19~04-25) vs 上周(04-12~04-18) vs 去年同期(25-04-19~25-04-25) vs OKR基准月(25-11-3025-12-27)\r\n[表格]\r\n趋势观察\r\n【环比分析】\r\nDAU小幅下降(-2.7%)，流水小幅下降(-3.6%)\r\n由于新上的小额礼包，付费率提升显著(+5.9%)，\r\n【同比分析】\r\nDAU同比下降9.7%，用户规模收缩\r\nDNU同比下降42.7%，新增用户大幅减少\r\n付费率同比提升+28.8%，ARPPU同比下降16.3%，是用户浓缩与有意识提升付费率的双重作用\r\n【vs OKR基准月】\r\nDAU 与 OKR 基准月持平（较之前几个月有回落，符合自然节律趋势）\r\n流水与 ARPU 均超过OKR基准 +4.4%/+4.3%\r\n付费率与 OKR基准月持平 + 1.7%\r\n研发\r\n线上更新\r\nBoss-毁灭之手（周五开放）\r\n五一版\r\n封版→发版中（0429更新）\r\n日志梳理完毕待验收\r\n炮倍/等级膨胀策略改动待测试上线\r\n后续版本\r\n0513版本（五月中）：设计中，每日boss福利-三气周瑜设计+开发需求已出；元宵庆典换皮方案+排期已确认\r\n0527版本（五月末）：早期设计，足球战魂拼图、大话收官集卡活动文档整理中\r\n重点设计讨论\r\n确认新实验上线方案\r\n确认五一版商业化内容\r\n反馈UltraBigNumber样式和设置门槛\r\n讨论金币x3设计思路\r\n五月中每日打boss活动方案审核（澄清设计预期，砍掉非必要设计）\r\n策划案AI辅助设计案例分享\r\n锦标赛设计文档AI加工，随时可开第一轮宣讲评审；准备kickoff文档\r\n赛季设计文档AI更新整理，尝试加入数据分析需求以便后续自动产出日志打点需求\r\n管线建设\r\n五月版本规划和相关工作进展Check\r\n初步对齐端午版本内容量，启动容量拆解\r\n同步五月内基于投放资源需提前准备的活动设计\r\nPM backlog 4-5月待办清单梳理\r\n新版Feature开发流程文档定稿\r\nPmSystem策划周计划工作台功能上线 + 完善易用性\r\n数据工作\r\n分析诊断和预测\r\n五一召回用户分群：\r\nB级5w/A级3.6w/S级6157人，与春节对比B级缩减（短信成本\u003e外呼），S+A级放宽以增加高价值回流\r\n建立周运营数据简报机制\r\n以W16和W17为试点，实行每周运营数据会，为下一周的运营动作提供决策依据\r\n数据基建和实验\r\n炮倍膨胀+等级膨胀删除"
+          },
+          {
+            "key": "本周其他工作进展",
+            "sort": 3,
+            "type": 1,
+            "value": "新一轮阶段面谈，完成3人\r\n应届生王珂复试（底层能力密度高，心态务实，6月入职）\r\n社招数值策划复试通过1名（5月中入职）\r\n黄梓琪数据分析校招复试（备选）\r\n直播运营面试交流"
+          },
+          {
+            "key": "需协调与帮助",
+            "sort": 5,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "专项工作本周总结（列举本周在自己所做的工作上的收获、创新或沉淀）",
+            "sort": 6,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "自我评价（5分制）",
+            "sort": 7,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "图片",
+            "sort": 8,
+            "type": 8,
+            "value": "[]"
+          },
+          {
+            "key": "附件",
+            "sort": 9,
+            "type": 9,
+            "value": "[]"
+          }
+        ],
+        "createTime": 1777212663000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777212781000,
+        "report_id": "19dca2124276f716b289c4f44efaf3f1",
+        "report_name": "孙懿的周报",
+        "report_template_name": "周报",
+        "templateId": "153363afcd787a1e1d8f6fc4e87b4cd0",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dca2124276f716b289c4f44efaf3f1%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      }
+    ],
+    "size": 20
+  },
+  "success": true
+}
