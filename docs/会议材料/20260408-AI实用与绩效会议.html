@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>产品组 AI 实用与绩效对齐会议</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0c0e14; --bg-card: rgba(255,255,255,0.04); --bg-card-hover: rgba(255,255,255,0.07);
+  --border: rgba(255,255,255,0.08); --text: #c9d1d9; --text-bright: #f0f3f6; --text-dim: #8b949e;
+  --gold: #f5a623; --blue: #4facfe; --green: #43e97b; --red: #f5576c; --purple: #b388ff;
+  --font: 'Noto Sans SC', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --slide-pad: 1.5rem; --content-max: min(1800px, 97vw); --pad-x: clamp(1.5rem, 2vw, 3rem);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 18px; scroll-behavior: smooth; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.7; overflow-x: hidden; }
+
+.deck { width: 100%; }
+.slide {
+  min-height: 100vh; width: 100%; display: flex; align-items: center; justify-content: center;
+  padding: var(--slide-pad) var(--pad-x); position: relative;
+  border-bottom: 1px solid var(--border);
+}
+.slide-inner { width: 100%; max-width: var(--content-max); }
+
+/* Cover */
+.slide.cover { background: linear-gradient(135deg, #0c0e14 0%, #1a1c2e 50%, #0c0e14 100%); text-align: center; }
+.slide.cover .cover-tag { font-size: 0.8rem; letter-spacing: 6px; text-transform: uppercase; color: var(--gold); margin-bottom: 24px; font-weight: 500; }
+.slide.cover h1 { font-size: 3rem; font-weight: 900; color: #fff; line-height: 1.3; margin-bottom: 16px; }
+.slide.cover .cover-sub { font-size: 1.2rem; color: var(--text-dim); margin-bottom: 40px; }
+.slide.cover .cover-meta { display: flex; gap: 32px; justify-content: center; font-size: 0.85rem; color: var(--text-dim); }
+.slide.cover .cover-meta span { display: flex; align-items: center; gap: 6px; }
+
+/* Titles */
+h1 { font-size: 2.4rem; font-weight: 900; color: #fff; margin-bottom: 8px; line-height: 1.3; }
+h2 { font-size: 1.6rem; font-weight: 700; color: var(--text-bright); margin-bottom: 20px; }
+h3 { font-size: 1.15rem; font-weight: 700; color: var(--gold); margin-bottom: 12px; letter-spacing: 1px; }
+.slide-label { font-size: 0.75rem; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; font-weight: 500; }
+.subtitle { font-size: 1.15rem; color: var(--text-dim); margin-bottom: 32px; font-weight: 300; }
+
+/* Section title slide */
+.slide.section-title { text-align: center; }
+.slide.section-title h1 { font-size: 3.2rem; margin-bottom: 16px; }
+.slide.section-title .subtitle { font-size: 1.3rem; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.95rem; }
+th { text-align: left; padding: 12px 16px; background: rgba(255,255,255,0.06); color: var(--gold); font-weight: 700; border-bottom: 2px solid var(--gold); font-size: 0.85rem; letter-spacing: 1px; }
+td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text); }
+tr:hover td { background: var(--bg-card-hover); }
+
+/* Cards */
+.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px 28px; margin: 16px 0; }
+.card.gold-border { border-left: 3px solid var(--gold); }
+.card.green-border { border-left: 3px solid var(--green); }
+.card.red-border { border-left: 3px solid var(--red); }
+.card.blue-border { border-left: 3px solid var(--blue); }
+
+/* Quotes */
+blockquote { border-left: 3px solid var(--gold); padding: 12px 20px; margin: 16px 0; color: var(--text-dim); font-style: italic; background: rgba(245,166,35,0.04); border-radius: 0 8px 8px 0; }
+blockquote strong { color: var(--gold); font-style: normal; }
+
+/* Emphasis */
+.accent { color: var(--gold); font-weight: 700; }
+.accent-blue { color: var(--blue); font-weight: 700; }
+.accent-green { color: var(--green); font-weight: 700; }
+.accent-red { color: var(--red); font-weight: 700; }
+.big-number { font-size: 3.5rem; font-weight: 900; color: var(--gold); line-height: 1; }
+.big-formula { font-size: 1.6rem; font-weight: 700; color: var(--text-bright); text-align: center; padding: 24px; background: var(--bg-card); border-radius: 12px; margin: 24px 0; letter-spacing: 1px; }
+
+/* Grid layouts */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+/* Bar chart */
+.bar-row { display: flex; align-items: center; margin: 10px 0; gap: 12px; }
+.bar-label { width: 200px; text-align: right; font-size: 0.9rem; color: var(--text-dim); flex-shrink: 0; }
+.bar { height: 36px; border-radius: 6px; display: flex; align-items: center; padding-left: 12px; font-weight: 700; font-size: 0.9rem; color: #fff; min-width: 40px; transition: width 0.8s ease; }
+
+/* Lists */
+ul, ol { padding-left: 1.4em; margin: 12px 0; }
+li { margin: 6px 0; }
+li::marker { color: var(--gold); }
+
+/* Tags */
+.tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; letter-spacing: 1px; }
+.tag.gold { background: rgba(245,166,35,0.15); color: var(--gold); }
+.tag.green { background: rgba(67,233,123,0.12); color: var(--green); }
+.tag.red { background: rgba(245,87,108,0.12); color: var(--red); }
+.tag.blue { background: rgba(79,172,254,0.12); color: var(--blue); }
+
+/* Page indicator */
+.page-ind { position: fixed; bottom: 24px; right: 32px; font-size: 0.8rem; color: var(--text-dim); z-index: 100; background: rgba(12,14,20,0.85); padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); backdrop-filter: blur(8px); }
+
+/* Benchmark/counter item */
+.example-item { margin-bottom: 28px; }
+.example-item .item-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.example-item .item-title.positive { color: var(--green); }
+.example-item .item-title.negative { color: var(--red); }
+.example-item .item-quote { font-size: 0.9rem; color: var(--text-dim); font-style: italic; padding: 8px 16px; border-left: 2px solid var(--border); margin: 8px 0; }
+.example-item .item-comment { font-size: 0.95rem; color: var(--text); margin-top: 8px; }
+
+/* Divider */
+.divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+/* Fade in animation */
+.slide-inner > * { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.slide.visible .slide-inner > * { opacity: 1; transform: translateY(0); }
+.slide.visible .slide-inner > *:nth-child(1) { transition-delay: 0.05s; }
+.slide.visible .slide-inner > *:nth-child(2) { transition-delay: 0.15s; }
+.slide.visible .slide-inner > *:nth-child(3) { transition-delay: 0.25s; }
+.slide.visible .slide-inner > *:nth-child(4) { transition-delay: 0.35s; }
+.slide.visible .slide-inner > *:nth-child(5) { transition-delay: 0.45s; }
+.slide.visible .slide-inner > *:nth-child(6) { transition-delay: 0.55s; }
+.slide.visible .slide-inner > *:nth-child(7) { transition-delay: 0.65s; }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- Slide 0: Cover -->
+<section class="slide cover" id="s0"><div class="slide-inner">
+<div class="cover-tag">2026 · Q2 Kickoff</div>
+<h1>AI 实用与绩效对齐</h1>
+<p class="cover-sub">Q1 盘点 · 兑现承诺 · Q2 标准升级</p>
+<div class="cover-meta">
+  <span>2026-04-08 周三</span>
+  <span>约 110 分钟</span>
+  <span>产品组全员 + HR</span>
+</div>
+</div></section>
+
+<!-- Slide 1: Agenda -->
+<section class="slide" id="s1"><div class="slide-inner">
+<p class="slide-label">议程总览</p>
+<h1>今天的四件事</h1>
+<p class="subtitle">先看成果，再看过去，然后看前方，最后看后果</p>
+<table>
+  <tr><th style="width:40px">#</th><th>环节</th><th>时长</th><th>核心动作</th></tr>
+  <tr><td class="accent">1</td><td>AI 实用成果分享</td><td>~58 min</td><td>看见彼此</td></tr>
+  <tr><td class="accent">2</td><td>25 年底 AI 作业回顾</td><td>10 min</td><td>看见过去</td></tr>
+  <tr><td class="accent">3</td><td>Q2 AI 新要求 + 日报案例</td><td>14 min</td><td>看见前方</td></tr>
+  <tr><td class="accent">4</td><td>H1 绩效评分标准</td><td>16 min</td><td>看见后果</td></tr>
+</table>
+<blockquote>今天不是培训课，是一次<strong>盘点和对齐</strong>。HR 在场，因为这些内容会直接关联 H1 绩效评定。</blockquote>
+</div></section>
+
+<!-- Slide 2: Show Time -->
+<section class="slide section-title" id="s2"><div class="slide-inner">
+<p class="slide-label">议程 1</p>
+<h1>Show Time</h1>
+<p class="subtitle">AI 实用成果分享 — 每个人的进步，大家都看得到</p>
+</div></section>
+
+<!-- Slide 3: Sharing Order -->
+<section class="slide" id="s3"><div class="slide-inner">
+<p class="slide-label">分享顺序</p>
+<h1>每人最多 5 min</h1>
+<p class="subtitle">3 min 时有提醒 · 不用做 PPT · 口述即可</p>
+<div class="grid-2">
+<div>
+<table>
+  <tr><th>#</th><th>组别</th><th>人员</th></tr>
+  <tr><td>1</td><td>运营</td><td>崔忠仁</td></tr>
+  <tr><td>2</td><td>运营</td><td>刘泊霆</td></tr>
+  <tr><td>3</td><td>数据</td><td>杨琳</td></tr>
+  <tr><td>4</td><td>数据</td><td>谷京儒</td></tr>
+  <tr><td>5</td><td>系统</td><td>李思奕</td></tr>
+  <tr><td>6</td><td>系统</td><td>郑杉</td></tr>
+  <tr><td>7</td><td>系统</td><td>李振源</td></tr>
+  <tr><td>8</td><td>UE</td><td>孙悦</td></tr>
+</table>
+</div>
+<div>
+<table>
+  <tr><th>#</th><th>组别</th><th>人员</th></tr>
+  <tr><td>9</td><td>UE</td><td>龚锦</td></tr>
+  <tr><td>10</td><td>UE</td><td>穆建博</td></tr>
+  <tr><td>11</td><td>战斗</td><td>胡亚飞</td></tr>
+  <tr><td>12</td><td>战斗</td><td>张颖</td></tr>
+  <tr><td>13</td><td>战斗</td><td>赵宇驰</td></tr>
+  <tr><td>14</td><td>战斗</td><td>张旭哲</td></tr>
+  <tr><td>15</td><td>战斗</td><td>王翕然</td></tr>
+  <tr><td>16</td><td>PM</td><td>张梦君</td></tr>
+</table>
+</div>
+</div>
+</div></section>
+
+<!-- Slide 4: 以身作则 -->
+<section class="slide section-title" id="s4"><div class="slide-inner">
+<p class="slide-label">以身作则</p>
+<h1>猫姐的成果分享</h1>
+<p class="subtitle">任何岗位都能做到 — 这不是技术岗干的事，是制作人自己搭的</p>
+</div></section>
+
+<!-- Slide 5: 事事有着落 -->
+<section class="slide section-title" id="s5"><div class="slide-inner">
+<p class="slide-label">议程 2</p>
+<h1>事事有着落</h1>
+<p class="subtitle">25 年底 AI 作业回顾 — 言必信，行必果，虽迟但到</p>
+</div></section>
+
+<!-- Slide 6: 整体数据 -->
+<section class="slide" id="s6"><div class="slide-inner">
+<p class="slide-label">整体数据</p>
+<h2>提交覆盖分布 <span style="font-weight:300;color:var(--text-dim)">（16 人，谷京儒入职前不计）</span></h2>
+<div style="margin-bottom:32px">
+  <div class="bar-row"><span class="bar-label">坚持到底（6-7 周）</span><div class="bar" style="width:19%;background:var(--green)">3 人</div></div>
+  <div class="bar-row"><span class="bar-label">大部分跟上（5 周）</span><div class="bar" style="width:38%;background:var(--blue)">6 人</div></div>
+  <div class="bar-row"><span class="bar-label">中途掉队（3-4 周）</span><div class="bar" style="width:25%;background:var(--gold)">4 人</div></div>
+  <div class="bar-row"><span class="bar-label">早早退场（1-2 周）</span><div class="bar" style="width:19%;background:var(--red)">3 人</div></div>
+</div>
+<h2>质量分布 <span style="font-weight:300;color:var(--text-dim)">（制作人校准后，满分 7）</span></h2>
+<div>
+  <div class="bar-row"><span class="bar-label">均分 ≥ 5.5（高质量）</span><div class="bar" style="width:25%;background:var(--green)">4 人</div></div>
+  <div class="bar-row"><span class="bar-label">均分 4.0-5.4（正常）</span><div class="bar" style="width:56%;background:var(--blue)">9 人</div></div>
+  <div class="bar-row"><span class="bar-label">均分 < 4.0（偏低）</span><div class="bar" style="width:19%;background:var(--red)">3 人</div></div>
+</div>
+<blockquote>全组不到六成能坚持五周以上。元旦之后没有明确说停还是继续——结果所有人都默默停了。<strong>没有外力推动时，大家的自驱力在哪里？</strong></blockquote>
+</div></section>
+
+<!-- Slide 7: 优秀个体 -->
+<section class="slide" id="s7"><div class="slide-inner">
+<p class="slide-label">优秀个体</p>
+<h2>点名表扬 — 不是天赋异禀，是<span class="accent">持续在做</span></h2>
+<div class="grid-2">
+  <div class="card green-border">
+    <h3 style="color:var(--green)">杨琳</h3>
+    <p>6/7 周全勤级 · 质量均分全组最高（5.7）· 每次都有深度</p>
+  </div>
+  <div class="card green-border">
+    <h3 style="color:var(--green)">穆建博</h3>
+    <p>6/7 周 · 节奏稳定 · 质量均匀</p>
+  </div>
+  <div class="card green-border">
+    <h3 style="color:var(--green)">刘泊霆</h3>
+    <p>6/7 周 · 运营视角的 AI 应用探索 · 持续输出</p>
+  </div>
+  <div class="card green-border">
+    <h3 style="color:var(--green)">孙悦</h3>
+    <p>5/7 周 · 单次质量突出（均分 5.8）</p>
+  </div>
+  <div class="card green-border">
+    <h3 style="color:var(--green)">张颖</h3>
+    <p>5/7 周 · 质量稳定（均分 5.4）· Q1 多线突破最强</p>
+  </div>
+</div>
+</div></section>
+
+<!-- Slide 8: 兑现承诺 -->
+<section class="slide" id="s8"><div class="slide-inner">
+<p class="slide-label">兑现承诺</p>
+<h1>AI 作业加扣分机制</h1>
+<p class="subtitle">按阶段设定上限（MaxBonus / MaxPenalty），每阶段独立结算、互不覆盖</p>
+<table>
+  <tr><th>表现档位</th><th style="color:var(--green)">加分</th><th style="color:var(--red)">扣分</th></tr>
+  <tr><td><span class="tag gold">卓越</span></td><td class="accent-green">+100% MaxBonus</td><td>—</td></tr>
+  <tr><td><span class="tag blue">优秀</span></td><td class="accent-green">+80% MaxBonus</td><td>—</td></tr>
+  <tr><td>及格</td><td style="color:var(--text-dim)">+60% MaxBonus</td><td>—</td></tr>
+  <tr><td>参加但不及格</td><td style="color:var(--text-dim)">0</td><td style="color:var(--text-dim)">0</td></tr>
+  <tr><td>参与度低</td><td>—</td><td class="accent-red">酌情（≤ MaxPenalty）</td></tr>
+  <tr><td>完全不参与</td><td>—</td><td class="accent-red">-100% MaxPenalty</td></tr>
+</table>
+<blockquote><strong>做得好有加分，做得差不扣分但没有加分，不做的扣分。</strong>每个阶段重新开始——上一阶段没做好不影响下一阶段的加分机会。</blockquote>
+</div></section>
+
+<!-- Slide 9: 时光如白驹过隙 -->
+<section class="slide section-title" id="s9"><div class="slide-inner">
+<p class="slide-label">时间线视角</p>
+<h1>时光如白驹过隙</h1>
+<p class="subtitle">从 25 年 11 月到现在，快半年了</p>
+<div style="text-align:center;margin:40px 0">
+  <p style="font-size:1.3rem;color:var(--text-bright);line-height:2">当时的门槛极低——证明你有在尝试就可以。</p>
+  <p style="font-size:1.5rem;color:#fff;font-weight:700;margin-top:16px">问你自己一个问题：</p>
+  <p style="font-size:1.8rem;color:var(--gold);font-weight:900;margin-top:8px">从那时到现在，你的 AI 应用水平<br>有没有本质变化？</p>
+  <p style="font-size:1.1rem;color:var(--text-dim);margin-top:24px">如果没有——说明半年过去了，进化没有发生。</p>
+</div>
+</div></section>
+
+<!-- Slide 10: Q2新要求 -->
+<section class="slide" id="s10"><div class="slide-inner">
+<p class="slide-label">议程 3 · Q2 新要求</p>
+<h1>AI 实用升级</h1>
+<p class="subtitle">跟上大部队不扣分（进化系数 = 1.0）。以下三项就是"大部队"的定义。</p>
+<table>
+  <tr><th>频次</th><th>交付物</th><th>具体说明</th><th>门槛</th></tr>
+  <tr><td class="accent">每周</td><td>SKILL / Memory .md</td><td>在任何 AI 工具中沉淀的可复用知识</td><td>最低 = TYGPT 一条 Skill</td></tr>
+  <tr><td class="accent-blue">每双周</td><td>KODA 数据报告</td><td>公司数据 Agent 平台 · 与业务相关</td><td>必须与实际工作挂钩</td></tr>
+  <tr><td class="accent-green">每月</td><td>OmniFlow 工作流</td><td>搭建实际可用的自动化工作流</td><td>量化提效 <strong>或</strong> 推广 ≥3 人</td></tr>
+</table>
+<div style="margin-top:16px">
+  <span class="tag gold">本周生效</span>
+  <span style="color:var(--text-dim);margin-left:12px;font-size:0.9rem">第一份 SKILL/Memory 截止 4/13，补交截止 4/20</span>
+</div>
+</div></section>
+
+<!-- Slide 11: 和25年底对比 -->
+<section class="slide" id="s11"><div class="slide-inner">
+<p class="slide-label">要求升级</p>
+<h2>和 25 年底 + Q1 的对比</h2>
+<table>
+  <tr><th>维度</th><th>25 年底</th><th>26 Q1</th><th style="color:var(--gold)">26 Q2（现在）</th></tr>
+  <tr><td>性质</td><td>鼓励尝试</td><td>过渡期</td><td class="accent">硬性要求</td></tr>
+  <tr><td>门槛</td><td>按时提交 = 达标</td><td>日报有 AI 心得</td><td class="accent">有深度 · 与业务相关</td></tr>
+  <tr><td>内容</td><td>不限</td><td>日报心得</td><td class="accent">三个明确方向</td></tr>
+  <tr><td>后果</td><td>加分 / 小额扣分</td><td>纳入观察</td><td class="accent">直接影响进化系数</td></tr>
+  <tr><td>Max 力度</td><td>较低</td><td>中等</td><td class="accent">较高</td></tr>
+</table>
+<blockquote>25 年底是鼓励性质的，要求很低。<strong>Q2 不一样了——不但要求更高，而且对应的 MaxBonus 和 MaxPenalty 也会更高。</strong></blockquote>
+</div></section>
+
+<!-- Slide 12: 质量标准 -->
+<section class="slide" id="s12"><div class="slide-inner">
+<p class="slide-label">质量标准</p>
+<h2>质量怎么判断？我来检查，标准很透明</h2>
+<div class="grid-2">
+  <div class="card" style="border-left:3px solid var(--gold)">
+    <h3><span class="tag gold">卓越</span></h3>
+    <p style="font-size:1.15rem;color:var(--text-bright)">给我启发 — 我看了觉得"这个思路我没想到"</p>
+  </div>
+  <div class="card" style="border-left:3px solid var(--blue)">
+    <h3><span class="tag blue">优秀</span></h3>
+    <p style="font-size:1.15rem;color:var(--text-bright)">正常水平 — 有深度、能解决实际问题</p>
+  </div>
+  <div class="card" style="border-left:3px solid var(--text-dim)">
+    <h3>及格</h3>
+    <p style="font-size:1.15rem">基础水平 — 做了但没有超出表面操作</p>
+  </div>
+  <div class="card" style="border-left:3px solid var(--red)">
+    <h3><span class="tag red">不及格</span></h3>
+    <p style="font-size:1.15rem">敷衍 / 复制粘贴 / 与业务无关 — <strong>等同于未提交</strong></p>
+  </div>
+</div>
+</div></section>
+
+<!-- Slide 13: 好的标准 案例说明 -->
+<section class="slide section-title" id="s13"><div class="slide-inner">
+<p class="slide-label">案例说明</p>
+<h1>好的标准长什么样？</h1>
+<p class="subtitle">从结构化日报里摘了一些真实记录，不点名，大家对照一下</p>
+<div style="display:flex;justify-content:center;gap:8px;margin-top:40px;flex-wrap:wrap">
+  <div style="padding:16px 28px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">
+    <p style="font-size:2rem;font-weight:900;color:var(--text-dim)">做了</p>
+  </div>
+  <div style="padding:16px 8px;font-size:2rem;color:var(--text-dim)">→</div>
+  <div style="padding:16px 28px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">
+    <p style="font-size:2rem;font-weight:900;color:var(--text)">做完</p>
+  </div>
+  <div style="padding:16px 8px;font-size:2rem;color:var(--text-dim)">→</div>
+  <div style="padding:16px 28px;background:var(--bg-card);border-radius:12px;border:1px solid var(--blue)">
+    <p style="font-size:2rem;font-weight:900;color:var(--blue)">做对</p>
+  </div>
+  <div style="padding:16px 8px;font-size:2rem;color:var(--text-dim)">→</div>
+  <div style="padding:16px 28px;background:rgba(245,166,35,0.08);border-radius:12px;border:1px solid var(--gold)">
+    <p style="font-size:2rem;font-weight:900;color:var(--gold)">做好</p>
+  </div>
+</div>
+</div></section>
+
+<!-- Slide 14: 标杆 ①② -->
+<section class="slide" id="s14"><div class="slide-inner">
+<p class="slide-label">标杆：什么叫"用得好"</p>
+<h2>拓展能力 · 诚实反思</h2>
+<div class="example-item">
+  <p class="item-title positive">① 用 AI 拓展能力边界，做到以前做不到的事</p>
+  <p class="item-quote">"让我这个没什么 SQL 基础的人也可以看一些以前不会查的数据"<br>"已跨越单纯美术/视频素材生成阶段，开始深入研发管线深水区"<br>"Coze 搭建 iOS 提审材料自动化生成器" · "Cursor + Figma 做 UMG"</p>
+  <p class="item-comment"><strong style="color:var(--green)">不是让 AI 替自己干活，是让 AI 帮自己获得了以前没有的能力。</strong></p>
+</div>
+<div class="example-item">
+  <p class="item-title positive">② 做完之后有诚实的判断，知道自己哪里不行</p>
+  <p class="item-quote">"还没我自己看的快……一定要形成定型工具，不然效率上不去"<br>"达标——有多场景学习应用，但缺少深度提效成果"<br>"最无效场景：Cursor + Pencil 做动效，不达预期"</p>
+  <p class="item-comment"><strong style="color:var(--green)">这种反思比产出本身更有价值。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 15: 标杆 ③④ -->
+<section class="slide" id="s15"><div class="slide-inner">
+<p class="slide-label">标杆：什么叫"用得好"</p>
+<h2>迭代循环 · 造工具</h2>
+<div class="example-item">
+  <p class="item-title positive">③ 有"用→反思→迭代"的真实循环</p>
+  <p class="item-quote">"AI 发散过多导致效率低下 → 下周调整：精炼提示词与需求"——下周<strong>真的改了</strong></p>
+  <p class="item-comment"><strong style="color:var(--green)">进化不是一开始就完美，是"发现问题→想清楚→下次做得不一样"。</strong></p>
+</div>
+<div class="example-item">
+  <p class="item-title positive">④ 自己造工具 + 给别人用</p>
+  <p class="item-quote">"yield 生成器，本地网页端，方便共享使用"<br>"ROI 自动化测算网站" · "Coze iOS 提审材料自动化" · "分层校验工具"</p>
+  <p class="item-comment"><strong style="color:var(--green)">造了可复用的工具，自己提效 1 倍，给别人用就是 N 倍。</strong>这就是 Q2 OmniFlow 的现成范例。</p>
+</div>
+</div></section>
+
+<!-- Slide 16: 标杆 ⑤⑥ -->
+<section class="slide" id="s16"><div class="slide-inner">
+<p class="slide-label">标杆：什么叫"用得好"</p>
+<h2>量化产出 · 业务决策</h2>
+<div class="example-item">
+  <p class="item-title positive">⑤ 量化产出效果——说得出百分比</p>
+  <p class="item-quote">"提效 50%（生图）/ 30%（动画）/ 40%（UMG）"<br>"平时 30 分钟 - 2 小时的 bug，15-30 分钟解决"<br>"20 分钟完成，传统古法约 1 小时"</p>
+  <p class="item-comment"><strong style="color:var(--green)">不是"感觉快了"，是真的量过。</strong></p>
+</div>
+<div class="example-item">
+  <p class="item-title positive">⑥ 带着业务目标用 AI 做决策</p>
+  <p class="item-quote">"评估新评分触发策略，转化率预估 2%-7%，每日新增评分 20~70——目前来看是准确的"<br>"ROI 自动化测算" · "KODA 数据分析" · "三套软上限方案逻辑对比"</p>
+  <p class="item-comment"><strong style="color:var(--green)">有假设、有推演、有验证——这就是"深度"。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 17: 标杆 ⑦⑧⑨⑩ -->
+<section class="slide" id="s17"><div class="slide-inner">
+<p class="slide-label">标杆：什么叫"用得好"</p>
+<h2>超前行动 · 举证意识 · 经验分享 · 持续深入</h2>
+<div class="grid-2">
+  <div class="card green-border">
+    <p class="item-title positive" style="margin-bottom:4px">⑦ Q2 还没开始，她已经在做了</p>
+    <p style="font-size:0.9rem;color:var(--text-dim);font-style:italic">"将 iOS 活动页文案喂给 Cursor，训练成专属 Skill"</p>
+  </div>
+  <div class="card green-border">
+    <p class="item-title positive" style="margin-bottom:4px">⑧ 做了好事也要让人看到</p>
+    <p style="font-size:0.9rem">日报一行字，背后是全组最深的工作流探索。<strong style="color:var(--gold)">不可举证等于不存在。</strong></p>
+  </div>
+  <div class="card green-border">
+    <p class="item-title positive" style="margin-bottom:4px">⑨ 高产出 + 主动写经验文档</p>
+    <p style="font-size:0.9rem">自己做完还写踩坑记录给同事避坑。<strong style="color:var(--green)">经验写下来给别人用，价值至少 3 倍。</strong></p>
+  </div>
+  <div class="card green-border">
+    <p class="item-title positive" style="margin-bottom:4px">⑩ 半年持续深入</p>
+    <p style="font-size:0.9rem">AI 作业 6/7 周 + 均分最高 + 日报每条挂钩业务 + 已在用 KODA。<strong style="color:var(--green)">持续在做、持续在深入。</strong></p>
+  </div>
+</div>
+</div></section>
+
+<!-- Slide 18: 反例 ❶❷ -->
+<section class="slide" id="s18"><div class="slide-inner">
+<p class="slide-label">幻象：看起来"在用"，但不算数</p>
+<h2 style="color:var(--red)">频繁≠深入 · 反思≠进步</h2>
+<div class="example-item">
+  <p class="item-title negative">❶ 频繁≠深入 — 只有动作没有结果</p>
+  <p class="item-quote">21 天日报中出现了 15 次同一句话——"SQL 代码的产出与校验。"</p>
+  <p class="item-comment">进化的标志是：<strong style="color:var(--red)">你今天用的方式和一个月前不一样。</strong>连续一个月复制同一句话，说明既没有反思，也没有尝试新场景。</p>
+</div>
+<div class="example-item">
+  <p class="item-title negative">❷ 反思≠进步 — 写了"下周调整"，从来没调整过</p>
+  <p class="item-quote">"下周调整：让 AI 帮助理清设计思路，并对设计进行找茬。" × 3 周<br>"下周调整：学习 AI 使用技巧，更快速合理的使用 AI。" × 多周</p>
+  <p class="item-comment">三周写一模一样的"下周调整"，说明<strong style="color:var(--red)">一次都没有真正调整过。这不是在反思，这是在填表。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 19: 反例 ❸❹ -->
+<section class="slide" id="s19"><div class="slide-inner">
+<p class="slide-label">幻象：看起来"在用"，但不算数</p>
+<h2 style="color:var(--red)">做了≠做对 · 准备≠行动</h2>
+<div class="example-item">
+  <p class="item-title negative">❸ 做了≠做对，更别说做好</p>
+  <p class="item-quote">做了很多尝试，月报列了不少案例，自评"不错""良好"。但这些方案交到我这里，<strong>没有过稿</strong>。</p>
+  <p class="item-comment"><strong style="color:var(--red)">如果你自己觉得"不错"但审核没通过，说明你的自我标准需要校准。</strong></p>
+</div>
+<div class="example-item">
+  <p class="item-title negative">❹ 准备好了≠在做了 — 装了工具不用</p>
+  <p class="item-quote">"完成 Cursor 部署，暂未使用体验。"</p>
+  <p class="item-comment">装了不等于用了。这就像买了健身卡但从来不去——<strong style="color:var(--red)">别把"准备好了"当成"在做了"。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 20: 反例 ❺❻ -->
+<section class="slide" id="s20"><div class="slide-inner">
+<p class="slide-label">幻象：看起来"在用"，但不算数</p>
+<h2 style="color:var(--red)">包装≠实力 · 用了≠用在工作上</h2>
+<div class="example-item">
+  <p class="item-title negative">❺ 包装≠实力 — 月报很漂亮，日报全是"无"</p>
+  <p class="item-quote">月报写得非常系统——"四大核心场景""多工具组合应用"。但日报 19 天里 11 天写的是"无"。</p>
+  <p class="item-comment"><strong style="color:var(--red)">月报包装再好，日报的真实记录骗不了人。</strong>我看的是日报，不是月报。</p>
+</div>
+<div class="example-item">
+  <p class="item-title negative">❻ 用了≠用在工作上 — 私人用途写进日报不算数</p>
+  <p class="item-quote">"今天用 AI 搜索东西……具体查找内容是洛克王国相关内容，搜了一下老版洛克王国为啥不能登录。"</p>
+  <p class="item-comment"><strong style="color:var(--red)">如果非要写进日报，请确保它和工作有关。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 21: 反例 ❼❽ -->
+<section class="slide" id="s21"><div class="slide-inner">
+<p class="slide-label">幻象：看起来"在用"，但不算数</p>
+<h2 style="color:var(--red)">广度≠深度 · 认同≠行动</h2>
+<div class="example-item">
+  <p class="item-title negative">❼ 工具广度≠能力深度 — 只有一个维度</p>
+  <p class="item-quote">"使用即梦生成视频素材" · "在 Suno 生成配乐" · "使用 Seedance 生成角色展示视频" · "使用可灵生成……" — 一个月全部是视频/音频生成</p>
+  <p class="item-comment">策划的核心能力是设计逻辑、系统思考、数据决策——<strong style="color:var(--red)">这些维度的 AI 应用一条都看不到。维度单一不算"深度应用"。</strong></p>
+</div>
+<div class="example-item">
+  <p class="item-title negative">❽ 认同≠行动 — 嘴上说重要，手上没动作</p>
+  <p class="item-quote">月报里写"前瞻判断：AI 赋能将是未来核心方向"。打开日报看——自己实际做了什么？</p>
+  <p class="item-comment"><strong style="color:var(--red)">进化系数看的是你做了什么，不是你觉得什么重要。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 22: 抽象提炼 -->
+<section class="slide section-title" id="s22"><div class="slide-inner">
+<p class="slide-label">本质区别</p>
+<h1>你是在思考，还是在表演？</h1>
+<div class="grid-2" style="margin-top:36px">
+  <div class="card" style="border-left:3px solid var(--green);text-align:center">
+    <p style="font-size:1.1rem;color:var(--green);font-weight:700;margin-bottom:12px">标杆的背后</p>
+    <p style="font-size:2.2rem;font-weight:900;color:#fff">深度思考</p>
+    <p style="margin-top:12px;color:var(--text-dim);font-size:0.95rem">想清楚问题 → 动手 → 验证 → 不满意就改<br>工具只是手段，<strong style="color:var(--green)">思考才是引擎</strong></p>
+  </div>
+  <div class="card" style="border-left:3px solid var(--red);text-align:center">
+    <p style="font-size:1.1rem;color:var(--red);font-weight:700;margin-bottom:12px">反例的背后</p>
+    <p style="font-size:2.2rem;font-weight:900;color:#fff">自我感动 / 填表</p>
+    <p style="margin-top:12px;color:var(--text-dim);font-size:0.95rem">感动了自己，没有感动审核人<br><strong style="color:var(--red)">在完成汇报动作，不是在完成工作</strong></p>
+  </div>
+</div>
+<blockquote style="margin-top:28px;text-align:center;font-size:1.1rem">Q2 的三项交付是帮大家从"用了"走向"用好了"的台阶——<strong>走不走还是看你自己脑子里那根弦。</strong></blockquote>
+</div></section>
+
+<!-- Slide 23: H1 公式 + 北极星 -->
+<section class="slide section-title" id="s23"><div class="slide-inner">
+<p class="slide-label">议程 4 · H1 绩效评分标准</p>
+<h1>公式回顾</h1>
+<div class="big-formula" style="margin-top:32px">
+  最终得分 = <span style="color:var(--blue)">业务结果分</span> × <span style="color:var(--gold)">进化系数</span> × <span style="color:var(--purple)">摩擦系数</span> + <span style="color:var(--green)">加法层</span>
+</div>
+<p class="subtitle" style="text-align:center;margin-top:24px">北极星：<strong style="color:var(--gold);font-size:1.3rem">增长效能 = 单位成本产出的用户价值</strong></p>
+</div></section>
+
+<!-- Slide 24: 场景试算 -->
+<section class="slide" id="s24"><div class="slide-inner">
+<p class="slide-label">场景试算</p>
+<h2>假设业务结果分 80，摩擦系数 1.0</h2>
+<table>
+  <tr><th>进化系数</th><th>乘法结果</th><th>加法层 +3</th><th>最终得分</th><th>大约评级</th></tr>
+  <tr style="background:rgba(67,233,123,0.06)"><td class="accent-green">1.1</td><td>88</td><td>91</td><td style="font-weight:900;color:var(--green)">91</td><td><span class="tag green">A</span></td></tr>
+  <tr><td>1.0</td><td>80</td><td>83</td><td style="font-weight:700">83</td><td>B+</td></tr>
+  <tr><td class="accent-red">0.9</td><td>72</td><td>75</td><td>75</td><td>B</td></tr>
+  <tr><td class="accent-red">0.8</td><td>64</td><td>67</td><td>67</td><td>B-/C+</td></tr>
+  <tr style="background:rgba(245,87,108,0.06)"><td class="accent-red">0.7</td><td>56</td><td>59</td><td style="font-weight:900;color:var(--red)">≤B</td><td><span class="tag red">天花板锁死</span></td></tr>
+</table>
+<blockquote><strong>业务做得再好，进化不动，打七折。</strong>反过来，业务一般但进化突出，系数可以帮你一把。</blockquote>
+</div></section>
+
+<!-- Slide 25: 业务结果分 -->
+<section class="slide" id="s25"><div class="slide-inner">
+<p class="slide-label"><span style="color:var(--blue)">业务结果分</span> — 基数</p>
+<h2>什么算高分？</h2>
+<p class="subtitle">基数决定起跑线 — 起跑线低，后面的系数再高也拉不到前面去</p>
+<div class="grid-2">
+  <div class="card blue-border">
+    <h3 style="color:var(--blue)">交付质量</h3>
+    <p>完成度高 · 符合验收标准 · 返工率低</p>
+  </div>
+  <div class="card blue-border">
+    <h3 style="color:var(--blue)">管线效率</h3>
+    <p>按节奏交付 · 主动推进 · 不卡上下游</p>
+  </div>
+  <div class="card blue-border">
+    <h3 style="color:var(--blue)">设计目标贯彻</h3>
+    <p>准确理解并实现设计意图 · 不走形 · 不缩水</p>
+  </div>
+  <div class="card blue-border">
+    <h3 style="color:var(--blue)">生态问题发现与解决</h3>
+    <p>主动提出有价值的问题 · 方案可落地 · 效果可量化</p>
+  </div>
+</div>
+</div></section>
+
+<!-- Slide 26: 进化系数 -->
+<section class="slide" id="s26"><div class="slide-inner">
+<p class="slide-label"><span style="color:var(--gold)">进化系数</span> — 乘数 ×</p>
+<h2>两个输入维度</h2>
+<div class="grid-2" style="margin-bottom:24px">
+  <div class="card gold-border">
+    <h3>维度一：个人成长轨迹</h3>
+    <p>和你自己比 — 上个周期到这个周期，你的 AI 应用深度、广度、复杂度有没有变化？</p>
+  </div>
+  <div class="card gold-border">
+    <h3>维度二：组织内相对水平</h3>
+    <p>和团队比 — 同样的岗位、同样的资源，别人走到哪了，你在哪里？</p>
+  </div>
+</div>
+<table>
+  <tr><th></th><th style="color:var(--green)">相对水平高</th><th style="color:var(--red)">相对水平低</th></tr>
+  <tr><td style="font-weight:700">成长明显</td><td><span class="tag green">领跑者</span> 系数高</td><td><span class="tag blue">追赶者</span> 系数中偏上</td></tr>
+  <tr><td style="font-weight:700">成长停滞</td><td><span class="tag gold">吃老本</span> 系数中，有风险</td><td><span class="tag red">掉队</span> 系数低，红灯</td></tr>
+</table>
+</div></section>
+
+<!-- Slide 27: 摩擦系数 -->
+<section class="slide" id="s27"><div class="slide-inner">
+<p class="slide-label"><span style="color:var(--purple)">摩擦系数</span> — 乘数 ×</p>
+<h2>协作效率：你是加速器还是减速带？</h2>
+<table>
+  <tr><th>维度</th><th style="color:var(--green)">高分（≥1.0）</th><th style="color:var(--red)">低分（&lt;1.0）</th></tr>
+  <tr><td style="font-weight:700">主动性</td><td>方案主动迭代、问题不等催</td><td>反复催促才交付、迭代不主动推进</td></tr>
+  <tr><td style="font-weight:700">提测质量</td><td>一次提测通过率高、QA 返工少</td><td>提测后大面积打回、反复修</td></tr>
+  <tr><td style="font-weight:700">交付节奏</td><td>按管线节点交付、偶尔提前</td><td>惯性延期、节点频繁滑动</td></tr>
+</table>
+<blockquote>摩擦系数低意味着你在拖团队节奏——<strong>别人等你、帮你擦屁股的时间都是成本。</strong></blockquote>
+</div></section>
+
+<!-- Slide 28: 加法层 -->
+<section class="slide" id="s28"><div class="slide-inner">
+<p class="slide-label"><span style="color:var(--green)">加法层</span> — 加减分</p>
+<h2>客观事件，可举证</h2>
+<div class="grid-2">
+  <div>
+    <h3 style="color:var(--green)">加分事项</h3>
+    <table>
+      <tr><td>个人探索转化为业务价值</td><td style="color:var(--text-dim);font-size:0.85rem">举证：工时/复用/替代</td></tr>
+      <tr><td>主动分享、带动他人</td><td style="color:var(--text-dim);font-size:0.85rem">工作流/培训/文档</td></tr>
+      <tr><td>主动补位有业务价值的任务</td><td style="color:var(--text-dim);font-size:0.85rem">低价值活应该工具解决</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3 style="color:var(--red)">扣分事项</h3>
+    <table>
+      <tr><td>AI 交付参与度低/不参与</td><td style="color:var(--text-dim);font-size:0.85rem">阶段制换算</td></tr>
+      <tr><td>结构化汇报不执行</td><td style="color:var(--text-dim);font-size:0.85rem">日报/1v1/早晚会</td></tr>
+      <tr><td>走形式不走心</td><td style="color:var(--text-dim);font-size:0.85rem">敷衍/复制粘贴/空白</td></tr>
+      <tr><td>考勤纪律</td><td style="color:var(--text-dim);font-size:0.85rem">迟到/早退/请假</td></tr>
+    </table>
+  </div>
+</div>
+<blockquote><strong>交作业是底线，用得深才是真本事；守纪律是底线，主动推进才是真态度。</strong></blockquote>
+</div></section>
+
+<!-- Slide 29: 收尾 -->
+<section class="slide section-title" id="s29"><div class="slide-inner">
+<p class="slide-label">收尾</p>
+<h1>三句话</h1>
+<div style="margin-top:40px;text-align:center">
+  <p style="font-size:1.3rem;color:var(--text-bright);margin:24px 0">1. 今天大家的分享让我看到了差距——<strong style="color:#fff">有人走得很远，有人还在原地。</strong></p>
+  <p style="font-size:1.3rem;color:var(--text-bright);margin:24px 0">2. Q2 三项要求<strong style="color:var(--gold)">本周就生效</strong>。SKILL/Memory 允许补交一周，其他不变。</p>
+  <p style="font-size:1.3rem;color:var(--text-bright);margin:24px 0">3. 进化系数不是口号——<strong style="color:var(--gold)">它是乘法，直接决定你的绩效上限。</strong></p>
+</div>
+</div></section>
+
+<!-- Slide 30: 下一步 Action -->
+<section class="slide" id="s30"><div class="slide-inner">
+<p class="slide-label">下一步 Action</p>
+<h1>Q2 交付时间表</h1>
+<table style="margin-top:24px">
+  <tr><th>截止时间</th><th>交付物</th><th>备注</th></tr>
+  <tr><td class="accent">本周日 4/13</td><td>第一份 SKILL / Memory .md</td><td>补交截止 4/20</td></tr>
+  <tr><td class="accent-blue">4/20（双周）</td><td>第一份 KODA 数据报告</td><td></td></tr>
+  <tr><td class="accent-green">4/30（月底）</td><td>第一个 OmniFlow 工作流</td><td></td></tr>
+  <tr><td style="color:var(--text-dim)">持续</td><td>结构化日报 AI 心得</td><td>已在执行，不中断</td></tr>
+</table>
+<div style="text-align:center;margin-top:48px">
+  <p style="font-size:1.6rem;font-weight:900;color:var(--gold)">从今天开始。</p>
+</div>
+</div></section>
+
+</div>
+
+<div class="page-ind" id="pageInd">1 / 31</div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const pageInd = document.getElementById('pageInd');
+const total = slides.length;
+
+function updateVisibility() {
+  const scrollY = window.scrollY;
+  slides.forEach((s, i) => {
+    const rect = s.getBoundingClientRect();
+    if (rect.top < window.innerHeight * 0.6 && rect.bottom > window.innerHeight * 0.4) {
+      s.classList.add('visible');
+      pageInd.textContent = (i + 1) + ' / ' + total;
+    }
+  });
+}
+
+function goToSlide(n) {
+  if (n < 0 || n >= total) return;
+  slides[n].scrollIntoView({ behavior: 'smooth' });
+}
+
+function currentSlide() {
+  let best = 0, bestDist = Infinity;
+  slides.forEach((s, i) => {
+    const d = Math.abs(s.getBoundingClientRect().top);
+    if (d < bestDist) { bestDist = d; best = i; }
+  });
+  return best;
+}
+
+window.addEventListener('scroll', updateVisibility);
+window.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+    e.preventDefault(); goToSlide(currentSlide() + 1);
+  } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+    e.preventDefault(); goToSlide(currentSlide() - 1);
+  } else if (e.key === 'Home') {
+    e.preventDefault(); goToSlide(0);
+  } else if (e.key === 'End') {
+    e.preventDefault(); goToSlide(total - 1);
+  }
+});
+
+updateVisibility();
+</script>
+</body>
+</html>

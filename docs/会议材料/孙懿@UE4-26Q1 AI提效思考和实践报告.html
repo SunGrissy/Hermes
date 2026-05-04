@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<title>AI 提效：思考、实践与组织建设</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+:root {
+  --bg-dark: #0a0e17;
+  --bg-card: #111827;
+  --bg-accent: #1a2332;
+  --text-primary: #e8e6e3;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent-gold: #d4a857;
+  --accent-amber: #f59e0b;
+  --accent-blue: #3b82f6;
+  --accent-teal: #14b8a6;
+  --accent-rose: #f43f5e;
+  --accent-violet: #8b5cf6;
+  --border-subtle: rgba(255,255,255,0.06);
+  --slide-w: 1280px;
+  --slide-h: 720px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #050810;
+  font-family: 'Noto Sans SC', sans-serif;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+.slide {
+  width: var(--slide-w);
+  height: var(--slide-h);
+  margin: 20px auto;
+  background: var(--bg-dark);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 60px 80px;
+  page-break-after: always;
+  border: 1px solid var(--border-subtle);
+}
+
+.slide::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 4px;
+  background: linear-gradient(90deg, var(--accent-gold), var(--accent-amber), transparent);
+}
+
+.page-num {
+  position: absolute;
+  bottom: 24px; right: 40px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: 'Noto Serif SC', serif;
+}
+
+.slide-title {
+  font-family: 'Noto Serif SC', serif;
+  font-weight: 700;
+  font-size: 36px;
+  line-height: 1.3;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.slide-subtitle {
+  font-size: 16px;
+  color: var(--accent-gold);
+  font-weight: 500;
+  margin-bottom: 32px;
+  letter-spacing: 0.5px;
+}
+
+.slide-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.key-point {
+  font-size: 20px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  font-weight: 400;
+}
+
+.key-point strong, .key-point b {
+  color: var(--accent-gold);
+  font-weight: 700;
+}
+
+.highlight-box {
+  background: var(--bg-accent);
+  border-left: 3px solid var(--accent-gold);
+  padding: 16px 24px;
+  border-radius: 0 8px 8px 0;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.highlight-box strong {
+  color: var(--accent-gold);
+}
+
+.data-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.data-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+.data-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.data-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+.data-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+
+.data-card .label {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.data-card .value {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.data-card .desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+table.clean {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+table.clean th {
+  text-align: left;
+  padding: 10px 16px;
+  font-weight: 500;
+  color: var(--accent-gold);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+table.clean td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+table.clean tr:last-child td { border-bottom: none; }
+
+table.clean td:first-child {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tag-gold { background: rgba(212,168,87,0.15); color: var(--accent-gold); }
+.tag-blue { background: rgba(59,130,246,0.15); color: var(--accent-blue); }
+.tag-teal { background: rgba(20,184,166,0.15); color: var(--accent-teal); }
+.tag-rose { background: rgba(244,63,94,0.15); color: var(--accent-rose); }
+
+.spectrum-bar {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.footer-line {
+  position: absolute;
+  bottom: 24px; left: 80px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Cover slide special */
+.slide.cover {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 80px;
+}
+
+.slide.cover::before {
+  height: 100%;
+  width: 4px;
+  background: linear-gradient(180deg, var(--accent-gold), transparent);
+  position: absolute;
+  top: 0; left: 80px;
+}
+
+.slide.cover .slide-title {
+  font-size: 48px;
+  font-weight: 900;
+  margin-bottom: 16px;
+}
+
+.slide.section-break {
+  justify-content: center;
+  padding-left: 120px;
+}
+
+.slide.section-break .slide-title {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.steps-list {
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps-list li {
+  counter-increment: step;
+  padding: 12px 0 12px 48px;
+  position: relative;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.steps-list li:last-child { border-bottom: none; }
+
+.steps-list li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0; top: 12px;
+  width: 32px; height: 32px;
+  background: var(--bg-accent);
+  border: 1px solid var(--accent-gold);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.steps-list li strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+.col-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-gold);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bullet-list {
+  list-style: none;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.bullet-list li {
+  padding: 4px 0 4px 20px;
+  position: relative;
+}
+
+.bullet-list li::before {
+  content: '—';
+  position: absolute;
+  left: 0;
+  color: var(--accent-gold);
+}
+
+@media print {
+  body { background: none; }
+  .slide {
+    margin: 0;
+    border: none;
+    page-break-after: always;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page {
+    size: 1280px 720px;
+    margin: 0;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- P1 封面 -->
+<div class="slide cover">
+  <div class="slide-title">AI 提效：实践、思考与组织建设</div>
+  <div style="font-size:18px; color:var(--text-secondary); margin-top:8px;">孙懿 · 捕鱼中心 UE4 工作室</div>
+  <div style="font-size:14px; color:var(--text-muted); margin-top:24px;">2026 年 4 月</div>
+  <div class="page-num">1 / 20</div>
+</div>
+
+<!-- P2 开场 -->
+<div class="slide">
+  <div class="slide-title">从三个案例说起</div>
+  <div class="slide-subtitle">一、思考</div>
+  <div class="slide-body">
+    <div class="data-grid cols-3" style="margin-bottom:24px;">
+      <div class="data-card">
+        <div class="label">TYCLAW</div>
+        <div class="desc" style="color:var(--text-primary);font-size:15px;">把研发管线中的重复操作<br>封装成可调用的工具</div>
+      </div>
+      <div class="data-card">
+        <div class="label">OmniFlow</div>
+        <div class="desc" style="color:var(--text-primary);font-size:15px;">让非技术人员<br>也能搭建自动化流程</div>
+      </div>
+      <div class="data-card">
+        <div class="label">KODA</div>
+        <div class="desc" style="color:var(--text-primary);font-size:15px;">在数据分析环节<br>引入对话式交互</div>
+      </div>
+    </div>
+    <div class="key-point" style="font-size:18px;color:var(--text-secondary);">三个案例呈现了深度 AI 化以后的工作方式想象，但我想聊的不止工具本身——</div>
+    <div class="data-grid cols-3" style="margin-top:16px;">
+      <div class="data-card" style="border-left:3px solid var(--accent-gold);padding:16px 20px;">
+        <div style="font-size:17px;color:var(--text-primary);font-weight:600;line-height:1.6;">AI 对人的影响深度<br>由人决定</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-amber);padding:16px 20px;">
+        <div style="font-size:17px;color:var(--text-primary);font-weight:600;line-height:1.6;">新生产力需要<br>新生产关系</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-teal);padding:16px 20px;">
+        <div style="font-size:17px;color:var(--text-primary);font-weight:600;line-height:1.6;">工具、人、制度<br>缺一不可</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">2 / 20</div>
+</div>
+
+<!-- P3 思考①：深度光谱 -->
+<div class="slide">
+  <div class="slide-title">AI 对人的影响深度，由人决定</div>
+  <div class="slide-subtitle">思考 ①　同一个工具，不同的人用出完全不同的结果</div>
+  <div class="slide-body" style="gap:12px;">
+    <div class="data-grid cols-3">
+      <div class="data-card" style="border-top:3px solid var(--text-muted);">
+        <div class="label" style="color:var(--text-muted);">浅层（待提升）</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin:8px 0;">AI 替我执行</div>
+        <div class="desc">省时间，但能力没变。频率很高，深度很浅。</div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:13px;color:var(--text-muted);">例：每天用 AI 做视频，试了一大串工具，但只有"生成素材"一个维度</div>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-blue);">
+        <div class="label" style="color:var(--accent-blue);">中层（基本要求）</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin:8px 0;">AI 帮我突破边界</div>
+        <div class="desc">能力圈变大了——做到以前做不到的事。</div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:13px;color:var(--text-muted);">例：非专业开发人员也开始搭建自己的系统；UE一人搞定界面设计和实现）</div>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-gold);">
+        <div class="label" style="color:var(--accent-gold);">深层（鼓励倡导）</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text-primary);margin:8px 0;">AI 改变思维方式</div>
+        <div class="desc">系统性思考"怎么用好 AI"，而非"今天让 AI 帮我做什么"。</div>
+        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-subtle);font-size:13px;color:var(--text-muted);">例：4 步视频工作流方法论 + Skill 沉淀；ROI 平台 + AI 沟通 4 要素框架</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="margin-top:8px;">
+      差距不在工具，在于有没有思考。同一件事可以停在浅层，也可以到深层。<strong>差距不是线性拉开的，是指数级的。</strong>
+    </div>
+  </div>
+  <div class="page-num">3 / 20</div>
+</div>
+
+<!-- P4 思考②：新生产关系 -->
+<div class="slide">
+  <div class="slide-title">新生产力需要新生产关系</div>
+  <div class="slide-subtitle">思考 ②　碳基 Agent 与硅基 Agent 紧密合作、各司其职、互相成就</div>
+  <div class="slide-body" style="gap:16px;">
+    <div class="two-col">
+      <div class="data-card" style="border-left:3px solid var(--accent-teal);">
+        <div style="font-size:14px;color:var(--accent-teal);font-weight:700;margin-bottom:8px;">硅基 Agent</div>
+        <div style="font-size:16px;color:var(--text-primary);line-height:1.6;">AI / 自动化系统<br>做 rule-based 的事——零延迟、无损耗、消灭信息差</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-top:8px;">所有"反人性的"（重复盯防、规则检查、信息搬运）→ 交给硅基</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-amber);">
+        <div style="font-size:14px;color:var(--accent-amber);font-weight:700;margin-bottom:8px;">碳基 Agent</div>
+        <div style="font-size:16px;color:var(--text-primary);line-height:1.6;">人<br>做需要体验、情绪和创造力的事</div>
+        <div style="font-size:14px;color:var(--text-muted);margin-top:8px;">业务判断、用户洞察、审美直觉、创新设计 → 碳基不可替代、硅基指数放大</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="font-size:15px;">岗位边界、协作流程、信息流转不变，AI 最多<strong>"用新工具干旧活"</strong>。<br>
+      分工落地为两条轨道——<strong style="color:var(--accent-blue);">快轨</strong>（硅基主导，极致压成本）+ <strong style="color:var(--accent-gold);">慢轨</strong>（碳基主导，死磕体验代差）。<br>
+      <span style="color:var(--text-muted);font-size:14px;">管理两者的逻辑是一样的：给清晰标准 → 说清要什么 → 验收结果。</span></div>
+  </div>
+  <div class="page-num">4 / 20</div>
+</div>
+
+<!-- P5 思考②续：硅基性格 + 信息基建 + 快慢轨 -->
+<div class="slide">
+  <div class="slide-title">硅基的两种性格 × 信息基建</div>
+  <div class="slide-subtitle">思考 ② 续　用对了是杠杆，用错了是风险</div>
+  <div class="slide-body" style="gap:16px;">
+    <div class="two-col">
+      <div class="data-card">
+        <div style="font-size:14px;color:var(--accent-teal);font-weight:700;margin-bottom:6px;">确定性硅基 <span class="tag tag-teal">脚本 / 规则引擎</span></div>
+        <div class="desc" style="font-size:15px;">同输入 → 同输出，永远稳定<br>适合容错率为零的场景：检查、校验、流程推送</div>
+      </div>
+      <div class="data-card">
+        <div style="font-size:14px;color:var(--accent-violet);font-weight:700;margin-bottom:6px;">概率性硅基 <span class="tag" style="background:rgba(139,92,246,0.15);color:var(--accent-violet);">大模型</span></div>
+        <div class="desc" style="font-size:15px;">输出天然不稳定，同一 prompt 两遍结果可能不同<br>适合开放探索、辅助判断、创意发散</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="border-left-color:var(--accent-amber);">
+      <strong>对双方友好的基础设施，是碳硅协作的前提。</strong><br>
+      <span style="font-size:15px;color:var(--text-secondary);"><strong style="color:var(--accent-teal);">对硅基友好</strong>：语料结构化 → 规则显性化 → 流程标准化——让硅基 Agent 能读懂、能执行。</span><br>
+      <span style="font-size:15px;color:var(--text-secondary);"><strong style="color:var(--accent-amber);">对碳基友好</strong>：送达渠道选钉钉机器人——符合用户心智、门槛为零，让结果出现在人已经在用的地方。</span>
+    </div>
+  </div>
+  <div class="page-num">5 / 20</div>
+</div>
+
+<!-- P6 思考③：工具人制度 -->
+<div class="slide">
+  <div class="slide-title">工具、人、制度——缺一不可</div>
+  <div class="slide-subtitle">思考 ③　到达目的地需要三条腿同时走</div>
+  <div class="slide-body">
+    <div class="data-grid cols-3">
+      <div class="data-card" style="border-top:3px solid var(--accent-blue);">
+        <div style="font-size:14px;color:var(--accent-blue);font-weight:700;margin-bottom:10px;">工具层</div>
+        <div style="font-size:16px;color:var(--text-primary);font-weight:500;margin-bottom:8px;">把"人肉中继"变成"系统流转"</div>
+        <div class="desc">核心不是 AI 多聪明，而是信息能不能结构化、规则能不能自动执行、流程能不能零损耗流转。</div>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-amber);">
+        <div style="font-size:14px;color:var(--accent-amber);font-weight:700;margin-bottom:10px;">人的层面</div>
+        <div style="font-size:16px;color:var(--text-primary);font-weight:500;margin-bottom:8px;">分层供给，不同预期</div>
+        <div class="desc">塔基给工具、中层给反馈、头部给舞台。<strong style="color:var(--accent-gold);">助推是强化器。</strong></div>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-rose);">
+        <div style="font-size:14px;color:var(--accent-rose);font-weight:700;margin-bottom:10px;">制度层</div>
+        <div style="font-size:16px;color:var(--text-primary);font-weight:500;margin-bottom:8px;">靠热情跑一个月，靠制度跑一年</div>
+        <div class="desc">用了怎么奖、不用怎么罚、标准谁定、效果谁量。工具选型是战术，制度配套是战略。</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">6 / 20</div>
+</div>
+
+<!-- P7 判断①：自动>智能 -->
+<div class="slide">
+  <div class="slide-title">当前的主要问题不是没有好工具</div>
+  <div class="slide-subtitle">判断 ①　现阶段大部分提效来自"自动"而非"智能"</div>
+  <div class="slide-body" style="gap:16px;">
+    <div class="key-point" style="font-size:17px;color:var(--text-secondary);">需要确定性的事，就用确定性的方式解决——规则匹配、流程自动化，不依赖大模型的概率输出。<br>省掉的是等待、沟通、确认、遗忘这些<strong>摩擦成本</strong>，释放的是碳基 Agent 的判断力带宽。</div>
+    <div class="two-col" style="gap:24px;">
+      <div class="data-card" style="border-left:3px solid var(--accent-blue);">
+        <div style="font-size:14px;color:var(--accent-blue);font-weight:700;margin-bottom:8px;">基础状态（当前）</div>
+        <div style="font-size:17px;color:var(--text-primary);font-weight:600;margin-bottom:6px;">自动化清扫摩擦成本</div>
+        <div class="desc">"有多少人工中转可以被规则替代"<br>是 ROI 最确定、落地最快的问题</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-gold);">
+        <div style="font-size:14px;color:var(--accent-gold);font-weight:700;margin-bottom:8px;">进阶状态（正在进入）</div>
+        <div style="font-size:17px;color:var(--text-primary);font-weight:600;margin-bottom:6px;">智能赋能判断力和创造力</div>
+        <div class="desc">Agent 圆桌辅助设计、知识库决策支持<br>从事务性工作走向创造力核心</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="margin-top:4px;">
+      AI 最好的状态不是让人觉得"哇好厉害"，而是<strong>像呼吸一样自然</strong>——你不会注意到它，但离开它就不行。
+    </div>
+  </div>
+  <div class="page-num">7 / 20</div>
+</div>
+
+<!-- P9 判断②：D-K 曲线 -->
+<div class="slide">
+  <div class="slide-title">人才结构不再是传统金字塔</div>
+  <div class="slide-subtitle">判断 ②　AI 时代的能力分布更接近邓宁-克鲁格曲线</div>
+  <div class="slide-body" style="gap:12px;">
+    <div class="data-grid cols-4">
+      <div class="data-card" style="text-align:center;border-top:3px solid var(--accent-amber);">
+        <div style="font-size:28px;margin-bottom:4px;">🔥</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent-amber);margin-bottom:4px;">初始兴奋区</div>
+        <div class="desc" style="font-size:13px;">"ChatGPT 帮我写了个方案，太厉害了！"</div>
+      </div>
+      <div class="data-card" style="text-align:center;border-top:3px solid var(--accent-rose);">
+        <div style="font-size:28px;margin-bottom:4px;">⬇</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent-rose);margin-bottom:4px;">绝望之谷</div>
+        <div class="desc" style="font-size:13px;">发现 AI 并不总是对的，<br>不少人在这里放弃了</div>
+      </div>
+      <div class="data-card" style="text-align:center;border-top:3px solid var(--accent-teal);">
+        <div style="font-size:28px;margin-bottom:4px;">⬆</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent-teal);margin-bottom:4px;">开悟之坡</div>
+        <div class="desc" style="font-size:13px;">理解边界，造工具、<br>建工作流、沉淀方法论</div>
+      </div>
+      <div class="data-card" style="text-align:center;border-top:3px solid var(--accent-gold);">
+        <div style="font-size:28px;margin-bottom:4px;">⚡</div>
+        <div style="font-size:14px;font-weight:700;color:var(--accent-gold);margin-bottom:4px;">持续产出区</div>
+        <div class="desc" style="font-size:13px;">AI 是日常工作的一部分，<br>"本来就该这样"</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="margin-top:8px;">
+      团队实测：<strong>工具、培训、时间完全一样，半年后位置完全不同。</strong><br>
+      <span style="font-size:15px;color:var(--text-secondary);">组织策略：对已经走进谷底且有意愿攀登的人——<strong>扶上马，送一程。用助推放大、用强推做筛选。</strong></span>
+    </div>
+  </div>
+  <div class="page-num">8 / 20</div>
+</div>
+
+<!-- P10 判断③：自驱力+深度思考 -->
+<div class="slide">
+  <div class="slide-title">阻碍不是技术，而是自驱力和深度思考</div>
+  <div class="slide-subtitle">判断 ③　技术门槛已低到"想清楚要什么 >> 会不会写代码"</div>
+  <div class="slide-body" style="gap:20px;">
+    <div class="key-point" style="font-size:17px;color:var(--text-secondary);">半年遇到的所有卡点——权限审批、安全审查、自驱力不均——<strong>没有一个是技术问题。</strong></div>
+    <div class="two-col" style="gap:24px;">
+      <div class="data-card" style="border-top:3px solid var(--accent-rose);">
+        <div style="font-size:15px;color:var(--accent-rose);font-weight:700;margin-bottom:8px;">瓶颈一：进化的自驱力</div>
+        <div class="desc" style="font-size:15px;line-height:1.7;">同样的工具给同样的人——<br>有人重新定义工作方式，<br>有人只会挠头说我觉得没什么应用场景。<br><br>正向飞轮 vs 原地不动 = <strong style="color:var(--text-primary);">相对倒退</strong></div>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-amber);">
+        <div style="font-size:15px;color:var(--accent-amber);font-weight:700;margin-bottom:8px;">瓶颈二：深度思考</div>
+        <div class="desc" style="font-size:15px;line-height:1.7;">头部的人产出高，不是工具用得多，而是<strong style="color:var(--text-primary);">想清楚了真实痛点</strong>，然后用 AI 精准解决。<br><br>频率 ≠ 深度<br>动作 ≠ 思考</div>
+      </div>
+    </div>
+    <div class="highlight-box"><strong>推工具容易，推思考难。但后者才是真正的杠杆。</strong></div>
+  </div>
+  <div class="page-num">9 / 20</div>
+</div>
+
+<!-- P11 团队成果总览 -->
+<div class="slide section-break">
+  <div class="slide-subtitle" style="margin-bottom:8px;">三、团队做了什么</div>
+  <div class="slide-title">四块成果</div>
+  <div class="slide-body" style="justify-content:flex-start;padding-top:24px;">
+    <div style="font-size:16px;color:var(--text-secondary);margin-bottom:24px;">美术线是 AI 先行者，几年前就在用。最近半年，AI 延伸到研发流程、项目管理和质量管控——</div>
+    <div class="data-grid cols-2" style="gap:20px;">
+      <div class="data-card" style="border-left:3px solid var(--accent-rose);">
+        <div class="value" style="font-size:22px;">① 系统拦截</div>
+        <div class="desc">版本质量从"人盯"变成系统自动拦截</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-blue);">
+        <div class="value" style="font-size:22px;">② 全链路渗透</div>
+        <div class="desc">开发/TA/UI/测试/数据——每个环节都在被 AI 改造</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-teal);">
+        <div class="value" style="font-size:22px;">③ 职能边界打破</div>
+        <div class="desc">中介职能消失，"一个人 + AI = 一条线"</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-gold);">
+        <div class="value" style="font-size:22px;">④ 生态沉淀</div>
+        <div class="desc">基础设施 + 个人→团队资产 + 方法论</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">10 / 20</div>
+</div>
+
+<!-- P12 成果①：系统拦截 -->
+<div class="slide">
+  <div class="slide-title">版本质量：从"人盯"到"系统拦截"</div>
+  <div class="slide-subtitle">成果 ①　这些问题以前不是不存在，是没人能发现</div>
+  <div class="slide-body" style="gap:16px;">
+    <div class="data-grid cols-4">
+      <div class="data-card" style="text-align:center;">
+        <div class="value">79</div>
+        <div class="desc">次可疑提交拦截<br><span style="font-size:12px;">（8 次确认回退）</span></div>
+      </div>
+      <div class="data-card" style="text-align:center;">
+        <div class="value">272</div>
+        <div class="desc">处配置错误<br><span style="font-size:12px;">（含 30 处进出包问题）</span></div>
+      </div>
+      <div class="data-card" style="text-align:center;">
+        <div class="value">85</div>
+        <div class="desc">对合并问题</div>
+      </div>
+      <div class="data-card" style="text-align:center;">
+        <div class="value">3</div>
+        <div class="desc">次多合回退<br><span style="font-size:12px;">避免线上事故</span></div>
+      </div>
+    </div>
+    <div class="key-point" style="font-size:16px;">
+      <strong>北极星小组</strong>搭建统一分支检查框架（本身也是 AI 写的），10+ 项检查全自动运行。
+    </div>
+    <div class="highlight-box">
+      每日代码自动 Review 已覆盖前端 + 配表 + 部分后端，<strong>检查规则根据结果自动优化——越用越准。</strong><br>系统不只是工具，它在学习。
+    </div>
+  </div>
+  <div class="page-num">11 / 20</div>
+</div>
+
+<!-- P13 成果②：全链路 -->
+<div class="slide">
+  <div class="slide-title">AI 渗透研发全链路</div>
+  <div class="slide-subtitle">成果 ②　不只是程序在用 AI 写代码</div>
+  <div class="slide-body">
+    <table class="clean" style="font-size:14px;">
+      <tr><th style="width:280px;">环节</th><th>代表性变化</th><th style="width:300px;">关键数据</th></tr>
+      <tr><td><span class="tag tag-blue">版本功能开发</span></td><td>活动功能 AI 初步开发→人 Review 交付</td><td>宝箱升级/三图抽奖/点券转盘</td></tr>
+      <tr><td><span class="tag tag-teal">工具与平台</span></td><td>传统数周开发 → 现在 1-2 天搞定</td><td><strong style="color:var(--accent-gold);">Q1 产出 20+ 工具</strong></td></tr>
+      <tr><td><span class="tag tag-gold">UI / UE</span></td><td>Figma↔UE4 双向同步 · UMG 一键生成</td><td>UI 原型：小时级→分钟级</td></tr>
+      <tr><td><span class="tag tag-rose">TA 方向</span></td><td>竞品材质逆向 · RenderDoc 自动化 · Blender 工具集</td><td>完整逆向 Workflow</td></tr>
+      <tr><td><span class="tag" style="background:rgba(139,92,246,0.15);color:var(--accent-violet);">测试</span></td><td>自动下包→安装→启动→登录→测试→上报</td><td>QA 日常使用</td></tr>
+      <tr><td><span class="tag tag-teal">数据与后端</span></td><td>仿真导表助手 · 线上报错分析 · 流失预测</td><td>240 次调用 / 省 ~700 分钟</td></tr>
+    </table>
+  </div>
+  <div class="page-num">12 / 20</div>
+</div>
+
+<!-- P14 成果③：职能边界 -->
+<div class="slide">
+  <div class="slide-title">职能边界正在打破</div>
+  <div class="slide-subtitle">成果 ③　"一个人 + AI = 一条线"正在成为现实</div>
+  <div class="slide-body" style="gap:20px;">
+    <div class="two-col">
+      <div>
+        <div class="col-title">研发侧</div>
+        <ul class="bullet-list">
+          <li><strong style="color:var(--text-primary);">Boss 制作</strong>：过去 5 工种接力 → AI 直接出片，已验证可行</li>
+          <li><strong style="color:var(--text-primary);">活动界面</strong>：策划→UE→UI→前端 → 1 人 + 工具链搞定</li>
+        </ul>
+      </div>
+      <div>
+        <div class="col-title">支撑侧</div>
+        <ul class="bullet-list">
+          <li><strong style="color:var(--text-primary);">HR 年度表彰</strong>：全套视觉 AI 生成，耗时缩减 80%</li>
+          <li><strong style="color:var(--text-primary);">北斗七星计划</strong>：调研→方案→课件→宣发，一人全链路</li>
+        </ul>
+      </div>
+    </div>
+    <div class="highlight-box">
+      <strong>中介职能正在消失。</strong>当每个人都能调用以前只有专业岗位才掌握的能力时，协作链条会自然缩短。
+    </div>
+  </div>
+  <div class="page-num">13 / 20</div>
+</div>
+
+<!-- P15 成果④：生态沉淀 -->
+<div class="slide">
+  <div class="slide-title">工具生态和方法论开始沉淀</div>
+  <div class="slide-subtitle">成果 ④　单点工具好造，难的是沉淀为可持续的组织资产</div>
+  <div class="slide-body" style="gap:12px;">
+    <div class="data-grid cols-3">
+      <div class="data-card" style="border-top:3px solid var(--accent-blue);">
+        <div style="font-size:14px;color:var(--accent-blue);font-weight:700;margin-bottom:8px;">基础设施层</div>
+        <ul class="bullet-list" style="font-size:14px;">
+          <li>AI Rule / Skill 知识库</li>
+          <li>Jenkins MCP 集成</li>
+          <li>UltraAI Agent 平台</li>          
+          <li>质量管理平台</li>
+        </ul>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-gold);">
+        <div style="font-size:14px;color:var(--accent-gold);font-weight:700;margin-bottom:8px;">个人→团队资产</div>
+        <ul class="bullet-list" style="font-size:14px;">
+          <li>技术 20+ 工具/平台</li>
+          <li>制作人开发 PM System 系统</li>
+          <li>产品组头部 5 人造工具</li>
+          <li>HR 自动化运营闭环</li>
+        </ul>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:8px;">作者分布各条线，不是某个职能的专利</div>
+      </div>
+      <div class="data-card" style="border-top:3px solid var(--accent-teal);">
+        <div style="font-size:14px;color:var(--accent-teal);font-weight:700;margin-bottom:8px;">方法论沉淀</div>
+        <ul class="bullet-list" style="font-size:14px;">
+          <li>AI 沟通 4 要素框架</li>
+          <li>AI 视频 4 步工作流</li>
+          <li>文案训练为 Cursor Skill</li>
+          <li>Q1 共 4 次全员分享会</li>
+        </ul>
+      </div>
+    </div>
+    <div style="font-size:14px;color:var(--text-muted);margin-top:4px;">与运维效率部跨项目共建 Doraemon 工具适配中，"自建 + 共建"双轮驱动</div>
+  </div>
+  <div class="page-num">14 / 20</div>
+</div>
+
+<!-- P15 个人：制度建设 -->
+<div class="slide">
+  <div class="slide-subtitle" style="margin-bottom:4px;">四、我个人做了什么</div>
+  <div class="slide-title">制度建设：让进化不可逆</div>
+  <div class="slide-body" style="gap:16px;">
+    <div class="key-point" style="font-size:17px;color:var(--text-secondary);">热情能推一个月，制度才能推一年。从破冰到兜底，五步递进——</div>
+    <ol class="steps-list">
+      <li><strong>降门槛，让人敢试</strong>　7 周 AI 作业破冰 → 结构化日报养成习惯 → 硬性交付提高标准</li>
+      <li><strong>让成果和差距同时可见</strong>　全员分享会（每人 3 分钟口述）+ 标杆 vs 反例校准（10 + 8 条）</li>
+      <li><strong>进化系数纳入绩效乘法层</strong>　不进化就打折，H1 首次正式启用——制度兜底，确保不可逆</li>
+      <li><strong>组织形式固化成果</strong>　组建北极星小组，个人工具 → 组织级基础设施</li>
+    </ol>
+  </div>
+  <div class="page-num">15 / 20</div>
+</div>
+
+<!-- P16 个人：身体力行 -->
+<div class="slide">
+  <div class="slide-title">身体力行：搭建了 7 个系统</div>
+  <div class="slide-subtitle">管理幅度过载是最大的单点瓶颈——AI 的发展恰恰是我的解药</div>
+  <div class="slide-body" style="gap:16px;">
+    <div class="data-grid cols-2" style="gap:20px;">
+      <div class="data-card" style="border-left:3px solid var(--accent-gold);">
+        <div class="value" style="font-size:22px;">7 个系统</div>
+        <div class="desc">项目管线 · 绩效评价 · 招聘初筛 · 策划预审<br>素材评分 · 钉钉消息通道 · 任务提醒</div>
+      </div>
+      <div class="data-card" style="border-left:3px solid var(--accent-teal);">
+        <div class="value" style="font-size:22px;">0 管线资源投入</div>
+        <div class="desc">用 Cursor Agent 从零搭建<br>每个系统背后都是一个管理判断</div>
+      </div>
+    </div>
+    <div class="highlight-box">
+      <strong>以身作则，堵死所有惰性借口。</strong><br>
+      <span style="font-size:15px;color:var(--text-secondary);">团队里最忙的人、本身已经持续超负荷运转的人，都能拿出这样的成果——<br>任何人再说"没时间""不会""太难了"，这张清单就是回应。</span>
+    </div>
+    <div style="font-size:14px;color:var(--text-muted);">系统清单详见附录 C</div>
+  </div>
+  <div class="page-num">16 / 20</div>
+</div>
+
+<!-- P17 个人：代价与收获 -->
+<div class="slide">
+  <div class="slide-title">代价与收获</div>
+  <div class="slide-subtitle">正收益还没完全显现，但路已经趟清楚了</div>
+  <div class="slide-body" style="gap:12px;">
+    <div class="data-grid cols-3" style="margin-bottom:8px;">
+      <div class="data-card" style="text-align:center;">
+        <div class="value">13.75h</div>
+        <div class="desc">日均工作时长</div>
+      </div>
+      <div class="data-card" style="text-align:center;">
+        <div class="value" style="color:var(--accent-rose);">？</div>
+        <div class="desc">短期投入产出比</div>
+      </div>
+      <div class="data-card" style="text-align:center;">
+        <div class="value" style="color:var(--accent-teal);">前置投资</div>
+        <div class="desc">工具越用越轻<br>标准不会消失</div>
+      </div>
+    </div>
+    <div style="font-size:15px;color:var(--accent-gold);font-weight:600;margin-bottom:4px;">真正的收获是趟路想清楚了——</div>
+    <div class="data-grid cols-2" style="gap:12px;">
+      <div class="data-card" style="padding:14px 20px;">
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">想清楚了"什么信息值得看"</div>
+        <div class="desc" style="font-size:13px;">模糊的管理直觉 → 可执行的规则</div>
+      </div>
+      <div class="data-card" style="padding:14px 20px;">
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">想清楚了"标准到底是什么"</div>
+        <div class="desc" style="font-size:13px;">脑子里的标准 → 结构化判据</div>
+      </div>
+      <div class="data-card" style="padding:14px 20px;">
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">想清楚了"推动人比造工具难"</div>
+        <div class="desc" style="font-size:13px;">齐步走的幻想 → 分层供给</div>
+      </div>
+      <div class="data-card" style="padding:14px 20px;">
+        <div style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:4px;">自己趟过的路才有说服力</div>
+        <div class="desc" style="font-size:13px;">没趟过，"不会写代码都做到了"说不出口</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">17 / 20</div>
+</div>
+
+<!-- P18 下一步：互补+核心 -->
+<div class="slide">
+  <div class="slide-subtitle" style="margin-bottom:4px;">五、下一步规划</div>
+  <div class="slide-title">与案例互补 + 从事务走向核心</div>
+  <div class="slide-body" style="gap:20px;">
+    <div class="two-col">
+      <div>
+        <div class="col-title">与案例分享的互补</div>
+        <table class="clean" style="font-size:14px;">
+          <tr><td style="width:100px;"><span class="tag tag-blue">TYCLAW</span></td><td>评估替代部分自建工具，安全审查通过后优先试用</td></tr>
+          <tr><td><span class="tag tag-teal">OmniFlow</span></td><td>覆盖 Boss 预审、素材评价、日报巡检三个核心工作流</td></tr>
+          <tr><td><span class="tag tag-gold">KODA</span></td><td>全员双周提交一份数据报告，用公司平台不重复造轮子</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="col-title">从事务走向策划核心</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-bottom:8px;">现阶段主要提效、拓边界。下一步要进入"深层"：让 AI 介入思考本身。</div>
+        <ul class="bullet-list" style="font-size:15px;">
+          <li><strong style="color:var(--text-primary);">升级设计预审团</strong><br>多 Agent 从玩家/数据/技术/竞品视角讨论，倒逼策划想更全面</li>
+          <li><strong style="color:var(--text-primary);">知识库驱动设计辅助</strong><br>项目自身经验，而非通用知识</li>
+          <li><strong style="color:var(--text-primary);">视频资料→设计文档</strong><br>自动提取 UI 框架、交互流程、设计决策点等，快速启动</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="page-num">18 / 20</div>
+</div>
+
+<!-- P20 下一步：时间表 -->
+<div class="slide">
+  <div class="slide-title">组织建设时间表</div>
+  <div class="slide-subtitle">Q2 关键里程碑</div>
+  <div class="slide-body" style="gap:20px;">
+    <table class="clean">
+      <tr><th style="width:100px;">时间</th><th>目标</th><th style="width:500px;">检验标准</th></tr>
+      <tr><td style="color:var(--accent-gold);font-weight:700;">4 月</td><td>三项硬性交付启动（SKILL / KODA / OmniFlow）</td><td>首批 SKILL 提交率 ≥ 80%</td></tr>
+      <tr><td style="color:var(--accent-gold);font-weight:700;">4 月</td><td>进一步体系化</td><td>汇总已有工具 + 贡献榜</td></tr>
+      <tr><td style="color:var(--accent-gold);font-weight:700;">5 月</td><td>北极星系统上线</td><td>日常事务相关工作流全面升级硅基化</td></tr>
+      <tr><td style="color:var(--accent-gold);font-weight:700;">6 月</td><td>H1 绩效纳入进化系数</td><td>全员评定完成，AI 能力作为乘法层正式生效</td></tr>
+      <tr><td style="color:var(--text-muted);font-weight:700;">持续</td><td>自动化度量体系</td><td>工时对比、流程耗时埋点——从"感觉"变成"数据"</td></tr>
+    </table>
+    <div class="highlight-box" style="border-left-color:var(--accent-rose);">
+      <strong>需要协同</strong>：钉钉生态权限 · KODA 权限分级 · TYCLAW 安全审查加速
+    </div>
+  </div>
+  <div class="page-num">19 / 20</div>
+</div>
+
+<!-- P20 结语 -->
+<div class="slide" style="justify-content:center;padding-left:100px;padding-right:100px;">
+  <div class="slide-title" style="font-size:32px;margin-bottom:28px;">半年下来，我确信三件事</div>
+  <div class="slide-body" style="gap:20px;justify-content:flex-start;">
+    <div style="display:flex;gap:16px;align-items:flex-start;">
+      <div style="min-width:24px;font-family:'Noto Serif SC',serif;font-size:20px;color:var(--accent-gold);font-weight:900;">1</div>
+      <div style="font-size:18px;line-height:1.7;color:var(--text-primary);font-weight:500;">飞轮已经转起来了，不会停。<br><span style="font-size:15px;font-weight:400;color:var(--text-secondary);">从系统拦截到全链路渗透，从个人工具到组织基础设施——回不去了。</span></div>
+    </div>
+    <div style="display:flex;gap:16px;align-items:flex-start;">
+      <div style="min-width:24px;font-family:'Noto Serif SC',serif;font-size:20px;color:var(--accent-gold);font-weight:900;">2</div>
+      <div style="font-size:18px;line-height:1.7;color:var(--text-primary);font-weight:500;">下一个台阶是让 AI 介入思考，而不只是执行。<br><span style="font-size:15px;font-weight:400;color:var(--text-secondary);">事务性提效已经验证了路径，接下来要进入策划核心——设计辅助、多视角决策、知识库驱动。</span></div>
+    </div>
+    <div style="display:flex;gap:16px;align-items:flex-start;">
+      <div style="min-width:24px;font-family:'Noto Serif SC',serif;font-size:20px;color:var(--accent-gold);font-weight:900;">3</div>
+      <div style="font-size:18px;line-height:1.7;color:var(--text-primary);font-weight:500;">真正的瓶颈从来不是工具，是人愿不愿意改变工作方式。<br><span style="font-size:15px;font-weight:400;color:var(--text-secondary);">所以要同时建工具、建制度、建信任。用助推放大、用强推筛选。</span></div>
+    </div>
+    <div style="margin-top:24px;text-align:center;padding:28px 24px;background:var(--bg-accent);border-radius:12px;">
+      <div style="font-family:'Noto Serif SC',serif;font-size:22px;font-weight:700;color:var(--accent-gold);line-height:1.5;">有你 + AI，比没有你只有 AI，<br>效果好在哪里？——这是每个人都要回答的问题。</div>
+    </div>
+  </div>
+  <div class="page-num">20 / 20</div>
+</div>
+
+</body>
+</html>

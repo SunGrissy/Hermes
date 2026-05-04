@@ -1,0 +1,255 @@
+{
+  "errcode": 0,
+  "errorMsg": "ok",
+  "result": {
+    "cursor": 6952332767,
+    "hasMore": false,
+    "report_list": [
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "【管线】\r\n\r\n1.   PMO脉搏会（资产和研发管线日常对齐）\r\n\r\n初步对齐端午版本内容量，启动容量拆解工作\r\n同步五月内基于投放资源需要提前准备的活动设计\r\n2.   休闲捕鱼—管线周会\r\n\r\n【投放】\r\n 直播运营面试交流\r\n候选人的快手经验非常有限\r\n了解到了一些关于主播选拔和考核的心得经验\r\n【产品】\r\n\r\n五一版本 boss 阶段反馈\r\n\r\n五月中的每日打 boss 活动方案审核（澄清设计预期，砍掉一些非必要设计）\r\n【组建】\r\n黄梓琪 · 数据分析（复试，校招）\r\n偏向业务执行+数据工程\r\n游戏理解一般\r\n备选\r\n【AI实用】\r\n\r\n重度 Hermes，除了面试信息处理没用 Cursor\r\n在搞多 profile，原本想接入 PmSystem 的 LLM 预警打算直接搞成钉钉机器人从接口取数\r\nPmSystem 权限分级按照 少数人+多数Agent 的方式重新搞了，待验收\r\n【其他】\r\n\r\n 北极星小组阶段沟通\r\n北极星系统当前已有工作台框架\r\n重点讨论了以端午版本中的某个活动为试点，由北极星系统从效率优化空间最显著的上下游流转切入"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "createTime": 1777046889000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [],
+        "modifiedTime": 1777046889000,
+        "report_id": "19dc03fa1067db4d383cd0f412aa6200",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dc03fa1067db4d383cd0f412aa6200%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "【管线】\r\n\r\n1.   周运营数据会议（昆仑山，崔忠仁/杨琳），对齐版本节奏\r\n\r\n2.   PM backlog 4-5月待办清单梳理\r\n3.  新版 Feature 开发流程文档定稿\r\n4.   PmSystem 完善策划周计划工作台功能和易用性\r\n\r\n【产品】\r\n\r\n1.   锦标赛赛季设计文档的 ai 更新整理，尝试加入数据分析需求，以便后续自动产出日志打点需求\r\n【组建】\r\n\r\n一人份阶段沟通\r\n【AI实用】\r\n\r\n1.   Hermes多 profile 架构成功运行\r\n multica 独占一个机器人以便拓展后续自动化"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": "端午版本内容量容量拆解\r\n提供钉钉消息关注名单（群名+人名）配日报自动化"
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "createTime": 1777137262000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777137262000,
+        "report_id": "19dc5a29dbc35ce75001d62495bad772",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dc5a29dbc35ce75001d62495bad772%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "【管线】  协调刘泊霆离职交接安排，微调月版本 scope  【产品】  与君怡、崔哥交流产品组下阶段工作方向 五一版体验走查及若干反馈对齐  【营销】  数据核算会 LM 投放对齐会  【AI实用】  新增运营版本内容分布智囊团（liveops-council）和程良奇认知炼化（cheng-liangqi-perspective）两个 Skill，同步四 Agent 共享目录  【其他】  公司双周会 PmSystem 人机权限控制开发 Multica 机器人升级，接入 LLM 准备任猛入职面谈材料"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "createTime": 1777307967000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777307967000,
+        "report_id": "19dcfcf5c5e309cd98af35043e59ff97",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dcfcf5c5e309cd98af35043e59ff97%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "═══【AI实用\u0026amp;基建】═══ 日报发送修复验证——请勿回复，本条为测试消息。"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": "验证 dws report create 是否不再通过聊天打扰抄送人"
+          }
+        ],
+        "createTime": 1777366510000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777366510000,
+        "report_id": "19dd34caa421247926f3b6e49b5b0192",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dd34caa421247926f3b6e49b5b0192%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "───【管线】───  沟通版本进展  ​ ───【营销】───  直播运营例会 硬核投放数据复盘和定标 LM 双月素材情况\u0026amp;解说文案对齐  ​ ───【产品】───  五一版本关键内容效果反馈 和崔哥讨论后续几个资产  ​ ───【组建】───  任猛入职面谈  ​ ───【AI实用\u0026amp;基建】───  跑通 Multica 工作流：Agent 派单、review 和验收提醒 个人工作台和策划工作台的 API 开发（待验收） 和子骜沟通 Obsidian 配表知识库，为自动化配表和人类友好的输入与校验做基建（快手小乔已做基础版本）"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": "个人工作台和策划工作台 API 验收"
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "createTime": 1777400481000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777400481000,
+        "report_id": "19dd5530486919e2f2a28a0427d88e47",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dd5530486919e2f2a28a0427d88e47%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "───【管线】───\r\n五月内容系统中对应更新\r\n端午内容梳理\r\n​​\r\n───【产品】───\r\n线上问题处理方案确认\r\n端午boss初步选定角色和玩法\r\n讨论后续消耗拉动预案\r\n​\r\n───【组建】───\r\n沟通孔繁哲入组\r\n猛哥今日份交流\r\n和笛笛沟通近期注意事项\r\n协调两人份工作交接安排\r\n​\r\n───【AI实用\u0026基建】───\r\nDebug Multica 工作流：Agent 派单、review 和验收提醒，实际完成了6个工单，效率虽然不比cursor高、但胜在状态清晰便于铺开\r\nops和workbench的Agent 操作API补充了一些"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "createTime": 1777480172000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777480172000,
+        "report_id": "19dda1302b5838cd0949f3b42a8b3231",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19dda1302b5838cd0949f3b42a8b3231%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      },
+      {
+        "content": [
+          {
+            "key": "今日完成工作",
+            "sort": 0,
+            "type": 1,
+            "value": "───【管线】───\r\n1.   5月研发重点对齐：对齐5月版本优先级与资源排布\r\n\r\n───【产品】───\r\n1.   追加活动讨论：\r\n对齐技能充能CD数值调整（最终出于稳定性考虑取消上线）\r\n技能冲刺活动升级方案\r\n高V邀请特权（额外炮倍buff）\r\n天下第一神君奖励吸引力提升\r\n升炮赛奖励调整\r\n2.   端午版本 boss 玩法和关键画面讨论\r\n───【组建】───\r\n沟通新人入组安排\r\n和崔哥沟通后续一些规划\r\n───【AI实用】───\r\n1.   Multica派单桥审查闭环状态机上线：dev Agent执行成功→自动in_review→Claude审查通过→done→自动合并main并打【已合并】前缀\r\n2.   Claude自助同步技能入库：新增.cursor/skills/claude-self-serve-skills/，建立Cursor与Hermes技能双向同步机制\r\n3.   文档结构化归档：根目录历史设计文档迁入docs/narrative/，新增DOC_HUB.md统一索引\r\n4.   pm-system策划周计划交互优化\r\n5.   pm-system制作人塔与运营矩阵API  \r\n───【其他】───\r\n\r\n安排节后的一些重点会议"
+          },
+          {
+            "key": "待完成工作",
+            "sort": 3,
+            "type": 1,
+            "value": ""
+          },
+          {
+            "key": "需协助工作",
+            "sort": 4,
+            "type": 1,
+            "value": ""
+          }
+        ],
+        "createTime": 1777563019000,
+        "creatorId": "0165313012750022",
+        "creatorName": "孙懿",
+        "deptName": "UE4捕鱼",
+        "images": [
+          null
+        ],
+        "modifiedTime": 1777563019000,
+        "report_id": "19ddf032723cc712417887a43dca58c8",
+        "report_name": "孙懿的日报",
+        "report_template_name": "日报",
+        "templateId": "153363afc40e225078a5a254ded82265",
+        "url": "dingtalk://dingtalkclient/action/openapp?corpid=ding37c967956637d20d\u0026container_type=work_platform\u0026app_id=2\u0026redirect_type=jump\u0026redirect_url=https%3A%2F%2Flandray.dingtalkapps.com%2Falid%2Fapp%2Freport%2FviewReport_new.html%3Fid%3D19ddf032723cc712417887a43dca58c8%26corpid%3Dding37c967956637d20d%26dd_progress%3Dfalse%26dt_editor%3Dtrue%26dd_func_wk%3Dtrue%26dd_func_wk_ver%3D4.6.39%26dd_func_rt%3Dtrue%26dd_rt_type%3D1%26reportsource%3D%26createtime%3D%26dd_from%3D"
+      }
+    ],
+    "size": 20
+  },
+  "success": true
+}
