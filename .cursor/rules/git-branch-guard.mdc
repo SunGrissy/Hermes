@@ -1,0 +1,111 @@
+---
+description: Git 分支安全协议 — 会话启动检查、操作前验证、分支切换审批、未提交改动处置（适用于所有项目）
+globs:
+alwaysApply: true
+---
+
+# Git 分支安全协议
+
+用户可能同时开启多个 Agent 会话，共享同一工作目录。任何一方切换分支，另一方的工作目录会静默变化。本规则用于拦截由此引发的误操作。
+
+> 提交时机、message 格式、验收流程见 `git-workflow.mdc`。
+
+## 1. 会话启动：分支绑定 + 状态检查
+
+Agent 在每轮会话**首次执行写操作前**（StrReplace / Write / git add / git commit 等），必须执行：
+
+```
+git branch --show-current
+git status --short
+```
+
+将当前分支记录为本会话的 **绑定分支（SESSION_BRANCH）**，并明确告知用户：
+
+> 本会话绑定分支：`{SESSION_BRANCH}`
+
+**状态检查结果处理：**
+- ✅ **干净且分支匹配** → 正常工作
+- ⚠️ **有未提交改动，分支与当前任务匹配** → 向用户确认：
+  > "当前分支 `feat/xxx` 有 N 个文件未提交。这些是你之前留下的改动吗？确认后我继续在此基础上工作。"
+  - 用户确认 → 继续
+  - 用户说不是 → 按"不匹配"流程处理
+- 🚫 **有未提交改动，分支与当前任务不匹配** → **禁止直接操作**，向用户报告并提供选项：
+  > "当前分支是 `feat/xxx`，有未提交改动 N 个文件。本次任务和这个分支无关，建议先处理当前改动再开始新任务。"
+  - (a) **`git stash`**（推荐临时中断）：暂存改动到栈里，恢复时 `git stash pop`
+  - (b) **`git commit`**（推荐阶段性成果）：正式提交保留在分支历史中
+  - (c) **创建 worktree**：用独立工作目录并行处理新任务（见第 5 节）
+  - Agent 需说明以上选项的区别，由用户决定
+- 如果当前分支是 `main`/`master` 且任务是新功能/修复 → 提醒用户是否要先创建功能分支
+
+## 2. 操作前验证（每次 Git 写操作前必做）
+
+在执行 commit / push / merge / rebase / checkout / switch / reset / stash pop 之前：
+
+1. 执行 `git branch --show-current`
+2. 比对结果与 SESSION_BRANCH
+3. **如果不一致 → 立即中止**，输出：
+
+> ⚠️ 分支不一致：期望 `{SESSION_BRANCH}`，实际 `{当前分支}`
+> 可能原因：另一个会话切换了分支。
+> 请确认你要在哪个分支操作，我再继续。
+
+不要自行尝试切回或猜测用户意图。等待指令。
+
+## 3. 分支切换：三步审批
+
+用户要求切换分支时，按顺序执行，缺一不可：
+
+1. **脏检查**：`git status` — 如有未提交变更，要求用户先 commit 或 stash，不代替决定
+2. **多会话提醒**：告知用户 "切换分支会影响所有共享此工作目录的会话"
+3. **等待明确确认**后才执行 checkout/switch
+
+切换后，更新 SESSION_BRANCH 为新分支。
+
+## 4. 绝对禁止（无论用户是否要求）
+
+| 操作 | 条件 |
+|---|---|
+| `git push --force` / `--force-with-lease` | 除非用户逐字说出 "force push" |
+| `git reset --hard` | 除非用户逐字说出 "hard reset" |
+| `git clean -fd` | 除非用户逐字说出 "clean" |
+| 在 master/main 上 rebase | 任何情况下都先警告风险 |
+| 静默 checkout/switch | 永远不允许 Agent 自行切分支 |
+
+## 5. 推荐：git worktree（多分支并行的正确方式）
+
+用户若需同时在两个分支工作，主动推荐 worktree，这是从根源上消除多会话踩踏的方法。
+
+### 原理
+
+worktree 允许同一个 Git 仓库同时检出多个分支到不同目录。各目录文件系统独立，`.git` 数据库只有一份（共享历史、远程配置）。两个 Cursor 会话各打开一个目录，物理隔离，无法互相踩踏。
+
+### 标准操作流程
+
+**1. 创建 worktree（在主目录执行）：**
+```bash
+git worktree add ../ProjectName-feature feature/xxx
+git worktree add -b feature/xxx ../ProjectName-feature
+```
+
+**2. 查看所有 worktree：**
+```bash
+git worktree list
+```
+
+**3. 使用：** 打开两个 Cursor 窗口，各指向一个目录，各干各的
+
+**4. 合并回来（在主目录）：**
+```bash
+git merge feature/xxx
+```
+
+**5. 完成后清理：**
+```bash
+git worktree remove ../ProjectName-feature
+```
+
+### Agent 职责
+
+- 用户消息含有"分支"相关词时（拉个分支、切到分支、建个分支、开个分支、新分支、切分支、换分支、两个分支、另一个分支、并行开发、两个会话、同时改）主动询问是否需要创建 worktree
+- 若用户同意，帮助执行上述流程，并提醒用 Cursor 打开新目录作为独立窗口
+- worktree 目录同样受本规则约束：进入后绑定其分支，后续操作前验证一致性
