@@ -1,5 +1,18 @@
 # Work Log - MyAgents Root
 
+## [2026-05-07] - 更新 pm-system 子模块指针
+
+**状态**: 验收通过（本提交）
+
+**内容**:
+- 根仓指针从 `a876d397` 更新至 `b665e522`，同步近期 20 个 commit：Feature ↔ Workbench 自动同步、DoD 字段、来源标识与解耦标记、Tower 巡检与自动归档、Producer Tower 分配至 Workbench 等。
+
+**测试**:
+- `git submodule status`确认指针与 origin/main 一致。
+- 子模块推送状态已于前一步验证。
+
+---
+
 ## [2026-05-04] - 会议材料：可交互版分享稿补充编辑能力
 
 **状态**: 验收通过（本提交）
